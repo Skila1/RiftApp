@@ -1,0 +1,17 @@
+port: 7880
+rtc:
+  # Ports for WebRTC media (must be reachable from the internet)
+  port_range_start: 50000
+  port_range_end: 50200
+  tcp_port: 7881
+  use_external_ip: true
+
+# Built-in TURN server for clients behind restrictive NATs
+turn:
+  enabled: true
+  domain: livekit.riftapp.io
+  tls_port: 5349
+  udp_port: 3478
+
+keys:
+  devkey: devsecret

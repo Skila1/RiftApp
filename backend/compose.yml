@@ -39,13 +39,15 @@ services:
 
   livekit:
     image: livekit/livekit-server:latest
-    command: --dev --bind 0.0.0.0
+    command: --config /etc/livekit.yaml --bind 0.0.0.0 --node-ip=${LIVEKIT_NODE_IP:-}
     ports:
       - "7880:7880"
       - "7881:7881"
-      - "7882:7882/udp"
-    environment:
-      - "LIVEKIT_KEYS=devkey: devsecret"
+      - "3478:3478/udp"
+      - "5349:5349"
+      - "50000-50200:50000-50200/udp"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:7880"]
       interval: 5s
