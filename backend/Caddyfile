@@ -1,3 +1,0 @@
-livekit.riftapp.io {
-	reverse_proxy livekit:7880
-}
