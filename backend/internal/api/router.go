@@ -39,7 +39,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(chiMiddleware.RealIP)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000", "http://localhost:5173"},
+		AllowedOrigins:   deps.Config.AllowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Authorization", "Content-Type"},
 		AllowCredentials: true,
@@ -51,7 +51,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 	hubH := NewHubHandler(deps.HubService, deps.NotifService, deps.NotifRepo)
 	streamH := NewStreamHandler(deps.StreamService)
 	msgH := NewMessageHandler(deps.MsgService)
-	wsH := NewWSHandler(deps.WSHub, deps.AuthService)
+	wsH := NewWSHandler(deps.WSHub, deps.AuthService, deps.Config.AllowedOrigins)
 	voiceH := NewVoiceHandler(deps.Config, deps.HubService)
 	notifH := NewNotifHandler(deps.NotifService)
 	dmH := NewDMHandler(deps.DMService)
