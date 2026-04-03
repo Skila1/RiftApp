@@ -1,0 +1,142 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-riptide-bg text-riptide-text;
+    font-feature-settings: 'ss01' on, 'cv01' on;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #2a2d3e transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(42, 45, 62, 0.5);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(58, 61, 78, 0.8);
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  ::selection {
+    background: rgba(99, 102, 241, 0.3);
+  }
+
+  /* Smooth scrolling globally */
+  * {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer components {
+  .settings-input {
+    @apply w-full px-3 py-2 rounded-lg bg-riptide-bg border border-riptide-border text-sm text-riptide-text
+      focus:outline-none focus:border-riptide-accent focus:ring-1 focus:ring-riptide-accent/30 transition-all duration-200;
+  }
+
+  /* Discord-style tooltip pill */
+  .tooltip-pill {
+    @apply absolute left-full ml-3 px-3 py-1.5 rounded-lg bg-riptide-panel text-sm text-riptide-text
+      shadow-elevation-md pointer-events-none whitespace-nowrap z-50 font-medium
+      opacity-0 -translate-x-1 transition-all duration-150;
+  }
+
+  /* Hub icon with Discord-style morphing */
+  .hub-icon {
+    @apply w-12 h-12 flex items-center justify-center text-sm font-semibold transition-all duration-300 ease-out cursor-pointer;
+  }
+
+  .hub-icon-idle {
+    @apply rounded-3xl bg-riptide-surface text-riptide-text-muted;
+  }
+
+  .hub-icon-idle:hover {
+    @apply rounded-2xl bg-riptide-accent text-white;
+  }
+
+  .hub-icon-active {
+    @apply rounded-2xl bg-riptide-accent text-white;
+  }
+
+  /* Active indicator pill (left of hub icon) */
+  .hub-pill {
+    @apply absolute left-0 w-1 bg-white rounded-r-full transition-all duration-300 ease-out;
+  }
+
+  /* Channel item styling */
+  .channel-item {
+    @apply w-full text-left px-2 py-1.5 rounded-md text-[15px] flex items-center gap-1.5 transition-all duration-150 cursor-pointer;
+  }
+
+  .channel-item-idle {
+    @apply text-riptide-text-muted;
+  }
+
+  .channel-item-idle:hover {
+    @apply text-riptide-text bg-riptide-panel/60;
+  }
+
+  .channel-item-active {
+    @apply bg-riptide-panel/80 text-riptide-text font-medium;
+  }
+
+  /* Modal backdrop with fade */
+  .modal-backdrop {
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-black/70;
+  }
+
+  /* Modal content with scale animation */
+  .modal-content {
+    @apply bg-riptide-surface rounded-xl shadow-modal border border-riptide-border/50 overflow-hidden;
+  }
+
+  /* Button base styles */
+  .btn-primary {
+    @apply px-4 py-2 rounded-lg text-sm font-medium bg-riptide-accent text-white
+      hover:bg-riptide-accent-hover active:scale-[0.97] active:translate-y-px transition-all duration-150
+      disabled:opacity-40 disabled:cursor-not-allowed disabled:active:translate-y-0 disabled:active:scale-100;
+  }
+
+  .btn-ghost {
+    @apply px-4 py-2 rounded-lg text-sm font-medium text-riptide-text-muted
+      hover:text-riptide-text hover:bg-riptide-panel/60 active:scale-[0.97] active:translate-y-px
+      transition-all duration-150;
+  }
+
+  .btn-danger {
+    @apply px-4 py-2 rounded-lg text-sm font-medium border border-riptide-danger text-riptide-danger
+      hover:bg-riptide-danger hover:text-white active:scale-[0.97] active:translate-y-px transition-all duration-150;
+  }
+
+  /* Section header (like Discord's category labels) */
+  .section-label {
+    @apply px-0.5 text-[11px] font-bold uppercase tracking-[0.02em] text-riptide-text-dim
+      hover:text-riptide-text-muted cursor-default select-none flex items-center gap-1 mb-1;
+  }
+}

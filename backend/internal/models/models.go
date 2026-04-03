@@ -1,0 +1,142 @@
+package models
+
+import "time"
+
+type User struct {
+	ID           string     `json:"id"`
+	Username     string     `json:"username"`
+	Email        *string    `json:"email,omitempty"`
+	PasswordHash string     `json:"-"`
+	DisplayName  string     `json:"display_name"`
+	AvatarURL    *string    `json:"avatar_url,omitempty"`
+	Bio          *string    `json:"bio,omitempty"`
+	Status       int        `json:"status"`    // 0=offline, 1=online, 2=idle, 3=dnd
+	LastSeen     *time.Time `json:"last_seen,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+}
+
+type Hub struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	OwnerID   string    `json:"owner_id"`
+	IconURL   *string   `json:"icon_url,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type HubMember struct {
+	HubID    string    `json:"hub_id"`
+	UserID   string    `json:"user_id"`
+	Role     string    `json:"role"`
+	RankID   *string   `json:"rank_id,omitempty"`
+	JoinedAt time.Time `json:"joined_at"`
+	User     *User     `json:"user,omitempty"`
+}
+
+type Rank struct {
+	ID          string    `json:"id"`
+	HubID       string    `json:"hub_id"`
+	Name        string    `json:"name"`
+	Color       string    `json:"color"`
+	Permissions int64     `json:"permissions"`
+	Position    int       `json:"position"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type Stream struct {
+	ID        string    `json:"id"`
+	HubID     string    `json:"hub_id"`
+	Name      string    `json:"name"`
+	Type      int       `json:"type"` // 0=text, 1=voice
+	Position  int       `json:"position"`
+	IsPrivate bool      `json:"is_private"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type Message struct {
+	ID             string        `json:"id"`
+	StreamID       *string       `json:"stream_id,omitempty"`
+	ConversationID *string       `json:"conversation_id,omitempty"`
+	AuthorID       string        `json:"author_id"`
+	Content        string        `json:"content"`
+	EditedAt       *time.Time    `json:"edited_at,omitempty"`
+	CreatedAt      time.Time     `json:"created_at"`
+	Author         *User         `json:"author,omitempty"`
+	Attachments    []Attachment  `json:"attachments,omitempty"`
+	Reactions      []ReactionAgg `json:"reactions,omitempty"`
+}
+
+type Attachment struct {
+	ID          string `json:"id"`
+	MessageID   string `json:"message_id"`
+	Filename    string `json:"filename"`
+	URL         string `json:"url"`
+	ContentType string `json:"content_type"`
+	SizeBytes   int64  `json:"size_bytes"`
+}
+
+type Reaction struct {
+	MessageID string    `json:"message_id"`
+	UserID    string    `json:"user_id"`
+	Emoji     string    `json:"emoji"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type ReactionAgg struct {
+	Emoji string   `json:"emoji"`
+	Count int      `json:"count"`
+	Users []string `json:"users"`
+}
+
+type DirectMessage struct {
+	ID         string     `json:"id"`
+	SenderID   string     `json:"sender_id"`
+	ReceiverID string     `json:"receiver_id"`
+	Content    string     `json:"content"`
+	EditedAt   *time.Time `json:"edited_at,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	Sender     *User      `json:"sender,omitempty"`
+}
+
+type Friendship struct {
+	UserID    string    `json:"user_id"`
+	FriendID  string    `json:"friend_id"`
+	Status    int       `json:"status"` // 0=pending, 1=accepted, 2=blocked
+	CreatedAt time.Time `json:"created_at"`
+	Friend    *User     `json:"friend,omitempty"`
+}
+
+type HubInvite struct {
+	ID        string     `json:"id"`
+	HubID     string     `json:"hub_id"`
+	CreatorID string     `json:"creator_id"`
+	Code      string     `json:"code"`
+	MaxUses   int        `json:"max_uses"`
+	Uses      int        `json:"uses"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	Hub       *Hub       `json:"hub,omitempty"`
+}
+
+type Conversation struct {
+	ID        string    `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Members   []User    `json:"members,omitempty"`
+	LastMessage *Message `json:"last_message,omitempty"`
+}
+
+type Notification struct {
+	ID          string    `json:"id"`
+	UserID      string    `json:"user_id"`
+	Type        string    `json:"type"` // mention, invite, dm
+	Title       string    `json:"title"`
+	Body        *string   `json:"body,omitempty"`
+	ReferenceID *string   `json:"reference_id,omitempty"`
+	HubID       *string   `json:"hub_id,omitempty"`
+	StreamID    *string   `json:"stream_id,omitempty"`
+	ActorID     *string   `json:"actor_id,omitempty"`
+	Read        bool      `json:"read"`
+	CreatedAt   time.Time `json:"created_at"`
+	Actor       *User     `json:"actor,omitempty"`
+}

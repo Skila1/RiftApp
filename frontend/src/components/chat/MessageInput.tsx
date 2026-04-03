@@ -1,0 +1,267 @@
+import { useState, useRef, useCallback } from 'react';
+import { useAppStore } from '../../stores/app';
+import { api } from '../../api/client';
+import type { Attachment } from '../../types';
+
+const TYPING_THROTTLE_MS = 2000;
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
+interface PendingFile {
+  file: File;
+  preview?: string;
+  uploading: boolean;
+  attachment?: Attachment;
+  error?: string;
+}
+
+interface MessageInputProps {
+  streamName: string;
+  onTyping?: () => void;
+  onTypingStop?: () => void;
+  isDMMode?: boolean;
+  onSendDM?: (content: string, attachmentIds?: string[]) => Promise<void>;
+}
+
+export default function MessageInput({ streamName, onTyping, onTypingStop, isDMMode, onSendDM }: MessageInputProps) {
+  const [content, setContent] = useState('');
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const sendMessage = useAppStore((s) => s.sendMessage);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastTypingRef = useRef(0);
+
+  const addFiles = useCallback(async (files: FileList | File[]) => {
+    const newFiles: PendingFile[] = [];
+    for (const file of Array.from(files)) {
+      if (file.size > MAX_FILE_SIZE) {
+        newFiles.push({ file, uploading: false, error: 'File too large (max 10 MB)' });
+        continue;
+      }
+      const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
+      newFiles.push({ file, preview, uploading: true });
+    }
+    setPendingFiles((prev) => [...prev, ...newFiles]);
+
+    // Upload each file
+    for (let i = 0; i < newFiles.length; i++) {
+      const pf = newFiles[i];
+      if (pf.error) continue;
+      try {
+        const attachment = await api.uploadFile(pf.file);
+        setPendingFiles((prev) =>
+          prev.map((f) => (f.file === pf.file ? { ...f, uploading: false, attachment } : f))
+        );
+      } catch {
+        setPendingFiles((prev) =>
+          prev.map((f) => (f.file === pf.file ? { ...f, uploading: false, error: 'Upload failed' } : f))
+        );
+      }
+    }
+  }, []);
+
+  const removeFile = useCallback((file: File) => {
+    setPendingFiles((prev) => {
+      const removed = prev.find((f) => f.file === file);
+      if (removed?.preview) URL.revokeObjectURL(removed.preview);
+      return prev.filter((f) => f.file !== file);
+    });
+  }, []);
+
+  const handleSubmit = useCallback(async () => {
+    const trimmed = content.trim();
+    const readyAttachments = pendingFiles.filter((f) => f.attachment).map((f) => f.attachment!);
+    if (!trimmed && readyAttachments.length === 0) return;
+
+    // Revoke any object URLs to prevent memory leaks
+    for (const pf of pendingFiles) {
+      if (pf.preview) URL.revokeObjectURL(pf.preview);
+    }
+
+    setContent('');
+    setPendingFiles([]);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+    onTypingStop?.();
+    lastTypingRef.current = 0;
+
+    const attachmentIds = readyAttachments.map((a) => a.id);
+    if (isDMMode && onSendDM) {
+      await onSendDM(trimmed, attachmentIds.length > 0 ? attachmentIds : undefined);
+    } else {
+      await sendMessage(trimmed, attachmentIds.length > 0 ? attachmentIds : undefined);
+    }
+  }, [content, pendingFiles, sendMessage, onTypingStop, isDMMode, onSendDM]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
+
+  const handleInput = () => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setContent(e.target.value);
+    handleInput();
+
+    // Throttled typing event
+    const now = Date.now();
+    if (e.target.value.length > 0 && now - lastTypingRef.current > TYPING_THROTTLE_MS) {
+      lastTypingRef.current = now;
+      onTyping?.();
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    if (e.dataTransfer.files.length > 0) {
+      addFiles(e.dataTransfer.files);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      addFiles(e.target.files);
+      e.target.value = '';
+    }
+  };
+
+  const hasUploading = pendingFiles.some((f) => f.uploading);
+  const canSend = (content.trim() || pendingFiles.some((f) => f.attachment)) && !hasUploading;
+
+  return (
+    <div
+      className="px-4 pb-6 pt-1 flex-shrink-0"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Drag overlay */}
+      {dragging && (
+        <div className="mb-2 border-2 border-dashed border-riptide-accent rounded-xl p-8 text-center text-sm text-riptide-accent bg-riptide-accent/5 animate-fade-in">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-2 opacity-70">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          Drop files here to upload
+        </div>
+      )}
+
+      {/* Pending file previews */}
+      {pendingFiles.length > 0 && (
+        <div className="flex gap-2 mb-2 flex-wrap animate-slide-up">
+          {pendingFiles.map((pf, i) => (
+            <div
+              key={i}
+              className="relative bg-riptide-surface border border-riptide-border/60 rounded-xl p-2.5 flex items-center gap-2.5 max-w-[220px] shadow-elevation-low group/file"
+            >
+              {pf.preview ? (
+                <img src={pf.preview} alt="" className="w-12 h-12 rounded-lg object-cover" />
+              ) : (
+                <div className="w-12 h-12 rounded-lg bg-riptide-bg flex items-center justify-center">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-riptide-text-dim">
+                    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+                    <polyline points="13 2 13 9 20 9" />
+                  </svg>
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-riptide-text truncate">{pf.file.name}</p>
+                {pf.uploading && (
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <div className="w-3 h-3 border border-riptide-accent border-t-transparent rounded-full animate-spin" />
+                    <p className="text-[10px] text-riptide-accent">Uploading…</p>
+                  </div>
+                )}
+                {pf.error && <p className="text-[10px] text-riptide-danger mt-0.5">{pf.error}</p>}
+                {pf.attachment && <p className="text-[10px] text-riptide-success mt-0.5">Ready</p>}
+              </div>
+              <button
+                onClick={() => removeFile(pf.file)}
+                className="absolute -top-2 -right-2 w-6 h-6 bg-riptide-panel border border-riptide-border rounded-full flex items-center justify-center
+                  text-riptide-text-dim hover:text-white hover:bg-riptide-danger hover:border-riptide-danger transition-all duration-150
+                  opacity-0 group-hover/file:opacity-100 shadow-elevation-low"
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className={`bg-riptide-surface rounded-xl border flex items-end transition-all duration-200 ${
+        dragging ? 'border-riptide-accent shadow-glow' : 'border-riptide-border/60 hover:border-riptide-border'
+      }`}>
+        {/* File attach button */}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="px-3 py-3 text-riptide-text-dim hover:text-riptide-text active:scale-95 transition-all duration-150"
+          title="Attach file"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="16" />
+            <line x1="8" y1="12" x2="16" y2="12" />
+          </svg>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+
+        <textarea
+          ref={textareaRef}
+          value={content}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          placeholder={isDMMode ? `Message @${streamName}` : `Message #${streamName}`}
+          rows={1}
+          className="flex-1 px-1 py-3 bg-transparent text-[15px] text-riptide-text placeholder:text-riptide-text-dim/60 resize-none focus:outline-none max-h-[200px] leading-relaxed"
+          maxLength={4000}
+        />
+        <button
+          onClick={handleSubmit}
+          disabled={!canSend}
+          className={`px-3 py-3 transition-all duration-150 ${
+            canSend
+              ? 'text-riptide-accent hover:text-riptide-accent-hover active:scale-95 scale-100'
+              : 'text-riptide-text-dim/40 scale-95 cursor-not-allowed'
+          }`}
+          title="Send message"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
