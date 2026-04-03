@@ -147,7 +147,7 @@ export default function SelfProfilePopover() {
                 </span>
               )}
             </div>
-            <div className="absolute -bottom-0.5 -right-0.5 border-[3px] border-riptide-surface rounded-full">
+            <div className="absolute bottom-[2px] right-[2px] border-[3px] border-riptide-surface rounded-full">
               <StatusDot userId={user.id} fallbackStatus={user.status} size="lg" />
             </div>
           </div>

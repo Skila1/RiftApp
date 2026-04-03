@@ -56,9 +56,14 @@ func (h *VoiceHandler) Token(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	publicURL := h.cfg.LiveKitURL
+	if publicURL == "" {
+		publicURL = h.cfg.LiveKitHost
+	}
+
 	writeJSON(w, http.StatusOK, map[string]string{
 		"token": token,
-		"url":   h.cfg.LiveKitHost,
+		"url":   publicURL,
 		"room":  roomName,
 	})
 }
