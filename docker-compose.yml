@@ -38,7 +38,7 @@ services:
       - minio_data:/data
 
   backend:
-    image: ghcr.io/skila1/riptide/backend:latest
+    image: ghcr.io/skila1/riftapp/backend:latest
     ports:
       - "8080:8080"
     environment:
