@@ -3,7 +3,7 @@ import { useMessageStore } from '../../stores/messageStore';
 import { api } from '../../api/client';
 import type { Attachment } from '../../types';
 
-const TYPING_THROTTLE_MS = 2000;
+const TYPING_THROTTLE_MS = 500;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 interface PendingFile {

@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect, useMemo, memo } from 'react';
+import { useState, useRef, useEffect, useMemo, memo, useCallback } from 'react';
 import type { Message } from '../../types';
 import { useMessageStore } from '../../stores/messageStore';
 import { useAuthStore } from '../../stores/auth';
+import { useProfilePopoverStore } from '../../stores/profilePopoverStore';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '🔥', '👀', '😮', '🙏'];
 
@@ -120,6 +121,13 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn }: Me
     [message.content],
   );
   const pickerRef = useRef<HTMLDivElement>(null);
+  const openProfile = useProfilePopoverStore((s) => s.open);
+
+  const handleProfileClick = useCallback((e: React.MouseEvent) => {
+    if (author) {
+      openProfile(author, (e.currentTarget as HTMLElement).getBoundingClientRect());
+    }
+  }, [author, openProfile]);
 
   useEffect(() => {
     if (!pickerOpen) return;
@@ -189,12 +197,15 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn }: Me
       {showHeader ? (
         <div className="flex gap-3">
           {/* Avatar */}
-          <div className={`w-10 h-10 rounded-full ${bg} flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-0.5 cursor-pointer hover:opacity-80 transition-opacity`}>
+          <div
+            onClick={handleProfileClick}
+            className={`w-10 h-10 rounded-full ${bg} flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-0.5 cursor-pointer hover:opacity-80 transition-opacity`}
+          >
             {authorName.slice(0, 2).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-2 mb-0.5">
-              <span className={`font-semibold text-[15px] cursor-pointer hover:underline ${isOwn ? 'text-riptide-accent-hover' : color}`}>
+              <span onClick={handleProfileClick} className={`font-semibold text-[15px] cursor-pointer hover:underline ${isOwn ? 'text-riptide-accent-hover' : color}`}>
                 {authorName}
               </span>
               <span className="text-[11px] text-riptide-text-dim/80 select-none">

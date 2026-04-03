@@ -6,10 +6,13 @@ interface TypingIndicatorProps {
 
 export default function TypingIndicator({ streamId }: TypingIndicatorProps) {
   const typers = usePresenceStore((s) => s.typers[streamId]);
+  const hubMembers = usePresenceStore((s) => s.hubMembers);
 
   if (!typers || typers.size === 0) return null;
 
-  const names = Array.from(typers);
+  const names = Array.from(typers).map(
+    (id) => hubMembers[id]?.display_name || hubMembers[id]?.username || 'Someone'
+  );
   let text: string;
   if (names.length === 1) {
     text = `${names[0]} is typing`;

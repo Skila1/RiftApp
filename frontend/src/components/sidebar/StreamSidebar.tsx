@@ -1,14 +1,16 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useHubStore } from '../../stores/hubStore';
 import { useStreamStore } from '../../stores/streamStore';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useAuthStore } from '../../stores/auth';
+import { useProfilePopoverStore } from '../../stores/profilePopoverStore';
 import { useVoice } from '../../hooks/useVoice';
 import SettingsModal from '../settings/SettingsModal';
 import HubSettingsModal from '../settings/HubSettingsModal';
 import VoicePanel from '../voice/VoicePanel';
 import StatusDot, { statusLabel } from '../shared/StatusDot';
 import { api } from '../../api/client';
+import type { User } from '../../types';
 
 export default function StreamSidebar() {
   const streams = useStreamStore((s) => s.streams);
@@ -284,9 +286,16 @@ export default function StreamSidebar() {
   );
 }
 
-function UserBar({ user }: { user: { id: string; username: string; display_name: string; status: number } | null; logout: () => void }) {
+function UserBar({ user }: { user: User | null; logout: () => void }) {
   const [showSettings, setShowSettings] = useState(false);
   const liveStatus = usePresenceStore((s) => user ? s.presence[user.id] : undefined);
+  const openProfile = useProfilePopoverStore((s) => s.open);
+
+  const handleAvatarClick = useCallback((e: React.MouseEvent) => {
+    if (user) {
+      openProfile(user, (e.currentTarget as HTMLElement).getBoundingClientRect());
+    }
+  }, [user, openProfile]);
 
   if (!user) return null;
 
@@ -296,15 +305,14 @@ function UserBar({ user }: { user: { id: string; username: string; display_name:
     <>
       <div className="h-[52px] flex items-center px-2 bg-riptide-bg/40 flex-shrink-0 gap-2">
         <button
-          onClick={() => setShowSettings(true)}
+          onClick={handleAvatarClick}
           className="flex items-center gap-2 flex-1 min-w-0 px-1 py-1 -ml-1 rounded-md hover:bg-riptide-panel/60 transition-all duration-150 group"
-          title="User Settings"
+          title="View Profile"
         >
           <div className="relative">
             <div className="w-8 h-8 rounded-full bg-riptide-accent flex items-center justify-center text-xs font-semibold text-white flex-shrink-0">
               {user.display_name.slice(0, 2).toUpperCase()}
             </div>
-            {/* Status dot */}
             <StatusDot
               userId={user.id}
               fallbackStatus={user.status}
@@ -318,7 +326,6 @@ function UserBar({ user }: { user: { id: string; username: string; display_name:
           </div>
         </button>
 
-        {/* Settings gear */}
         <button
           onClick={() => setShowSettings(true)}
           title="User Settings"
