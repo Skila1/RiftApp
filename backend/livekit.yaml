@@ -1,15 +1,13 @@
 port: 7880
+
 rtc:
   port_range_start: 50000
   port_range_end: 50200
   tcp_port: 7881
   use_external_ip: true
-  # Set this to your server's public IP
-  node_ip: 220.233.12.104
-  ips:
-    - 192.168.2.145
+  nat1to1_ips:
+    - 220.233.12.104
 
-# Built-in TURN server for clients behind restrictive NATs
 turn:
   enabled: true
   domain: livekit.riftapp.io
