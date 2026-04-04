@@ -2,6 +2,8 @@ package api
 
 import (
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -61,6 +63,12 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 	friendH := NewFriendHandler(deps.FriendService)
 
 	r.Get("/ws", wsH.Handle)
+
+	// Reverse proxy for S3/MinIO assets (avatars, attachments)
+	if s3Target, err := url.Parse(deps.Config.S3Endpoint); err == nil {
+		s3Proxy := httputil.NewSingleHostReverseProxy(s3Target)
+		r.Handle("/s3/*", http.StripPrefix("/s3", s3Proxy))
+	}
 
 	r.Get("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
