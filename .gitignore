@@ -21,3 +21,6 @@ Thumbs.db
 # Docker volumes
 pgdata/
 minio_data/
+
+# Cursor
+.cursor/
