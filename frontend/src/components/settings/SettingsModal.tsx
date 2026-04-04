@@ -144,8 +144,26 @@ function ProfileTab({
   const [bio, setBio] = useState(user.bio ?? '');
   const [avatarUrl, setAvatarUrl] = useState(user.avatar_url ?? '');
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+    setUploading(true);
+    try {
+      const attachment = await api.uploadFile(file);
+      setAvatarUrl(attachment.url);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to upload avatar');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   const dirty =
     username !== user.username ||
@@ -178,9 +196,15 @@ function ProfileTab({
 
   return (
     <div className="space-y-5">
-      {/* Avatar Preview */}
+      {/* Avatar Preview — click to upload */}
       <div className="flex items-center gap-4">
-        <div className="relative">
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="relative group cursor-pointer"
+          title="Change avatar"
+        >
           {avatarUrl ? (
             <img
               src={avatarUrl}
@@ -193,7 +217,26 @@ function ProfileTab({
               {(displayName || username).slice(0, 2).toUpperCase()}
             </div>
           )}
-        </div>
+          <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+            {uploading ? (
+              <svg className="w-5 h-5 text-white animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="31.4 31.4" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+            )}
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            className="hidden"
+            onChange={handleAvatarUpload}
+          />
+        </button>
         <div>
           <p className="text-sm font-medium">{displayName || username}</p>
           <p className="text-xs text-riptide-text-dim">@{username}</p>
@@ -231,16 +274,6 @@ function ProfileTab({
         <p className="text-[11px] text-riptide-text-dim mt-1 text-right">
           {bio.length}/190
         </p>
-      </Field>
-
-      <Field label="Avatar URL" maxLength={512}>
-        <input
-          value={avatarUrl}
-          onChange={(e) => setAvatarUrl(e.target.value)}
-          maxLength={512}
-          className="settings-input"
-          placeholder="https://example.com/avatar.png"
-        />
       </Field>
 
       {/* Error / Success */}
