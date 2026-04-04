@@ -11,6 +11,7 @@ import VoicePanel from '../voice/VoicePanel';
 import StatusDot, { statusLabel } from '../shared/StatusDot';
 import CreateChannelModal from '../modals/CreateChannelModal';
 import CreateCategoryModal from '../modals/CreateCategoryModal';
+import InviteToServerModal from '../modals/InviteToServerModal';
 import { api } from '../../api/client';
 import type { User, Stream } from '../../types';
 
@@ -40,6 +41,7 @@ export default function StreamSidebar() {
   const [createChannelFor, setCreateChannelFor] = useState<string | undefined>(undefined);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showCreateCategory, setShowCreateCategory] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
 
   // Collapsible categories
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -67,8 +69,8 @@ export default function StreamSidebar() {
     if (!activeHubId) return;
     setInviteGenerating(true);
     try {
-      const invite = await api.createInvite(activeHubId);
-      setInviteCode(invite.code);
+      const invite = await api.createInvite(activeHubId, { expires_in: 604800 });
+      setInviteCode(`${window.location.origin}/invite/${invite.code}`);
     } finally {
       setInviteGenerating(false);
     }
@@ -189,7 +191,7 @@ export default function StreamSidebar() {
       {showInvitePopover && (
         <div className="mx-2 mt-2 p-3 rounded-xl bg-riptide-panel border border-riptide-border/40 animate-scale-in">
           <p className="text-[12px] font-semibold mb-1">Invite People</p>
-          <p className="text-[11px] text-riptide-text-dim mb-2">Share this code to invite someone to <span className="font-medium text-riptide-text">{activeHub?.name}</span>.</p>
+          <p className="text-[11px] text-riptide-text-dim mb-2">Share this link to invite someone to <span className="font-medium text-riptide-text">{activeHub?.name}</span>.</p>
           {inviteCode ? (
             <div className="flex gap-1.5">
               <code className="flex-1 px-2 py-1 rounded-md bg-riptide-bg border border-riptide-border text-[12px] font-mono text-riptide-accent select-all truncate">{inviteCode}</code>
@@ -203,7 +205,7 @@ export default function StreamSidebar() {
               disabled={inviteGenerating}
               className="btn-primary w-full py-1.5 text-[13px]"
             >
-              {inviteGenerating ? 'Generating…' : 'Generate Invite Code'}
+              {inviteGenerating ? 'Generating…' : 'Generate Invite Link'}
             </button>
           )}
         </div>
@@ -216,7 +218,7 @@ export default function StreamSidebar() {
           y={headerMenu.y}
           onCreateChannel={() => { setCreateChannelFor(undefined); setShowCreateChannel(true); setHeaderMenu(null); }}
           onCreateCategory={() => { setShowCreateCategory(true); setHeaderMenu(null); }}
-          onInvite={() => { handleInviteToggle(); setHeaderMenu(null); }}
+          onInvite={() => { setShowInviteModal(true); setHeaderMenu(null); }}
         />
       )}
 
@@ -301,17 +303,13 @@ export default function StreamSidebar() {
       <VoicePanel
         connected={voice.connected}
         connecting={voice.connecting}
-        participants={voice.participants}
-        isMuted={voice.isMuted}
-        isDeafened={voice.isDeafened}
-        pttMode={voice.pttMode}
-        pttActive={voice.pttActive}
+        isCameraOn={voice.isCameraOn}
+        isScreenSharing={voice.isScreenSharing}
         streamName={streams.find((s) => s.id === voice.streamId)?.name || ''}
-        hubMembers={hubMembers}
+        hubName={activeHub?.name || ''}
         onLeave={voice.leave}
-        onToggleMute={voice.toggleMute}
-        onToggleDeafen={voice.toggleDeafen}
-        onTogglePTT={voice.togglePTT}
+        onToggleCamera={voice.toggleCamera}
+        onToggleScreenShare={voice.toggleScreenShare}
       />
 
       <UserBar user={user} logout={logout} />
@@ -321,6 +319,9 @@ export default function StreamSidebar() {
       )}
       {showCreateCategory && activeHubId && (
         <CreateCategoryModal hubId={activeHubId} onClose={() => setShowCreateCategory(false)} />
+      )}
+      {showInviteModal && activeHub && (
+        <InviteToServerModal hub={activeHub} onClose={() => setShowInviteModal(false)} />
       )}
     </div>
   );
@@ -496,6 +497,7 @@ function UserBar({ user }: { user: User | null; logout: () => void }) {
   const [showSettings, setShowSettings] = useState(false);
   const liveStatus = usePresenceStore((s) => user ? s.presence[user.id] : undefined);
   const openSelfProfile = useSelfProfileStore((s) => s.open);
+  const voice = useVoiceStore();
 
   const handleAvatarClick = useCallback((e: React.MouseEvent) => {
     openSelfProfile((e.currentTarget as HTMLElement).getBoundingClientRect());
@@ -513,15 +515,20 @@ function UserBar({ user }: { user: User | null; logout: () => void }) {
 
   return (
     <>
-      <div className="h-[52px] flex items-center px-2 bg-riptide-bg/40 flex-shrink-0 gap-2">
+      <div className="h-[52px] flex items-center px-1.5 bg-riptide-bg/40 flex-shrink-0">
+        {/* Avatar + name */}
         <button
           onClick={handleAvatarClick}
-          className="flex items-center gap-2 flex-1 min-w-0 px-1 py-1 -ml-1 rounded-md hover:bg-riptide-panel/60 transition-all duration-150 group"
+          className="flex items-center gap-2 flex-1 min-w-0 px-1 py-1 rounded-md hover:bg-riptide-panel/60 transition-all duration-150 group"
           title="View Profile"
         >
-          <div className="relative">
-            <div className="w-8 h-8 rounded-full bg-riptide-accent flex items-center justify-center text-xs font-semibold text-white flex-shrink-0">
-              {user.display_name.slice(0, 2).toUpperCase()}
+          <div className="relative flex-shrink-0">
+            <div className="w-8 h-8 rounded-full bg-riptide-accent flex items-center justify-center text-xs font-semibold text-white overflow-hidden">
+              {user.avatar_url ? (
+                <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
+              ) : (
+                user.display_name.slice(0, 2).toUpperCase()
+              )}
             </div>
             <StatusDot
               userId={user.id}
@@ -536,17 +543,71 @@ function UserBar({ user }: { user: User | null; logout: () => void }) {
           </div>
         </button>
 
-        <button
-          onClick={() => setShowSettings(true)}
-          title="User Settings"
-          className="w-8 h-8 rounded-md flex items-center justify-center text-riptide-text-dim
-            hover:text-riptide-text hover:bg-riptide-panel/60 transition-all duration-150"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-          </svg>
-        </button>
+        {/* Control buttons */}
+        <div className="flex items-center flex-shrink-0">
+          {/* Mic */}
+          <button
+            onClick={voice.toggleMute}
+            title={voice.isMuted ? 'Unmute' : 'Mute'}
+            className={`w-8 h-8 rounded-md flex items-center justify-center transition-all duration-150 active:scale-90 ${
+              voice.isMuted
+                ? 'text-riptide-danger hover:bg-riptide-danger/10'
+                : 'text-riptide-text-dim hover:text-riptide-text hover:bg-riptide-panel/60'
+            }`}
+          >
+            {voice.isMuted ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="1" y1="1" x2="23" y2="23" />
+                <path d="M9 9v3a3 3 0 005.12 2.12M15 9.34V4a3 3 0 00-5.94-.6" />
+                <path d="M17 16.95A7 7 0 015 12m14 0a7 7 0 01-.11 1.23" />
+                <line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" />
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+                <path d="M19 10v2a7 7 0 01-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" />
+              </svg>
+            )}
+          </button>
+
+          {/* Deafen */}
+          <button
+            onClick={voice.toggleDeafen}
+            title={voice.isDeafened ? 'Undeafen' : 'Deafen'}
+            className={`w-8 h-8 rounded-md flex items-center justify-center transition-all duration-150 active:scale-90 ${
+              voice.isDeafened
+                ? 'text-riptide-danger hover:bg-riptide-danger/10'
+                : 'text-riptide-text-dim hover:text-riptide-text hover:bg-riptide-panel/60'
+            }`}
+          >
+            {voice.isDeafened ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="1" y1="1" x2="23" y2="23" />
+                <path d="M9 9a3 3 0 015-2.24M21 12a9 9 0 00-7.48-8.86" />
+                <path d="M3 12a9 9 0 008 8.94V18a3 3 0 01-3-3v-1" />
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M3 18v-6a9 9 0 0118 0v6" />
+                <path d="M21 19a2 2 0 01-2 2h-1a2 2 0 01-2-2v-3a2 2 0 012-2h3zM3 19a2 2 0 002 2h1a2 2 0 002-2v-3a2 2 0 00-2-2H3z" />
+              </svg>
+            )}
+          </button>
+
+          {/* Settings */}
+          <button
+            onClick={() => setShowSettings(true)}
+            title="User Settings"
+            className="w-8 h-8 rounded-md flex items-center justify-center text-riptide-text-dim
+              hover:text-riptide-text hover:bg-riptide-panel/60 transition-all duration-150 active:scale-90"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+            </svg>
+          </button>
+        </div>
       </div>
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
     </>

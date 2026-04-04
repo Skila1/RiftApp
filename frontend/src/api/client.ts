@@ -114,6 +114,7 @@ class ApiClient {
   updateHub(hubId: string, data: { name?: string; icon_url?: string }) { return this.request<Hub>(`/hubs/${hubId}`, { method: 'PATCH', body: JSON.stringify(data) }); }
   createInvite(hubId: string, options?: { max_uses?: number; expires_in?: number }) { return this.request<HubInvite>(`/hubs/${hubId}/invite`, { method: 'POST', body: JSON.stringify(options ?? {}) }); }
   joinInvite(code: string) { return this.request<{ status: string; hub: Hub }>(`/invites/${code}`, { method: 'POST' }); }
+  getInviteInfo(code: string) { return this.request<{ code: string; hub_id: string; hub_name: string; hub_icon_url?: string; member_count: number; expires_at?: string }>(`/invites/${code}`); }
 
   getStreams(hubId: string) { return this.request<Stream[]>(`/hubs/${hubId}/streams`); }
   createStream(hubId: string, name: string, type: number = 0, categoryId?: string) { return this.request<Stream>(`/hubs/${hubId}/streams`, { method: 'POST', body: JSON.stringify({ name, type, category_id: categoryId }) }); }

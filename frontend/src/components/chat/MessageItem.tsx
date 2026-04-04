@@ -4,6 +4,7 @@ import { useMessageStore } from '../../stores/messageStore';
 import { useAuthStore } from '../../stores/auth';
 import { useProfilePopoverStore } from '../../stores/profilePopoverStore';
 import { useUserContextMenuStore } from '../../stores/userContextMenuStore';
+import InviteEmbed from '../shared/InviteEmbed';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '🔥', '👀', '😮', '🙏'];
 
@@ -57,6 +58,8 @@ function avatarBg(name: string): string {
   return colors[Math.abs(hash) % colors.length];
 }
 
+const INVITE_URL_RE = /https?:\/\/[^\s/]+\/invite\/([A-Za-z0-9]+)/g;
+
 function renderContent(content: string) {
   const parts: React.ReactNode[] = [];
   let remaining = content;
@@ -86,7 +89,23 @@ function renderContent(content: string) {
     );
   }
 
-  return parts.length > 0 ? parts : renderInline(content);
+  const inviteCodes: string[] = [];
+  const textForParsing = parts.length > 0 ? content : content;
+  let inviteMatch;
+  const inviteRe = new RegExp(INVITE_URL_RE.source, 'g');
+  while ((inviteMatch = inviteRe.exec(textForParsing)) !== null) {
+    inviteCodes.push(inviteMatch[1]);
+  }
+
+  const result = parts.length > 0 ? parts : [<span key={0}>{renderInline(content)}</span>];
+
+  if (inviteCodes.length > 0) {
+    result.push(
+      ...inviteCodes.map((code) => <InviteEmbed key={`inv-${code}`} code={code} />)
+    );
+  }
+
+  return result;
 }
 
 function renderInline(text: string): React.ReactNode {

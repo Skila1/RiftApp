@@ -190,6 +190,12 @@ func (r *HubRepo) ListMembers(ctx context.Context, hubID string) ([]MemberWithRo
 	return members, rows.Err()
 }
 
+func (r *HubRepo) CountMembers(ctx context.Context, hubID string) (int, error) {
+	var count int
+	err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM hub_members WHERE hub_id = $1`, hubID).Scan(&count)
+	return count, err
+}
+
 func (r *HubRepo) GetDB() *pgxpool.Pool {
 	return r.db
 }

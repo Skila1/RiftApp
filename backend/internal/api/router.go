@@ -96,6 +96,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 		r.Get("/api/hubs/{hubID}/members", hubH.Members)
 		r.Post("/api/hubs/{hubID}/invite", hubH.CreateInvite)
 
+		r.Get("/api/invites/{code}", hubH.GetInviteInfo)
 		r.Post("/api/invites/{code}", hubH.JoinViaInvite)
 
 		r.Post("/api/hubs/{hubID}/streams", streamH.Create)

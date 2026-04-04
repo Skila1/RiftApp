@@ -124,6 +124,16 @@ func (h *HubHandler) CreateInvite(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, invite)
 }
 
+func (h *HubHandler) GetInviteInfo(w http.ResponseWriter, r *http.Request) {
+	code := chi.URLParam(r, "code")
+	info, err := h.svc.GetInviteInfo(r.Context(), code)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, info)
+}
+
 func (h *HubHandler) JoinViaInvite(w http.ResponseWriter, r *http.Request) {
 	code := chi.URLParam(r, "code")
 	userID := middleware.GetUserID(r.Context())

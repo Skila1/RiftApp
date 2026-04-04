@@ -240,7 +240,7 @@ function OverviewTab({ hub, isOwner }: { hub: Hub; isOwner: boolean }) {
 /* ───────── Invite Section ───────── */
 
 function InviteSection({ hubId, isOwner }: { hubId: string; isOwner: boolean }) {
-  const [code, setCode] = useState<string | null>(null);
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -251,8 +251,8 @@ function InviteSection({ hubId, isOwner }: { hubId: string; isOwner: boolean }) 
     setError(null);
     setGenerating(true);
     try {
-      const invite = await api.createInvite(hubId);
-      setCode(invite.code);
+      const invite = await api.createInvite(hubId, { expires_in: 604800 });
+      setInviteUrl(`${window.location.origin}/invite/${invite.code}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to create invite');
     } finally {
@@ -261,8 +261,8 @@ function InviteSection({ hubId, isOwner }: { hubId: string; isOwner: boolean }) 
   };
 
   const handleCopy = () => {
-    if (!code) return;
-    navigator.clipboard.writeText(code);
+    if (!inviteUrl) return;
+    navigator.clipboard.writeText(inviteUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -271,13 +271,13 @@ function InviteSection({ hubId, isOwner }: { hubId: string; isOwner: boolean }) 
     <div className="bg-riptide-panel/60 rounded-xl p-4 border border-riptide-border/30">
       <h3 className="text-sm font-semibold mb-1">Invite People</h3>
       <p className="text-xs text-riptide-text-dim mb-3">
-        Generate an invite code to share with others.
+        Generate an invite link to share with others.
       </p>
 
-      {code ? (
+      {inviteUrl ? (
         <div className="flex items-center gap-2">
-          <code className="flex-1 px-3 py-1.5 rounded-md bg-riptide-bg border border-riptide-border text-sm font-mono text-riptide-accent select-all">
-            {code}
+          <code className="flex-1 px-3 py-1.5 rounded-md bg-riptide-bg border border-riptide-border text-sm font-mono text-riptide-accent select-all truncate">
+            {inviteUrl}
           </code>
           <button
             onClick={handleCopy}
@@ -292,7 +292,7 @@ function InviteSection({ hubId, isOwner }: { hubId: string; isOwner: boolean }) 
           disabled={generating}
           className="btn-primary"
         >
-          {generating ? 'Generating…' : 'Generate Invite Code'}
+          {generating ? 'Generating…' : 'Generate Invite Link'}
         </button>
       )}
 

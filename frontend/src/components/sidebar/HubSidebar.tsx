@@ -1,10 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useHubStore } from '../../stores/hubStore';
 import { useDMStore } from '../../stores/dmStore';
 import { useStreamStore } from '../../stores/streamStore';
 import { useMessageStore } from '../../stores/messageStore';
 import { api } from '../../api/client';
+import type { Hub } from '../../types';
+import InviteToServerModal from '../modals/InviteToServerModal';
+
+function extractInviteCode(input: string): string {
+  const trimmed = input.trim();
+  const urlMatch = trimmed.match(/\/invite\/([A-Za-z0-9]+)\/?$/);
+  if (urlMatch) return urlMatch[1];
+  return trimmed;
+}
 
 export default function HubSidebar() {
   const hubs = useHubStore((s) => s.hubs);
@@ -20,8 +29,17 @@ export default function HubSidebar() {
   const [joining, setJoining] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [dmHovered, setDmHovered] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; hub: Hub } | null>(null);
+  const [inviteHub, setInviteHub] = useState<Hub | null>(null);
 
   const isDMMode = !activeHubId;
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handler = () => setContextMenu(null);
+    window.addEventListener('click', handler);
+    return () => window.removeEventListener('click', handler);
+  }, [contextMenu]);
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
@@ -32,8 +50,9 @@ export default function HubSidebar() {
   };
 
   const handleJoin = async () => {
-    const code = joinCode.trim();
-    if (!code) return;
+    const raw = joinCode.trim();
+    if (!raw) return;
+    const code = extractInviteCode(raw);
     setJoinError(null);
     setJoining(true);
     try {
@@ -43,7 +62,7 @@ export default function HubSidebar() {
       await useHubStore.getState().loadHubs();
       await setActiveHub(result.hub.id);
     } catch (err: unknown) {
-      setJoinError(err instanceof Error ? err.message : 'Invalid invite code');
+      setJoinError(err instanceof Error ? err.message : 'Invalid invite link');
     } finally {
       setJoining(false);
     }
@@ -119,6 +138,7 @@ export default function HubSidebar() {
             {/* Hub icon with Discord-style morph */}
             <button
               onClick={() => setActiveHub(hub.id)}
+              onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, hub }); }}
               title={hub.name}
               className={`hub-icon ${isActive ? 'hub-icon-active shadow-glow-sm' : 'hub-icon-idle'}`}
             >
@@ -222,8 +242,8 @@ export default function HubSidebar() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-xl font-bold mb-1">Join a Hub</h2>
-            <p className="text-sm text-riptide-text-dim mb-5">Enter an invite code or link to join an existing hub.</p>
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-riptide-text-dim mb-1.5 block">Invite Code</label>
+            <p className="text-sm text-riptide-text-dim mb-5">Enter an invite link or code to join an existing hub.</p>
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-riptide-text-dim mb-1.5 block">Invite Link</label>
             <input
               type="text"
               value={joinCode}
@@ -232,10 +252,10 @@ export default function HubSidebar() {
                 if (e.key === 'Enter') handleJoin();
                 if (e.key === 'Escape') { setShowJoin(false); setJoinCode(''); setJoinError(null); }
               }}
-              placeholder="Enter invite code"
+              placeholder="https://riftapp.io/invite/abc123"
               className="settings-input text-base"
               autoFocus
-              maxLength={64}
+              maxLength={256}
             />
             {joinError && (
               <p className="text-sm text-riptide-danger mt-2">{joinError}</p>
@@ -259,6 +279,50 @@ export default function HubSidebar() {
         </div>,
         document.body
       )}
+
+      {/* Hub right-click context menu */}
+      {contextMenu && createPortal(
+        <div className="fixed inset-0 z-[200]" onClick={() => setContextMenu(null)} onContextMenu={(e) => { e.preventDefault(); setContextMenu(null); }}>
+          <div
+            className="fixed animate-scale-in"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-riptide-panel rounded-lg border border-riptide-border/50 shadow-modal py-1.5 min-w-[180px]">
+              <button
+                onClick={() => {
+                  setInviteHub(contextMenu.hub);
+                  setContextMenu(null);
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm hover:bg-riptide-accent hover:text-white transition-colors text-left"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" />
+                  <line x1="20" y1="8" x2="20" y2="14" /><line x1="23" y1="11" x2="17" y2="11" />
+                </svg>
+                Invite to Server
+              </button>
+              <div className="mx-2 my-1 border-t border-riptide-border/30" />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(contextMenu.hub.id);
+                  setContextMenu(null);
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm hover:bg-riptide-surface-hover transition-colors text-left text-riptide-text-dim"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                Copy Server ID
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Invite to Server modal */}
+      {inviteHub && <InviteToServerModal hub={inviteHub} onClose={() => setInviteHub(null)} />}
     </div>
   );
 }

@@ -131,9 +131,35 @@ func (s *HubService) Members(ctx context.Context, hubID, userID string) ([]repos
 	return members, nil
 }
 
+func (s *HubService) GetInviteInfo(ctx context.Context, code string) (map[string]interface{}, error) {
+	invite, err := s.inviteRepo.GetByCode(ctx, code)
+	if err != nil {
+		return nil, apperror.NotFound("invalid invite code")
+	}
+	if invite.ExpiresAt != nil && time.Now().After(*invite.ExpiresAt) {
+		return nil, apperror.New(410, "invite has expired")
+	}
+	if invite.MaxUses > 0 && invite.Uses >= invite.MaxUses {
+		return nil, apperror.New(410, "invite has reached maximum uses")
+	}
+	hub, err := s.hubRepo.GetByID(ctx, invite.HubID)
+	if err != nil {
+		return nil, apperror.NotFound("hub not found")
+	}
+	memberCount, _ := s.hubRepo.CountMembers(ctx, invite.HubID)
+	return map[string]interface{}{
+		"code":         invite.Code,
+		"hub_id":       hub.ID,
+		"hub_name":     hub.Name,
+		"hub_icon_url": hub.IconURL,
+		"member_count": memberCount,
+		"expires_at":   invite.ExpiresAt,
+	}, nil
+}
+
 func (s *HubService) CreateInvite(ctx context.Context, hubID, userID string, maxUses int, expiresIn *int) (*models.HubInvite, error) {
-	if !s.canManage(ctx, hubID, userID) {
-		return nil, apperror.Forbidden("you do not have permission to create invites")
+	if !s.hubRepo.IsMember(ctx, hubID, userID) {
+		return nil, apperror.Forbidden("you must be a member to create invites")
 	}
 
 	code, err := repository.GenerateInviteCode()

@@ -4,6 +4,7 @@ import { useAuthStore } from './stores/auth';
 
 const AuthPage = lazy(() => import('./components/auth/AuthPage'));
 const AppLayout = lazy(() => import('./components/layout/AppLayout'));
+const InviteJoinPage = lazy(() => import('./components/invite/InviteJoinPage'));
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -69,6 +70,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<RequireGuest><AuthPage /></RequireGuest>} />
           <Route path="/register" element={<RequireGuest><AuthPage /></RequireGuest>} />
+          <Route path="/invite/:code" element={<RequireAuth><InviteJoinPage /></RequireAuth>} />
           <Route path="/hubs/:hubId/:streamId" element={<RequireAuth><AppLayout /></RequireAuth>} />
           <Route path="/hubs/:hubId" element={<RequireAuth><AppLayout /></RequireAuth>} />
           <Route path="/dms/:conversationId" element={<RequireAuth><AppLayout /></RequireAuth>} />
