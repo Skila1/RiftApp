@@ -1,6 +1,0 @@
-{
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "https://staging-backend.riftapp.io/api/:path*" },
-    { "source": "/((?!assets/).*)", "destination": "/index.html" }
-  ]
-}
