@@ -22,6 +22,7 @@ func writeAppError(w http.ResponseWriter, err error) {
 }
 
 func readJSON(r *http.Request, v interface{}) error {
+	r.Body = http.MaxBytesReader(nil, r.Body, 1<<20) // 1 MB
 	defer r.Body.Close()
 	return json.NewDecoder(r.Body).Decode(v)
 }

@@ -48,17 +48,14 @@ func main() {
 	userRepo := user.NewRepo(db)
 	userService := user.NewService(userRepo)
 
-	// Redis pub/sub
-	var broker pubsub.Broker
+	// Redis (used for future cross-instance pub/sub)
 	redisBroker, err := pubsub.NewRedisBroker(cfg.RedisURL)
 	if err != nil {
-		log.Printf("warning: Redis unavailable, using in-memory only: %v", err)
-		broker = pubsub.NewNoopBroker()
+		log.Printf("warning: Redis unavailable: %v", err)
 	} else {
-		broker = redisBroker
 		log.Println("connected to Redis")
+		defer redisBroker.Close()
 	}
-	defer broker.Close()
 
 	// WebSocket hub
 	wsHub := ws.NewHub(db)

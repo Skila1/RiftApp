@@ -11,9 +11,9 @@ import (
 )
 
 type WSHandler struct {
-	hub            *wsHub.Hub
-	authService    *auth.Service
-	upgrader       websocket.Upgrader
+	hub         *wsHub.Hub
+	authService *auth.Service
+	upgrader    websocket.Upgrader
 }
 
 func NewWSHandler(hub *wsHub.Hub, authService *auth.Service, allowedOrigins []string) *WSHandler {
@@ -30,7 +30,7 @@ func NewWSHandler(hub *wsHub.Hub, authService *auth.Service, allowedOrigins []st
 			CheckOrigin: func(r *http.Request) bool {
 				origin := r.Header.Get("Origin")
 				if origin == "" {
-					return true
+					return false
 				}
 				return originSet[origin]
 			},

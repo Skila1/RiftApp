@@ -60,7 +60,8 @@ func (h *VoiceHandler) Token(w http.ResponseWriter, r *http.Request) {
 
 	publicURL := h.cfg.LiveKitURL
 	if publicURL == "" {
-		publicURL = h.cfg.LiveKitHost
+		writeError(w, http.StatusInternalServerError, "LIVEKIT_URL not configured")
+		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{

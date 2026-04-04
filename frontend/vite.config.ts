@@ -21,7 +21,7 @@ export default defineConfig({
         manualChunks: {
           'vendor-react': ['react', 'react-dom'],
           'vendor-motion': ['framer-motion'],
-          'vendor-livekit': ['livekit-client', '@livekit/components-react'],
+          'vendor-livekit': ['livekit-client'],
           'vendor-misc': ['zustand', 'date-fns'],
         },
       },

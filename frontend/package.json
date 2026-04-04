@@ -10,7 +10,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@livekit/components-react": "^2.9.20",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.38.0",
     "livekit-client": "^2.18.1",

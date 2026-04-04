@@ -16,7 +16,6 @@ type Config struct {
 	S3AccessKey    string
 	S3SecretKey    string
 	S3Bucket       string
-	LiveKitHost    string
 	LiveKitURL     string
 	LiveKitKey     string
 	LiveKitSecret  string
@@ -34,7 +33,6 @@ func Load() *Config {
 		S3AccessKey:    getEnv("S3_ACCESS_KEY", "riptide"),
 		S3SecretKey:    getEnv("S3_SECRET_KEY", "riptide_dev"),
 		S3Bucket:       getEnv("S3_BUCKET", "riptide"),
-		LiveKitHost:    getEnv("LIVEKIT_HOST", "ws://localhost:7880"),
 		LiveKitURL:     getEnv("LIVEKIT_URL", ""),
 		LiveKitKey:     getEnv("LIVEKIT_API_KEY", "devkey"),
 		LiveKitSecret:  getEnv("LIVEKIT_API_SECRET", "devsecret"),

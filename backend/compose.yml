@@ -2,11 +2,11 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: riptide
-      POSTGRES_USER: riptide
-      POSTGRES_PASSWORD: riptide_dev
+      POSTGRES_DB: ${POSTGRES_DB:-riptide}
+      POSTGRES_USER: ${POSTGRES_USER:-riptide}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-riptide_dev}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -18,7 +18,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -29,23 +29,23 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: riptide
-      MINIO_ROOT_PASSWORD: riptide_dev
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-riptide}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-riptide_dev}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - minio_data:/data
 
   livekit:
     image: livekit/livekit-server:latest
-    command: --config /etc/livekit.yaml --bind 0.0.0.0 --node-ip=${LIVEKIT_NODE_IP:-}
+    command: --config /etc/livekit.yaml --bind 0.0.0.0
     ports:
       - "7880:7880"
       - "7881:7881"
       - "3478:3478/udp"
       - "5349:5349"
-      - "50000-50200:50000-50200/udp"
+      - "55000-55100:55000-55100/udp"
     volumes:
       - ./livekit.yaml:/etc/livekit.yaml:ro
     healthcheck:
@@ -59,17 +59,16 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - DATABASE_URL=postgres://riptide:riptide_dev@postgres:5432/riptide?sslmode=disable
+      - DATABASE_URL=postgres://${POSTGRES_USER:-riptide}:${POSTGRES_PASSWORD:-riptide_dev}@postgres:5432/${POSTGRES_DB:-riptide}?sslmode=disable
       - REDIS_URL=redis://redis:6379
       - S3_ENDPOINT=http://minio:9000
-      - S3_ACCESS_KEY=riptide
-      - S3_SECRET_KEY=riptide_dev
-      - S3_BUCKET=riptide
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      - S3_ACCESS_KEY=${MINIO_ROOT_USER:-riptide}
+      - S3_SECRET_KEY=${MINIO_ROOT_PASSWORD:-riptide_dev}
+      - S3_BUCKET=${S3_BUCKET:-riptide}
+      - JWT_SECRET=${JWT_SECRET}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - PORT=8080
-      - LIVEKIT_HOST=ws://livekit:7880
-      - LIVEKIT_URL=${LIVEKIT_URL:-ws://localhost:7880}
+      - LIVEKIT_URL=${LIVEKIT_URL}
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-devkey}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-devsecret}
     depends_on:
