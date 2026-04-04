@@ -42,6 +42,7 @@ jobs:
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          ack_no_webhook: true
           title: "Frontend Deploy"
           description: "Deployed successfully"
           color: 0x57ab5a
@@ -52,6 +53,7 @@ jobs:
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          ack_no_webhook: true
           title: "Frontend Build Failed"
           description: "Build or deploy failed — check logs"
           color: 0xe5534b
