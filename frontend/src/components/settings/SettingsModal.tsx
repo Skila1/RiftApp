@@ -143,22 +143,31 @@ function ProfileTab({
   const [displayName, setDisplayName] = useState(user.display_name);
   const [bio, setBio] = useState(user.bio ?? '');
   const [avatarUrl, setAvatarUrl] = useState(user.avatar_url ?? '');
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
+    setImgError(false);
     setUploading(true);
+
+    // Show local preview immediately
+    const localUrl = URL.createObjectURL(file);
+    setAvatarPreview(localUrl);
+
     try {
       const attachment = await api.uploadFile(file);
       setAvatarUrl(attachment.url);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to upload avatar');
+      setAvatarPreview(null);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -205,12 +214,12 @@ function ProfileTab({
           className="relative group cursor-pointer"
           title="Change avatar"
         >
-          {avatarUrl ? (
+          {(avatarPreview || avatarUrl) && !imgError ? (
             <img
-              src={avatarUrl}
+              src={avatarPreview || avatarUrl}
               alt="avatar"
               className="w-16 h-16 rounded-full object-cover"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              onError={() => setImgError(true)}
             />
           ) : (
             <div className="w-16 h-16 rounded-full bg-riptide-accent flex items-center justify-center text-lg font-semibold text-white">
