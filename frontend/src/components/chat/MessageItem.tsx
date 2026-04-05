@@ -330,9 +330,8 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
 
   const reactions = message.reactions || [];
 
-  // Extract embeddable content from message text
-  const ytIds = useMemo(() => extractYouTubeIds(message.content || ''), [message.content]);
-  const linkUrls = useMemo(() => extractUrls(message.content || ''), [message.content]);
+  // Extract all non-invite URLs from message text for the unified embed system
+  const embedUrls = useMemo(() => extractEmbedUrls(message.content || ''), [message.content]);
 
   const contentBlock =
     editing ? (
@@ -375,8 +374,7 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
       <>
         <div className="text-[15px] leading-[1.375rem] text-riftapp-text/[0.90]">{renderedContent}</div>
         <Attachments message={message} />
-        {ytIds.map((id) => <YouTubeEmbed key={id} videoId={id} />)}
-        {linkUrls.map((u) => <LinkPreview key={u} url={u} />)}
+        {embedUrls.length > 0 && <LinkEmbeds urls={embedUrls} />}
         {reactions.length > 0 && (
           <ReactionPills reactions={reactions} currentUserId={currentUserId} onToggle={handleToggle} />
         )}
@@ -510,111 +508,334 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
 
 export default MessageItem;
 
-/* ─── YouTube embed helpers ───────────────────────────────────────── */
-const YT_RE = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([\w-]{11})(?:[&?][^\s]*)?/g;
+/* ═══════════════════════════════════════════════════════════════════════
+   Unified Link Embed System
+   ═══════════════════════════════════════════════════════════════════════ */
 
-function extractYouTubeIds(text: string): string[] {
-  const ids: string[] = [];
-  const seen = new Set<string>();
-  let m: RegExpExecArray | null;
-  const re = new RegExp(YT_RE.source, 'g');
-  while ((m = re.exec(text)) !== null) {
-    if (!seen.has(m[1])) {
-      seen.add(m[1]);
-      ids.push(m[1]);
-    }
-  }
-  return ids;
+const PLAIN_URL_RE = /https?:\/\/[^\s<>]+/g;
+const YT_RE = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([\w-]{11})(?:[&?][^\s]*)?/;
+const REDDIT_RE = /(?:https?:\/\/)?(?:www\.|old\.|new\.)?reddit\.com\/r\/[\w]+\/comments\/[\w]+/;
+const TWITTER_RE = /(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com)\/\w+\/status\/\d+/;
+
+type EmbedType = 'youtube' | 'reddit' | 'twitter' | 'generic';
+
+interface ParsedEmbed {
+  url: string;
+  type: EmbedType;
+  /** YouTube video ID, if applicable */
+  ytId?: string;
 }
 
-function YouTubeEmbed({ videoId }: { videoId: string }) {
+function classifyUrl(url: string): ParsedEmbed {
+  const ytMatch = url.match(YT_RE);
+  if (ytMatch) return { url, type: 'youtube', ytId: ytMatch[1] };
+  if (REDDIT_RE.test(url)) return { url, type: 'reddit' };
+  if (TWITTER_RE.test(url)) return { url, type: 'twitter' };
+  return { url, type: 'generic' };
+}
+
+function extractEmbedUrls(text: string): ParsedEmbed[] {
+  const matches = text.match(PLAIN_URL_RE);
+  if (!matches) return [];
+  const seen = new Set<string>();
+  const invRe = new RegExp(INVITE_URL_RE.source);
+  const results: ParsedEmbed[] = [];
+  for (const u of matches) {
+    if (seen.has(u) || invRe.test(u)) continue;
+    seen.add(u);
+    results.push(classifyUrl(u));
+  }
+  return results;
+}
+
+/* Max embeds to render per message to avoid spam */
+const MAX_EMBEDS = 5;
+
+function LinkEmbeds({ urls }: { urls: ParsedEmbed[] }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const visible = urls.slice(0, MAX_EMBEDS);
+  const overflow = urls.length - MAX_EMBEDS;
+
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        onClick={() => setCollapsed(false)}
+        className="mt-1 text-xs text-riftapp-text-dim hover:text-riftapp-text-muted transition-colors"
+      >
+        Show {urls.length} embed{urls.length !== 1 ? 's' : ''}
+      </button>
+    );
+  }
+
   return (
-    <div className="mt-1.5 max-w-[420px] rounded-xl overflow-hidden border border-riftapp-border/40 bg-riftapp-bg/40">
-      <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
-        <iframe
-          src={`https://www.youtube.com/embed/${videoId}`}
-          title="YouTube video"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-          loading="lazy"
-          className="absolute inset-0 w-full h-full"
-        />
-      </div>
+    <div className="flex flex-col gap-1.5">
+      {visible.map((embed) => {
+        switch (embed.type) {
+          case 'youtube':
+            return <YouTubeEmbed key={embed.url} videoId={embed.ytId!} />;
+          case 'twitter':
+            return <TwitterEmbed key={embed.url} url={embed.url} />;
+          case 'reddit':
+            return <RedditEmbed key={embed.url} url={embed.url} />;
+          default:
+            return <GenericLinkPreview key={embed.url} url={embed.url} />;
+        }
+      })}
+      {overflow > 0 && (
+        <span className="text-xs text-riftapp-text-dim">+{overflow} more link{overflow !== 1 ? 's' : ''}</span>
+      )}
+      {urls.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setCollapsed(true)}
+          className="text-[11px] text-riftapp-text-dim hover:text-riftapp-text-muted transition-colors w-fit"
+        >
+          Hide embeds
+        </button>
+      )}
     </div>
   );
 }
 
-/* ─── Generic link unfurl ────────────────────────────────────────────── */
-const PLAIN_URL_RE = /https?:\/\/[^\s<>]+/g;
+/* ─── Shared embed card wrapper ──────────────────────────────────────── */
+const EMBED_CARD =
+  'mt-1.5 max-w-[420px] rounded-xl overflow-hidden border border-riftapp-border/40 bg-riftapp-surface transition-all duration-200 hover:brightness-110 hover:shadow-elevation-md';
 
-function extractUrls(text: string): string[] {
-  const matches = text.match(PLAIN_URL_RE);
-  if (!matches) return [];
-  // Deduplicate and exclude YouTube (handled separately) and invite links
-  const seen = new Set<string>();
-  const ytRe = new RegExp(YT_RE.source);
-  const invRe = new RegExp(INVITE_URL_RE.source);
-  return matches.filter((u) => {
-    if (seen.has(u)) return false;
-    seen.add(u);
-    if (ytRe.test(u)) return false;
-    if (invRe.test(u)) return false;
-    return true;
-  });
+/* ─── YouTube Embed ──────────────────────────────────────────────────── */
+function YouTubeEmbed({ videoId }: { videoId: string }) {
+  const [playing, setPlaying] = useState(false);
+  const thumbUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+
+  if (playing) {
+    return (
+      <div className={`${EMBED_CARD} bg-black`}>
+        <div className="relative w-full" style={{ paddingBottom: '56.25%', maxHeight: '300px' }}>
+          <iframe
+            src={`https://www.youtube.com/embed/${videoId}?autoplay=1`}
+            title="YouTube video"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="absolute inset-0 w-full h-full"
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setPlaying(true)}
+      className={`${EMBED_CARD} bg-riftapp-bg/40 block text-left cursor-pointer group/yt`}
+    >
+      <div className="relative w-full" style={{ aspectRatio: '16/9', maxHeight: '240px' }}>
+        <img src={thumbUrl} alt="YouTube video" loading="lazy" className="w-full h-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/10 group-hover/yt:from-black/60 transition-colors duration-200" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-14 h-14 rounded-full bg-red-600/90 group-hover/yt:bg-red-600 group-hover/yt:scale-110 flex items-center justify-center shadow-lg transition-all duration-200">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="white" className="ml-0.5"><polygon points="6,4 20,12 6,20" /></svg>
+          </div>
+        </div>
+        <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/50 text-[10px] text-white/80 font-medium">
+          <svg width="12" height="9" viewBox="0 0 28 20" fill="currentColor" className="text-red-500">
+            <path d="M27.4 3.1a3.5 3.5 0 0 0-2.5-2.5C22.7 0 14 0 14 0S5.3 0 3.1.6A3.5 3.5 0 0 0 .6 3.1C0 5.3 0 10 0 10s0 4.7.6 6.9a3.5 3.5 0 0 0 2.5 2.5C5.3 20 14 20 14 20s8.7 0 10.9-.6a3.5 3.5 0 0 0 2.5-2.5C28 14.7 28 10 28 10s0-4.7-.6-6.9z"/>
+            <polygon points="11,14.5 18.5,10 11,5.5" fill="white"/>
+          </svg>
+          YouTube
+        </div>
+      </div>
+    </button>
+  );
 }
 
-function LinkPreview({ url }: { url: string }) {
-  const [meta, setMeta] = useState<{ title?: string; description?: string; image?: string; domain: string } | null>(null);
-  const [failed, setFailed] = useState(false);
+/* ─── Twitter/X Embed ────────────────────────────────────────────────── */
+function TwitterEmbed({ url }: { url: string }) {
+  const [meta, setMeta] = useState<{ title?: string; description?: string; image?: string; site_name?: string } | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    const domain = (() => { try { return new URL(url).hostname; } catch { return ''; } })();
-    // Use a lightweight open-graph proxy to get metadata
-    // Fallback: just show domain card with no metadata fetch
-    setMeta({ domain });
-
-    // Attempt fetching og metadata via a same-origin proxy to avoid CORS
     (async () => {
       try {
         const res = await fetch(`/api/unfurl?url=${encodeURIComponent(url)}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!cancelled) {
-          setMeta({ title: data.title, description: data.description, image: data.image, domain });
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) setMeta(data);
         }
-      } catch {
-        // Metadata fetch failed — the simple domain card remains
-      }
+      } catch { /* ignore */ }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [url]);
+
+  const handle = (() => { try { return new URL(url).pathname.split('/')[1]; } catch { return ''; } })();
+
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className={`${EMBED_CARD} flex p-3 gap-3 group/tw`}>
+      {/* Left accent stripe */}
+      <div className="w-1 rounded-full bg-[#1d9bf0] flex-shrink-0" />
+      <div className="min-w-0 flex-1">
+        {/* Header */}
+        <div className="flex items-center gap-1.5 mb-1">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="#1d9bf0" className="flex-shrink-0">
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+          </svg>
+          {handle && <span className="text-xs text-riftapp-text-dim">@{handle}</span>}
+        </div>
+
+        {/* Content */}
+        {loading ? (
+          <div className="h-8 bg-riftapp-bg/60 animate-pulse-soft rounded" />
+        ) : meta?.description ? (
+          <p className="text-sm text-riftapp-text/90 line-clamp-3 leading-snug">{meta.description}</p>
+        ) : meta?.title ? (
+          <p className="text-sm text-riftapp-text/90 line-clamp-3 leading-snug">{meta.title}</p>
+        ) : (
+          <p className="text-xs text-riftapp-text-dim">View on X</p>
+        )}
+
+        {/* Media thumbnail */}
+        {meta?.image && (
+          <img src={meta.image} alt="" loading="lazy" className="mt-2 w-full max-h-[200px] object-cover rounded-lg" />
+        )}
+      </div>
+    </a>
+  );
+}
+
+/* ─── Reddit Embed ───────────────────────────────────────────────────── */
+function RedditEmbed({ url }: { url: string }) {
+  const [meta, setMeta] = useState<{ title?: string; description?: string; image?: string; site_name?: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const subreddit = (() => {
+    try {
+      const m = url.match(/\/r\/([\w]+)/);
+      return m ? `r/${m[1]}` : '';
+    } catch { return ''; }
+  })();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/unfurl?url=${encodeURIComponent(url)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) setMeta(data);
+        }
+      } catch { /* ignore */ }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [url]);
+
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className={`${EMBED_CARD} flex p-3 gap-3 group/rd`}>
+      {/* Left accent stripe */}
+      <div className="w-1 rounded-full bg-[#ff4500] flex-shrink-0" />
+      <div className="min-w-0 flex-1">
+        {/* Header */}
+        <div className="flex items-center gap-1.5 mb-1">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="#ff4500" className="flex-shrink-0">
+            <circle cx="12" cy="12" r="11" fill="#ff4500"/>
+            <path d="M16.5 13.5c0 .83-2.01 2.5-4.5 2.5s-4.5-1.67-4.5-2.5" stroke="white" strokeWidth="1.2" fill="none" strokeLinecap="round"/>
+            <circle cx="9" cy="11" r="1.2" fill="white"/>
+            <circle cx="15" cy="11" r="1.2" fill="white"/>
+            <circle cx="18" cy="6" r="1.5" fill="#ff4500" stroke="white" strokeWidth=".8"/>
+            <path d="M14.5 3.5L18 6" stroke="white" strokeWidth=".8"/>
+          </svg>
+          {subreddit && <span className="text-xs text-riftapp-text-dim font-medium">{subreddit}</span>}
+        </div>
+
+        {/* Content */}
+        {loading ? (
+          <div className="h-8 bg-riftapp-bg/60 animate-pulse-soft rounded" />
+        ) : (
+          <>
+            {meta?.title && (
+              <p className="text-sm font-medium text-riftapp-text/90 line-clamp-2 leading-snug group-hover/rd:text-riftapp-accent transition-colors">{meta.title}</p>
+            )}
+            {meta?.description && (
+              <p className="text-xs text-riftapp-text-muted line-clamp-2 mt-0.5">{meta.description}</p>
+            )}
+          </>
+        )}
+
+        {/* Thumbnail */}
+        {meta?.image && (
+          <img src={meta.image} alt="" loading="lazy" className="mt-2 w-full max-h-[200px] object-cover rounded-lg" />
+        )}
+      </div>
+    </a>
+  );
+}
+
+/* ─── Generic Link Preview ───────────────────────────────────────────── */
+function GenericLinkPreview({ url }: { url: string }) {
+  const [meta, setMeta] = useState<{ title?: string; description?: string; image?: string; site_name?: string; domain: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [imgFailed, setImgFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const domain = (() => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; } })();
+    setMeta({ domain });
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/unfurl?url=${encodeURIComponent(url)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) setMeta({ ...data, domain });
+        }
+      } catch { /* ignore */ }
+      if (!cancelled) setLoading(false);
     })();
 
     return () => { cancelled = true; };
   }, [url]);
 
-  if (failed || !meta) return null;
+  if (!meta) return null;
+
+  const hasImage = meta.image && !imgFailed;
 
   return (
     <a
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="mt-1.5 flex gap-3 max-w-[420px] rounded-xl border border-riftapp-border/40 bg-riftapp-surface p-3
-        hover:bg-riftapp-surface-hover hover:border-riftapp-border transition-all duration-150 group/link"
+      className={`${EMBED_CARD} flex gap-3 p-3 group/link`}
     >
-      {meta.image && (
+      {/* Thumbnail */}
+      {hasImage && (
         <img
-          src={meta.image}
+          src={meta.image!}
           alt=""
+          loading="lazy"
           className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
-          onError={() => setFailed(false)}
+          onError={() => setImgFailed(true)}
         />
       )}
       <div className="min-w-0 flex-1">
-        {meta.title && (
-          <p className="text-sm font-medium text-riftapp-accent group-hover/link:underline truncate">{meta.title}</p>
-        )}
-        {meta.description && (
-          <p className="text-xs text-riftapp-text-muted line-clamp-2 mt-0.5">{meta.description}</p>
+        {loading && !meta.title ? (
+          <div className="space-y-1.5">
+            <div className="h-3.5 w-3/4 bg-riftapp-bg/60 animate-pulse-soft rounded" />
+            <div className="h-3 w-1/2 bg-riftapp-bg/60 animate-pulse-soft rounded" />
+          </div>
+        ) : (
+          <>
+            {meta.site_name && (
+              <p className="text-[11px] text-riftapp-text-dim font-medium mb-0.5">{meta.site_name}</p>
+            )}
+            {meta.title && (
+              <p className="text-sm font-medium text-riftapp-accent group-hover/link:underline line-clamp-2">{meta.title}</p>
+            )}
+            {meta.description && (
+              <p className="text-xs text-riftapp-text-muted line-clamp-2 mt-0.5">{meta.description}</p>
+            )}
+          </>
         )}
         <p className="text-[11px] text-riftapp-text-dim mt-1">{meta.domain}</p>
       </div>

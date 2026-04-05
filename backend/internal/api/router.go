@@ -75,6 +75,14 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 
+	// Link unfurl (OG metadata) — authenticated + rate-limited separately.
+	unfurlRL := middleware.NewRateLimiter(rate.Every(2*time.Second), 10)
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.Auth(deps.AuthService))
+		r.Use(middleware.RateLimit(unfurlRL))
+		r.Get("/api/unfurl", HandleUnfurl)
+	})
+
 	publicRL := middleware.NewRateLimiter(rate.Every(12*time.Second), 5)
 	r.Route("/api/auth", func(r chi.Router) {
 		r.Use(middleware.RateLimit(publicRL))
