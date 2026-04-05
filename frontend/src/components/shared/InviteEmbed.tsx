@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api/client';
+import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { useHubStore } from '../../stores/hubStore';
 
 interface InviteInfo {
@@ -62,7 +63,7 @@ export default function InviteEmbed({ code }: { code: string }) {
       {/* Hub icon */}
       <div className="w-12 h-12 rounded-2xl bg-riftapp-panel flex items-center justify-center flex-shrink-0 overflow-hidden">
         {info.hub_icon_url ? (
-          <img src={info.hub_icon_url} alt="" className="w-full h-full object-cover" />
+          <img src={publicAssetUrl(info.hub_icon_url)} alt="" className="w-full h-full object-cover" />
         ) : (
           <span className="text-sm font-bold text-riftapp-text-muted">
             {info.hub_name.slice(0, 2).toUpperCase()}

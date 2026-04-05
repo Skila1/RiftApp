@@ -191,7 +191,7 @@ function OverviewTab({ hub, isOwner, onCloseSettings }: { hub: Hub; isOwner: boo
         <div className="relative">
           {iconUrl ? (
             <img
-              src={iconUrl}
+              src={publicAssetUrl(iconUrl)}
               alt="hub icon"
               className="w-16 h-16 rounded-2xl object-cover"
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}

@@ -8,6 +8,7 @@ import { useNotificationStore } from '../../stores/notificationStore';
 import { api } from '../../api/client';
 import type { Hub, HubNotificationSettings, Notification } from '../../types';
 import InviteToServerModal from '../modals/InviteToServerModal';
+import { publicAssetUrl } from '../../utils/publicAssetUrl';
 
 const DEFAULT_HUB_NOTIFICATION: HubNotificationSettings = {
   notification_level: 'mentions_only',
@@ -257,7 +258,7 @@ export default function HubSidebar() {
             >
               {hub.icon_url ? (
                 <img
-                  src={hub.icon_url}
+                  src={publicAssetUrl(hub.icon_url)}
                   alt=""
                   className="w-full h-full rounded-[inherit] object-cover"
                 />

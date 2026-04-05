@@ -35,5 +35,13 @@ export async function onRequest(context) {
     init.body = context.request.body;
   }
 
-  return fetch(dest.toString(), init);
+  try {
+    return await fetch(dest.toString(), init);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return new Response(
+      `Pages proxy: upstream fetch failed (${msg}). Check BACKEND_URL, TLS, and that the API allows Cloudflare egress.`,
+      { status: 502, headers: { 'Content-Type': 'text/plain; charset=utf-8' } },
+    );
+  }
 }

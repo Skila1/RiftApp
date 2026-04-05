@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
+import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { useHubStore } from '../../stores/hubStore';
 
 interface InviteInfo {
@@ -88,7 +89,7 @@ export default function InviteJoinPage() {
         {/* Hub icon */}
         <div className="w-20 h-20 rounded-3xl bg-riftapp-surface flex items-center justify-center mx-auto mb-4 overflow-hidden shadow-elevation-low">
           {info.hub_icon_url ? (
-            <img src={info.hub_icon_url} alt="" className="w-full h-full object-cover" />
+            <img src={publicAssetUrl(info.hub_icon_url)} alt="" className="w-full h-full object-cover" />
           ) : (
             <span className="text-2xl font-bold text-riftapp-text-muted">
               {info.hub_name.slice(0, 2).toUpperCase()}
