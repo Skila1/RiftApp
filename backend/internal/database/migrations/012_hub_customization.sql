@@ -1,8 +1,8 @@
 -- +goose Up
 
 CREATE TABLE IF NOT EXISTS hub_emojis (
-    id         TEXT PRIMARY KEY,
-    hub_id     TEXT NOT NULL REFERENCES hubs(id) ON DELETE CASCADE,
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    hub_id     UUID NOT NULL REFERENCES hubs(id) ON DELETE CASCADE,
     name       TEXT NOT NULL,
     file_url   TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS hub_emojis (
 CREATE INDEX IF NOT EXISTS idx_hub_emojis_hub ON hub_emojis(hub_id);
 
 CREATE TABLE IF NOT EXISTS hub_stickers (
-    id         TEXT PRIMARY KEY,
-    hub_id     TEXT NOT NULL REFERENCES hubs(id) ON DELETE CASCADE,
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    hub_id     UUID NOT NULL REFERENCES hubs(id) ON DELETE CASCADE,
     name       TEXT NOT NULL,
     file_url   TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -19,8 +19,8 @@ CREATE TABLE IF NOT EXISTS hub_stickers (
 CREATE INDEX IF NOT EXISTS idx_hub_stickers_hub ON hub_stickers(hub_id);
 
 CREATE TABLE IF NOT EXISTS hub_sounds (
-    id         TEXT PRIMARY KEY,
-    hub_id     TEXT NOT NULL REFERENCES hubs(id) ON DELETE CASCADE,
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    hub_id     UUID NOT NULL REFERENCES hubs(id) ON DELETE CASCADE,
     name       TEXT NOT NULL,
     file_url   TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
