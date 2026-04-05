@@ -1,8 +1,9 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useMessageStore } from '../../stores/messageStore';
 import { useReplyDraftStore } from '../../stores/replyDraftStore';
+import { usePresenceStore } from '../../stores/presenceStore';
 import { api } from '../../api/client';
-import type { Attachment } from '../../types';
+import type { Attachment, User } from '../../types';
 
 const TYPING_THROTTLE_MS = 500;
 const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024; // 2 GB
@@ -42,6 +43,25 @@ export default function MessageInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastTypingRef = useRef(0);
+  const hubMembers = usePresenceStore((s) => s.hubMembers);
+
+  // Mention autocomplete state
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const mentionStartRef = useRef<number | null>(null);
+
+  const memberList = useMemo<User[]>(
+    () => Object.values(hubMembers),
+    [hubMembers],
+  );
+
+  const mentionResults = useMemo(() => {
+    if (mentionQuery === null) return [];
+    const q = mentionQuery.toLowerCase();
+    return memberList
+      .filter((u) => u.username.toLowerCase().startsWith(q) || u.display_name.toLowerCase().startsWith(q))
+      .slice(0, 8);
+  }, [mentionQuery, memberList]);
 
   useEffect(() => {
     setReplyTo(null);
@@ -133,7 +153,52 @@ export default function MessageInput({
     }
   }, [content, pendingFiles, sendMessage, onTypingStop, isDMMode, onSendDM, replyTo, setReplyTo]);
 
+  const insertMention = useCallback((username: string) => {
+    const start = mentionStartRef.current;
+    if (start === null) return;
+    const before = content.slice(0, start);
+    const textarea = textareaRef.current;
+    const cursorPos = textarea?.selectionStart ?? content.length;
+    const after = content.slice(cursorPos);
+    const inserted = `@${username} `;
+    setContent(before + inserted + after);
+    setMentionQuery(null);
+    mentionStartRef.current = null;
+    // Restore focus & cursor
+    requestAnimationFrame(() => {
+      if (textarea) {
+        textarea.focus();
+        const pos = before.length + inserted.length;
+        textarea.setSelectionRange(pos, pos);
+      }
+    });
+  }, [content]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Mention autocomplete navigation
+    if (mentionQuery !== null && mentionResults.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionIndex((i) => (i + 1) % mentionResults.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionIndex((i) => (i - 1 + mentionResults.length) % mentionResults.length);
+        return;
+      }
+      if (e.key === 'Tab' || e.key === 'Enter') {
+        e.preventDefault();
+        insertMention(mentionResults[mentionIndex].username);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMentionQuery(null);
+        mentionStartRef.current = null;
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
@@ -149,12 +214,26 @@ export default function MessageInput({
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setContent(e.target.value);
+    const val = e.target.value;
+    setContent(val);
     handleInput();
+
+    // Detect @mention query
+    const cursorPos = e.target.selectionStart ?? val.length;
+    const textBefore = val.slice(0, cursorPos);
+    const atMatch = textBefore.match(/@([\w.\-]*)$/);
+    if (atMatch) {
+      mentionStartRef.current = cursorPos - atMatch[0].length;
+      setMentionQuery(atMatch[1]);
+      setMentionIndex(0);
+    } else {
+      mentionStartRef.current = null;
+      setMentionQuery(null);
+    }
 
     // Throttled typing event
     const now = Date.now();
-    if (e.target.value.length > 0 && now - lastTypingRef.current > TYPING_THROTTLE_MS) {
+    if (val.length > 0 && now - lastTypingRef.current > TYPING_THROTTLE_MS) {
       lastTypingRef.current = now;
       onTyping?.();
     }
@@ -272,9 +351,41 @@ export default function MessageInput({
         </div>
       )}
 
-      <div className={`bg-riftapp-surface rounded-xl border flex items-end transition-all duration-200 ${
+      <div className={`bg-riftapp-surface rounded-xl border flex items-end transition-all duration-200 relative ${
         dragging ? 'border-riftapp-accent shadow-glow' : 'border-riftapp-border/60 hover:border-riftapp-border'
       }`}>
+        {/* Mention autocomplete dropdown */}
+        {mentionQuery !== null && mentionResults.length > 0 && (
+          <div className="absolute bottom-full left-0 right-0 mb-1 bg-riftapp-panel border border-riftapp-border/60 rounded-xl shadow-elevation-high overflow-hidden z-50 animate-scale-in">
+            <div className="px-3 py-1.5 text-[11px] font-semibold text-riftapp-text-dim uppercase tracking-wide">Members</div>
+            {mentionResults.map((user, i) => (
+              <button
+                key={user.id}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  insertMention(user.username);
+                }}
+                onMouseEnter={() => setMentionIndex(i)}
+                className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-[14px] transition-colors ${
+                  i === mentionIndex
+                    ? 'bg-riftapp-accent/15 text-riftapp-text'
+                    : 'text-riftapp-text-muted hover:bg-riftapp-surface-hover'
+                }`}
+              >
+                {user.avatar_url ? (
+                  <img src={user.avatar_url} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-riftapp-surface flex items-center justify-center text-[10px] font-bold text-riftapp-text-dim flex-shrink-0">
+                    {(user.display_name || user.username).slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <span className="font-medium truncate">{user.display_name}</span>
+                <span className="text-[12px] text-riftapp-text-dim ml-auto flex-shrink-0">@{user.username}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {/* File attach button */}
         <button
           onClick={() => fileInputRef.current?.click()}

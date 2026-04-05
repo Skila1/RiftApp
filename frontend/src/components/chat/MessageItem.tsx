@@ -63,7 +63,7 @@ function avatarBg(name: string): string {
 
 const INVITE_URL_RE = /https?:\/\/[^\s/]+\/invite\/([A-Za-z0-9]+)/g;
 
-function renderContent(content: string, usernames?: Set<string>) {
+function renderContent(content: string, usernames?: Set<string>, onMentionClick?: (username: string, rect: DOMRect) => void) {
   const parts: React.ReactNode[] = [];
   let remaining = content;
   let key = 0;
@@ -75,7 +75,7 @@ function renderContent(content: string, usernames?: Set<string>) {
   while ((match = codeBlockRegex.exec(remaining)) !== null) {
     if (match.index > lastIndex) {
       parts.push(
-        <span key={key++}>{renderInline(remaining.slice(lastIndex, match.index), usernames)}</span>
+        <span key={key++}>{renderInline(remaining.slice(lastIndex, match.index), usernames, onMentionClick)}</span>
       );
     }
     parts.push(
@@ -88,7 +88,7 @@ function renderContent(content: string, usernames?: Set<string>) {
 
   if (lastIndex < remaining.length) {
     parts.push(
-      <span key={key++}>{renderInline(remaining.slice(lastIndex), usernames)}</span>
+      <span key={key++}>{renderInline(remaining.slice(lastIndex), usernames, onMentionClick)}</span>
     );
   }
 
@@ -100,7 +100,7 @@ function renderContent(content: string, usernames?: Set<string>) {
     inviteCodes.push(inviteMatch[1]);
   }
 
-  const result = parts.length > 0 ? parts : [<span key={0}>{renderInline(content, usernames)}</span>];
+  const result = parts.length > 0 ? parts : [<span key={0}>{renderInline(content, usernames, onMentionClick)}</span>];
 
   if (inviteCodes.length > 0) {
     result.push(
@@ -111,7 +111,7 @@ function renderContent(content: string, usernames?: Set<string>) {
   return result;
 }
 
-function renderInline(text: string, usernames?: Set<string>): React.ReactNode {
+function renderInline(text: string, usernames?: Set<string>, onMentionClick?: (username: string, rect: DOMRect) => void): React.ReactNode {
   // Split on inline code first
   return text.split(/(`[^`]+`)/).map((part, i) => {
     if (part.startsWith('`') && part.endsWith('`')) {
@@ -123,13 +123,13 @@ function renderInline(text: string, usernames?: Set<string>): React.ReactNode {
     }
     // Parse @mentions in non-code text
     if (usernames && usernames.size > 0) {
-      return renderMentions(part, usernames, i);
+      return renderMentions(part, usernames, i, onMentionClick);
     }
     return part;
   });
 }
 
-function renderMentions(text: string, usernames: Set<string>, parentKey: number): React.ReactNode {
+function renderMentions(text: string, usernames: Set<string>, parentKey: number, onMentionClick?: (username: string, rect: DOMRect) => void): React.ReactNode {
   // Match @word patterns (username chars: letters, digits, underscores, dots, hyphens)
   const mentionRe = /@([\w.\-]+)/g;
   const nodes: React.ReactNode[] = [];
@@ -142,9 +142,17 @@ function renderMentions(text: string, usernames: Set<string>, parentKey: number)
     if (m.index > lastIdx) {
       nodes.push(text.slice(lastIdx, m.index));
     }
+    const capturedName = name;
     nodes.push(
       <span
         key={`${parentKey}-m${k++}`}
+        role="button"
+        tabIndex={0}
+        onClick={(e) => {
+          if (onMentionClick) {
+            onMentionClick(capturedName, (e.currentTarget as HTMLElement).getBoundingClientRect());
+          }
+        }}
         className="rounded px-1 py-px bg-riftapp-accent/20 text-riftapp-accent-hover font-medium cursor-pointer hover:bg-riftapp-accent/30 hover:underline"
       >
         @{name}
@@ -209,9 +217,16 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
     return set;
   }, [hubMembers]);
 
+  const handleMentionClick = useCallback((username: string, rect: DOMRect) => {
+    const user = Object.values(hubMembers).find(
+      (u) => u.username.toLowerCase() === username.toLowerCase(),
+    );
+    if (user) openProfile(user, rect);
+  }, [hubMembers, openProfile]);
+
   const renderedContent = useMemo(
-    () => message.content ? renderContent(message.content, knownUsernames) : null,
-    [message.content, knownUsernames],
+    () => message.content ? renderContent(message.content, knownUsernames, handleMentionClick) : null,
+    [message.content, knownUsernames, handleMentionClick],
   );
 
   // Detect whether the current user is mentioned in this message
