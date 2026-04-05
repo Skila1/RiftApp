@@ -2,8 +2,6 @@ package api
 
 import (
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -64,12 +62,11 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 
 	r.Get("/ws", wsH.Handle)
 
-	// Reverse proxy for S3/MinIO assets (avatars, attachments)
-	if s3Target, err := url.Parse(deps.Config.S3Endpoint); err == nil {
-		s3Proxy := httputil.NewSingleHostReverseProxy(s3Target)
-		r.Handle("/s3/*", http.StripPrefix("/s3", s3Proxy))
-		// Same proxy under /api/s3 so the SPA can load media via the API path (same-origin as /api).
-		r.Handle("/api/s3/*", http.StripPrefix("/api/s3", s3Proxy))
+	// Authenticated S3/MinIO file serving (avatars, attachments).
+	// Uses the MinIO client with credentials instead of an anonymous reverse proxy.
+	if deps.UploadHandler != nil {
+		r.Get("/s3/*", deps.UploadHandler.ServeObject)
+		r.Get("/api/s3/*", deps.UploadHandler.ServeObject)
 	}
 
 	r.Get("/api/health", func(w http.ResponseWriter, r *http.Request) {

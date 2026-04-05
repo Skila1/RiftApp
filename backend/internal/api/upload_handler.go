@@ -3,12 +3,14 @@ package api
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"path"
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/minio/minio-go/v7"
@@ -175,4 +177,52 @@ func (h *UploadHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		"content_type": contentType,
 		"size_bytes":   header.Size,
 	})
+}
+
+// ServeObject streams a file from MinIO using authenticated access.
+// Registered for GET /s3/* and GET /api/s3/* — the chi wildcard gives
+// the "{bucket}/{object}" portion of the path.
+func (h *UploadHandler) ServeObject(w http.ResponseWriter, r *http.Request) {
+	objPath := chi.URLParam(r, "*")
+	if objPath == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	idx := strings.IndexByte(objPath, '/')
+	if idx < 0 || idx == len(objPath)-1 {
+		http.NotFound(w, r)
+		return
+	}
+	bucket, objectName := objPath[:idx], objPath[idx+1:]
+
+	if bucket != h.bucket {
+		http.NotFound(w, r)
+		return
+	}
+
+	obj, err := h.client.GetObject(r.Context(), bucket, objectName, minio.GetObjectOptions{})
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer obj.Close()
+
+	stat, err := obj.Stat()
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	if match := r.Header.Get("If-None-Match"); match != "" && match == stat.ETag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
+	w.Header().Set("Content-Type", stat.ContentType)
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", stat.Size))
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.Header().Set("ETag", stat.ETag)
+
+	io.Copy(w, obj)
 }
