@@ -353,6 +353,13 @@ func (h *Hub) handleClientEvent(c *Client, evt *Event) {
 			return
 		}
 		go h.handleVoiceState(c.userID, data.StreamID, data.Action)
+
+	case OpVoiceSpeakingUpdate:
+		var data VoiceSpeakingClientData
+		if err := json.Unmarshal(evt.Data, &data); err != nil || data.StreamID == "" {
+			return
+		}
+		go h.handleVoiceSpeaking(c.userID, data.StreamID, data.Speaking)
 	}
 }
 
@@ -415,7 +422,6 @@ func (h *Hub) broadcastVoiceState(streamID, userID, action string) {
 		UserID:   userID,
 		Action:   action,
 	})
-
 	h.mu.RLock()
 	for rows.Next() {
 		var memberID string
@@ -429,6 +435,21 @@ func (h *Hub) broadcastVoiceState(streamID, userID, action string) {
 		}
 	}
 	h.mu.RUnlock()
+}
+
+func (h *Hub) handleVoiceSpeaking(userID, streamID string, speaking bool) {
+	h.mu.RLock()
+	inVoice := h.voiceState[streamID] != nil && h.voiceState[streamID][userID]
+	h.mu.RUnlock()
+	if !inVoice {
+		return
+	}
+
+	h.BroadcastToVoiceChannel(streamID, NewEvent(OpVoiceSpeakingUpdate, VoiceSpeakingData{
+		StreamID: streamID,
+		UserID:   userID,
+		Speaking: speaking,
+	}))
 }
 
 // removeUserFromAllVoice removes a user from all voice channels on disconnect

@@ -952,6 +952,7 @@ function ChannelGroup({
   const voiceStreamId = useVoiceStore((s) => s.streamId);
   const voiceConnected = useVoiceStore((s) => s.connected);
   const voiceParticipants = useVoiceStore((s) => s.participants);
+  const speakingSignals = useVoiceStore((s) => s.speakingSignals);
   const hideNamesByStream = useVoiceChannelUiStore((s) => s.hideNamesByStream);
   const textStreams = streams.filter((s) => s.type === 0);
   const voiceStreams = streams.filter((s) => s.type === 1);
@@ -987,6 +988,7 @@ function ChannelGroup({
             hasMembers={hasMembers}
             hideVcNames={hideVcNames}
             voiceParticipants={isConnected ? voiceParticipants : []}
+            speakingSignals={speakingSignals}
             hubMembers={hubMembers}
             hubId={hubId}
             canModerateVoiceUsers={canModerateVoiceUsers}
@@ -1086,6 +1088,7 @@ function SortableVoiceItem({
   hasMembers,
   hideVcNames,
   voiceParticipants,
+  speakingSignals,
   hubMembers,
   hubId,
   canModerateVoiceUsers,
@@ -1107,6 +1110,7 @@ function SortableVoiceItem({
   hasMembers: boolean;
   hideVcNames: boolean;
   voiceParticipants: { identity: string; isSpeaking: boolean; isMuted: boolean; isScreenSharing: boolean }[];
+  speakingSignals: Record<string, boolean>;
   hubMembers: Record<string, User>;
   hubId: string | null;
   canModerateVoiceUsers: boolean;
@@ -1217,7 +1221,7 @@ function SortableVoiceItem({
                 key={uid}
                 participant={{
                   identity: uid,
-                  isSpeaking: false,
+                  isSpeaking: Boolean(speakingSignals[uid]),
                   isMuted: false,
                   isCameraOn: false,
                   isScreenSharing: false,

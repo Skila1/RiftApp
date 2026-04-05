@@ -25,6 +25,11 @@ type ScreenShareNotice = {
   message: string;
 };
 
+const VAD_THRESHOLD = 0.03;
+const VAD_RELEASE_MS = 110;
+const VAD_SPEAKING_BROADCAST_INTERVAL_MS = 80;
+const VAD_LEVEL_PUSH_INTERVAL_MS = 33;
+
 function loadNoiseSuppressionMode(): NoiseSuppressionMode {
   try {
     const v = localStorage.getItem(NS_STORAGE_KEY);
@@ -59,12 +64,15 @@ interface VoiceStore {
   roomName: string | null;
   streamId: string | null;
   participants: VoiceParticipant[];
+  speakingSignals: Record<string, boolean>;
   isMuted: boolean;
   isDeafened: boolean;
   isCameraOn: boolean;
   isScreenSharing: boolean;
   pttActive: boolean;
   pttMode: boolean;
+  micLevel: number;
+  vadThreshold: number;
   /** 0–1 per remote identity; used for HTML audio elements tagged with data-riftapp-voice-id */
   participantVolumes: Record<string, number>;
   /** Mutes all remote voice output without changing per-user slider values */
@@ -108,6 +116,8 @@ interface VoiceStore {
   setNoiseSuppressionMode: (mode: NoiseSuppressionMode) => Promise<void>;
   toggleNoiseSuppression: () => Promise<void>;
   moveToStream: (streamId: string) => Promise<void>;
+  applySpeakingSignal: (identity: string, speaking: boolean) => void;
+  clearSpeakingSignal: (identity: string) => void;
   triggerSoundboardSpeaking: (identity: string, durationMs: number) => void;
 }
 
@@ -132,6 +142,163 @@ let wasMutedBeforeDeafen = false;
 let screenShareNoticeTimer: number | null = null;
 let transientSpeakingExpiry = new Map<string, number>();
 let transientSpeakingTimers = new Map<string, number>();
+let micVadContext: AudioContext | null = null;
+let micVadAnalyser: AnalyserNode | null = null;
+let micVadSource: MediaStreamAudioSourceNode | null = null;
+let micVadData: Uint8Array<ArrayBuffer> | null = null;
+let micVadFrame: number | null = null;
+let micVadTrackId: string | null = null;
+let micVadSpeaking = false;
+let micVadHoldUntil = 0;
+let micVadLastLevelPushAt = 0;
+let micVadLastSpeakingBroadcastAt = 0;
+let micVadDisplayLevel = 0;
+
+function hasOwnKey(record: Record<string, boolean>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
+function broadcastLocalSpeakingState(identity: string, speaking: boolean, force = false) {
+  const state = useVoiceStore.getState();
+  const streamId = state.streamId;
+  const now = performance.now();
+
+  if (!force && speaking && now - micVadLastSpeakingBroadcastAt < VAD_SPEAKING_BROADCAST_INTERVAL_MS) {
+    return;
+  }
+  micVadLastSpeakingBroadcastAt = now;
+
+  state.applySpeakingSignal(identity, speaking);
+  if (streamId) {
+    wsSend('voice_speaking_update', { stream_id: streamId, speaking });
+  }
+}
+
+function stopMicActivityMonitor(options?: { broadcast?: boolean; identity?: string }) {
+  const identity = options?.identity;
+
+  if (micVadFrame != null) {
+    window.cancelAnimationFrame(micVadFrame);
+    micVadFrame = null;
+  }
+
+  micVadSource?.disconnect();
+  micVadAnalyser?.disconnect();
+  micVadSource = null;
+  micVadAnalyser = null;
+  micVadData = null;
+  micVadTrackId = null;
+
+  if (micVadContext) {
+    void micVadContext.close().catch(() => {});
+    micVadContext = null;
+  }
+
+  if (identity) {
+    if (options?.broadcast) {
+      broadcastLocalSpeakingState(identity, false, true);
+    } else {
+      useVoiceStore.getState().applySpeakingSignal(identity, false);
+    }
+  }
+
+  micVadSpeaking = false;
+  micVadHoldUntil = 0;
+  micVadLastSpeakingBroadcastAt = 0;
+  micVadLastLevelPushAt = 0;
+  micVadDisplayLevel = 0;
+  useVoiceStore.setState({ micLevel: 0 });
+}
+
+function currentMicMediaTrack(room: Room): MediaStreamTrack | null {
+  const publication = room.localParticipant.getTrackPublication(Track.Source.Microphone) as LocalTrackPublication | undefined;
+  const mediaTrack = (publication?.track as { mediaStreamTrack?: MediaStreamTrack } | undefined)?.mediaStreamTrack;
+  return mediaTrack ?? null;
+}
+
+async function ensureMicActivityMonitor(room: Room) {
+  if (room.state !== ConnectionState.Connected) return;
+  const identity = room.localParticipant.identity;
+  const mediaTrack = currentMicMediaTrack(room);
+  if (!mediaTrack || mediaTrack.readyState === 'ended') {
+    stopMicActivityMonitor({ broadcast: false, identity });
+    return;
+  }
+  if (micVadFrame != null && micVadTrackId === mediaTrack.id) {
+    return;
+  }
+
+  stopMicActivityMonitor({ broadcast: false, identity });
+
+  const context = new AudioContext({ latencyHint: 'interactive' });
+  const source = context.createMediaStreamSource(new MediaStream([mediaTrack]));
+  const analyser = context.createAnalyser();
+  analyser.fftSize = 256;
+  analyser.smoothingTimeConstant = 0.12;
+  source.connect(analyser);
+
+  micVadContext = context;
+  micVadSource = source;
+  micVadAnalyser = analyser;
+  micVadData = new Uint8Array(new ArrayBuffer(analyser.fftSize));
+  micVadTrackId = mediaTrack.id;
+  micVadSpeaking = false;
+  micVadHoldUntil = 0;
+  micVadDisplayLevel = 0;
+  micVadLastLevelPushAt = 0;
+  micVadLastSpeakingBroadcastAt = 0;
+
+  try {
+    if (context.state === 'suspended') {
+      await context.resume();
+    }
+  } catch {
+    /* ignore audio context resume failures */
+  }
+
+  const step = () => {
+    if (micVadContext !== context || micVadAnalyser !== analyser || micVadData == null) {
+      return;
+    }
+
+    analyser.getByteTimeDomainData(micVadData);
+    let sumSquares = 0;
+    for (let index = 0; index < micVadData.length; index += 1) {
+      const sample = (micVadData[index] - 128) / 128;
+      sumSquares += sample * sample;
+    }
+    const rms = Math.sqrt(sumSquares / micVadData.length);
+    const now = performance.now();
+
+    micVadDisplayLevel = rms > micVadDisplayLevel
+      ? rms
+      : micVadDisplayLevel * (rms < 0.004 ? 0.78 : 0.9);
+
+    if (now - micVadLastLevelPushAt >= VAD_LEVEL_PUSH_INTERVAL_MS) {
+      micVadLastLevelPushAt = now;
+      useVoiceStore.setState({ micLevel: micVadDisplayLevel });
+    }
+
+    if (rms >= VAD_THRESHOLD) {
+      micVadHoldUntil = now + VAD_RELEASE_MS;
+      if (!micVadSpeaking) {
+        micVadSpeaking = true;
+        broadcastLocalSpeakingState(identity, true, true);
+      }
+    } else if (micVadSpeaking && now >= micVadHoldUntil) {
+      micVadSpeaking = false;
+      broadcastLocalSpeakingState(identity, false, true);
+    }
+
+    if (micVadSpeaking && now - micVadLastSpeakingBroadcastAt >= VAD_SPEAKING_BROADCAST_INTERVAL_MS) {
+      broadcastLocalSpeakingState(identity, true, true);
+    }
+
+    micVadFrame = window.requestAnimationFrame(step);
+  };
+
+  micVadFrame = window.requestAnimationFrame(step);
+}
 
 function clearScreenShareNoticeTimer() {
   if (screenShareNoticeTimer != null) {
@@ -285,9 +452,10 @@ function getTrackForSource(p: Participant, source: Track.Source): Track | undefi
 
 function buildParticipants(room: Room): VoiceParticipant[] {
   if (room.state !== ConnectionState.Connected) return [];
+  const speakingSignals = useVoiceStore.getState().speakingSignals;
   const toVP = (p: Participant): VoiceParticipant => ({
     identity: p.identity,
-    isSpeaking: p.isSpeaking || isTransientSpeaking(p.identity),
+    isSpeaking: (hasOwnKey(speakingSignals, p.identity) ? speakingSignals[p.identity] : false) || isTransientSpeaking(p.identity),
     isMuted: !p.isMicrophoneEnabled,
     isCameraOn: p.isCameraEnabled,
     isScreenSharing: p.isScreenShareEnabled,
@@ -350,6 +518,7 @@ function reapplyAllRemoteVoiceVolumes() {
 function resetState() {
   clearScreenShareNoticeTimer();
   clearTransientSpeaking();
+  stopMicActivityMonitor({ broadcast: false, identity: roomRef?.localParticipant.identity });
   useVoiceStore.setState({
     connected: false,
     connecting: false,
@@ -361,6 +530,7 @@ function resetState() {
     isCameraOn: false,
     isScreenSharing: false,
     pttActive: false,
+    micLevel: 0,
     participantVolumes: {},
     voiceOutputMuted: false,
     streamVolumes: {},
@@ -388,12 +558,15 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   roomName: null,
   streamId: null,
   participants: [],
+  speakingSignals: {},
   isMuted: false,
   isDeafened: false,
   isCameraOn: false,
   isScreenSharing: false,
   pttActive: false,
   pttMode: false,
+  micLevel: 0,
+  vadThreshold: VAD_THRESHOLD,
   participantVolumes: {},
   voiceOutputMuted: false,
   streamVolumes: {},
@@ -443,6 +616,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
         if (state === ConnectionState.Disconnected && roomRef === room) {
           const currentSid = useVoiceStore.getState().streamId;
           if (currentSid) wsSend('voice_state_update', { stream_id: currentSid, action: 'leave' });
+          stopMicActivityMonitor({ broadcast: false, identity: room.localParticipant.identity });
           roomRef = null;
           detachAllRoomMedia(room);
           room.removeAllListeners();
@@ -472,6 +646,9 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
         !startMuted,
         !startMuted ? micAudioCaptureOptions(nsMode) : undefined,
       );
+      if (!startMuted) {
+        await ensureMicActivityMonitor(room);
+      }
 
       set({
         connected: true,
@@ -482,6 +659,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
         isDeafened: false,
         isCameraOn: false,
         isScreenSharing: false,
+        micLevel: 0,
         participants: buildParticipants(room),
         participantVolumes: {},
         voiceOutputMuted: false,
@@ -506,6 +684,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     const room = roomRef;
     const sid = get().streamId;
     if (!room) { resetState(); return; }
+    stopMicActivityMonitor({ broadcast: true, identity: room.localParticipant.identity });
     roomRef = null;
     if (sid) wsSend('voice_state_update', { stream_id: sid, action: 'leave' });
     playLeaveSound();
@@ -514,13 +693,19 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   },
 
   toggleMute: async () => {
-    if (!roomRef || roomRef.state !== ConnectionState.Connected) return;
-    const wasEnabled = roomRef.localParticipant.isMicrophoneEnabled;
+    const room = roomRef;
+    if (!room || room.state !== ConnectionState.Connected) return;
+    const wasEnabled = room.localParticipant.isMicrophoneEnabled;
     const nsMode = get().noiseSuppressionMode;
-    await roomRef.localParticipant.setMicrophoneEnabled(
+    await room.localParticipant.setMicrophoneEnabled(
       !wasEnabled,
       !wasEnabled ? micAudioCaptureOptions(nsMode) : undefined,
     );
+    if (wasEnabled) {
+      stopMicActivityMonitor({ broadcast: true, identity: room.localParticipant.identity });
+    } else {
+      await ensureMicActivityMonitor(room);
+    }
     set({ isMuted: wasEnabled });
     syncParticipants();
   },
@@ -602,10 +787,12 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
       wasMutedBeforeDeafen = !room.localParticipant.isMicrophoneEnabled;
       if (room.localParticipant.isMicrophoneEnabled) {
         await room.localParticipant.setMicrophoneEnabled(false);
+        stopMicActivityMonitor({ broadcast: true, identity: room.localParticipant.identity });
         set({ isMuted: true });
       }
     } else if (!wasMutedBeforeDeafen) {
       await room.localParticipant.setMicrophoneEnabled(true, micAudioCaptureOptions(get().noiseSuppressionMode));
+      await ensureMicActivityMonitor(room);
       set({ isMuted: false });
     }
     set({ isDeafened: next });
@@ -616,12 +803,14 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     const next = !get().pttMode;
     pttModeRef = next;
     if (roomRef && roomRef.state === ConnectionState.Connected) {
+      const room = roomRef;
       const nsMode = get().noiseSuppressionMode;
       if (next) {
-        void roomRef.localParticipant.setMicrophoneEnabled(false);
+        void room.localParticipant.setMicrophoneEnabled(false);
+        stopMicActivityMonitor({ broadcast: true, identity: room.localParticipant.identity });
         set({ isMuted: true, pttActive: false, pttMode: next });
       } else {
-        void roomRef.localParticipant.setMicrophoneEnabled(true, micAudioCaptureOptions(nsMode));
+        void room.localParticipant.setMicrophoneEnabled(true, micAudioCaptureOptions(nsMode)).then(() => ensureMicActivityMonitor(room));
         set({ isMuted: false, pttMode: next });
       }
       syncParticipants();
@@ -673,6 +862,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     if (room?.state === ConnectionState.Connected && room.localParticipant.isMicrophoneEnabled) {
       await room.localParticipant.setMicrophoneEnabled(false);
       await room.localParticipant.setMicrophoneEnabled(true, micAudioCaptureOptions(mode));
+      await ensureMicActivityMonitor(room);
       syncParticipants();
     }
   },
@@ -686,6 +876,34 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     if (get().streamId === sid && get().connected) return;
     await get().leave();
     await get().join(sid);
+  },
+
+  applySpeakingSignal: (identity, speaking) => {
+    let changed = false;
+    set((state) => {
+      if (state.speakingSignals[identity] === speaking) return state;
+      changed = true;
+      return {
+        speakingSignals: { ...state.speakingSignals, [identity]: speaking },
+      };
+    });
+    if (changed && roomRef?.state === ConnectionState.Connected) {
+      syncParticipants();
+    }
+  },
+
+  clearSpeakingSignal: (identity) => {
+    let changed = false;
+    set((state) => {
+      if (!hasOwnKey(state.speakingSignals, identity)) return state;
+      const speakingSignals = { ...state.speakingSignals };
+      delete speakingSignals[identity];
+      changed = true;
+      return { speakingSignals };
+    });
+    if (changed && roomRef?.state === ConnectionState.Connected) {
+      syncParticipants();
+    }
   },
 
   triggerSoundboardSpeaking: (identity, durationMs) => {
@@ -704,7 +922,8 @@ if (typeof window !== 'undefined') {
     if (e.repeat) return;
     if (roomRef.state !== ConnectionState.Connected) return;
     const nsMode = useVoiceStore.getState().noiseSuppressionMode;
-    void roomRef.localParticipant.setMicrophoneEnabled(true, micAudioCaptureOptions(nsMode));
+    const room = roomRef;
+    void room.localParticipant.setMicrophoneEnabled(true, micAudioCaptureOptions(nsMode)).then(() => ensureMicActivityMonitor(room));
     useVoiceStore.setState({ isMuted: false, pttActive: true });
     syncParticipants();
   });
@@ -716,6 +935,7 @@ if (typeof window !== 'undefined') {
     if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) return;
     if (roomRef.state !== ConnectionState.Connected) return;
     roomRef.localParticipant.setMicrophoneEnabled(false);
+    stopMicActivityMonitor({ broadcast: true, identity: roomRef.localParticipant.identity });
     useVoiceStore.setState({ isMuted: true, pttActive: false });
     syncParticipants();
   });

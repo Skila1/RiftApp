@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import SoundboardPanel from './SoundboardPanel';
+import { useAppSettingsStore } from '../../stores/appSettingsStore';
+import { useVoiceStore } from '../../stores/voiceStore';
 
 interface VoicePanelProps {
   connected: boolean;
@@ -51,6 +53,13 @@ export default function VoicePanel({
   onDismissScreenShareNotice,
 }: VoicePanelProps) {
   const [soundboardOpen, setSoundboardOpen] = useState(false);
+  const developerMode = useAppSettingsStore((s) => s.developerMode);
+  const micLevel = useVoiceStore((s) => s.micLevel);
+  const vadThreshold = useVoiceStore((s) => s.vadThreshold);
+  const localSpeaking = useVoiceStore((s) => Boolean(s.participants[0]?.isSpeaking));
+  const meterMax = 0.1;
+  const meterPercent = Math.min(100, (micLevel / meterMax) * 100);
+  const thresholdPercent = Math.min(100, (vadThreshold / meterMax) * 100);
 
   if (!connected && !connecting) return null;
 
@@ -119,6 +128,31 @@ export default function VoicePanel({
       <p className="text-[11px] text-riftapp-text-dim truncate mb-3 ml-3.5">
         {streamName} / {hubName}
       </p>
+
+      {connected && developerMode && (
+        <div className="mb-3 rounded-xl border border-riftapp-border/40 bg-riftapp-panel/60 px-3 py-2.5">
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.14em] text-riftapp-text-dim">
+            <span>Mic VAD</span>
+            <span className={localSpeaking ? 'text-riftapp-success' : 'text-riftapp-text-dim'}>
+              {localSpeaking ? 'Speaking' : 'Idle'}
+            </span>
+          </div>
+          <div className="relative mt-2 h-2.5 overflow-hidden rounded-full bg-black/25">
+            <div
+              className={`h-full rounded-full transition-[width,background-color] duration-75 ${localSpeaking ? 'bg-riftapp-success' : 'bg-riftapp-accent/70'}`}
+              style={{ width: `${meterPercent}%` }}
+            />
+            <div
+              className="absolute inset-y-0 w-px bg-white/75"
+              style={{ left: `${thresholdPercent}%` }}
+            />
+          </div>
+          <div className="mt-1.5 flex items-center justify-between text-[11px] text-riftapp-text-dim">
+            <span>Level {micLevel.toFixed(3)}</span>
+            <span>Threshold {vadThreshold.toFixed(3)}</span>
+          </div>
+        </div>
+      )}
 
       {screenShareNotice && (
         <div className={`mb-3 flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-[12px] ${

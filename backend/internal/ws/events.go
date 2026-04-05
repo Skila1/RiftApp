@@ -37,6 +37,7 @@ const (
 	OpUserUpdate           = "user_update"
 	OpVoiceMove            = "voice_move"
 	OpVoiceDisconnect      = "voice_disconnect"
+	OpVoiceSpeakingUpdate  = "voice_speaking_update"
 )
 
 type SubscribeData struct {
@@ -79,6 +80,17 @@ type VoiceStateClientData struct {
 
 type VoiceMoveData struct {
 	StreamID string `json:"stream_id"`
+}
+
+type VoiceSpeakingData struct {
+	StreamID string `json:"stream_id"`
+	UserID   string `json:"user_id"`
+	Speaking bool   `json:"speaking"`
+}
+
+type VoiceSpeakingClientData struct {
+	StreamID string `json:"stream_id"`
+	Speaking bool   `json:"speaking"`
 }
 
 func NewEvent(op string, data interface{}) []byte {

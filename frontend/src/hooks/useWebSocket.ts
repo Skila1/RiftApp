@@ -185,6 +185,19 @@ export function useWebSocket() {
           case 'voice_state_update': {
             const { stream_id, user_id, action } = evt.d as { stream_id: string; user_id: string; action: 'join' | 'leave' };
             useStreamStore.getState().applyVoiceState(stream_id, user_id, action);
+            const voiceState = useVoiceStore.getState();
+            if (action === 'join') {
+              if (!Object.prototype.hasOwnProperty.call(voiceState.speakingSignals, user_id)) {
+                voiceState.applySpeakingSignal(user_id, false);
+              }
+            } else {
+              voiceState.clearSpeakingSignal(user_id);
+            }
+            break;
+          }
+          case 'voice_speaking_update': {
+            const { user_id, speaking } = evt.d as { stream_id: string; user_id: string; speaking: boolean };
+            useVoiceStore.getState().applySpeakingSignal(user_id, speaking);
             break;
           }
           case 'voice_move': {
