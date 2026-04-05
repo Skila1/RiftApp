@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { useHubStore } from '../../stores/hubStore';
 import { useDMStore } from '../../stores/dmStore';
@@ -9,7 +10,7 @@ import type { Hub, User } from '../../types';
 
 type Tab = 'overview' | 'members';
 
-export default function HubSettingsModal({ hub, onClose }: { hub: Hub; onClose: () => void }) {
+function HubSettingsModal({ hub, onClose }: { hub: Hub; onClose: () => void }) {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const backdropRef = useRef<HTMLDivElement>(null);
 
@@ -29,20 +30,21 @@ export default function HubSettingsModal({ hub, onClose }: { hub: Hub; onClose: 
     { id: 'members', label: 'Members' },
   ];
 
-  return (
+  // Portal + no backdrop-filter: fullscreen blur forces the GPU to filter the whole app on every scroll/paint.
+  return createPortal(
     <motion.div
       ref={backdropRef}
       onClick={(e) => { if (e.target === backdropRef.current) onClose(); }}
       className="modal-backdrop"
-      initial={{ opacity: 0, backdropFilter: 'blur(0px)' }}
-      animate={{ opacity: 1, backdropFilter: 'blur(4px)' }}
-      transition={{ duration: 0.2 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.15 }}
     >
       <motion.div
-        className="modal-content w-full max-w-[720px] h-[520px] flex"
-        initial={{ opacity: 0, scale: 0.92, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+        className="modal-content w-full max-w-[720px] h-[520px] flex isolate"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
       >
         {/* Sidebar nav */}
         <nav className="w-[180px] bg-riftapp-panel/80 p-3 flex flex-col flex-shrink-0">
@@ -86,7 +88,7 @@ export default function HubSettingsModal({ hub, onClose }: { hub: Hub; onClose: 
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto p-6 overscroll-contain [contain:content]">
             {activeTab === 'overview' ? (
               <OverviewTab hub={hub} isOwner={isOwner} />
             ) : (
@@ -95,7 +97,8 @@ export default function HubSettingsModal({ hub, onClose }: { hub: Hub; onClose: 
           </div>
         </div>
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.body,
   );
 }
 
@@ -423,3 +426,5 @@ function MembersTab({ hub }: { hub: Hub }) {
     </div>
   );
 }
+
+export default memo(HubSettingsModal);

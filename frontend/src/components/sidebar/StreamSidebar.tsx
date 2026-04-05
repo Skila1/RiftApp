@@ -33,7 +33,15 @@ export default function StreamSidebar() {
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [inviteGenerating, setInviteGenerating] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
-  const voice = useVoiceStore();
+  const voiceStreamId = useVoiceStore((s) => s.streamId);
+  const voiceConnected = useVoiceStore((s) => s.connected);
+  const voiceConnecting = useVoiceStore((s) => s.connecting);
+  const voiceIsCameraOn = useVoiceStore((s) => s.isCameraOn);
+  const voiceIsScreenSharing = useVoiceStore((s) => s.isScreenSharing);
+  const voiceJoin = useVoiceStore((s) => s.join);
+  const voiceLeave = useVoiceStore((s) => s.leave);
+  const voiceToggleCamera = useVoiceStore((s) => s.toggleCamera);
+  const voiceToggleScreenShare = useVoiceStore((s) => s.toggleScreenShare);
   const voiceMembers = useStreamStore((s) => s.voiceMembers);
 
   // Header context menu
@@ -112,15 +120,23 @@ export default function StreamSidebar() {
     });
   };
 
-  const handleVoiceClick = (streamId: string) => {
-    const isConnected = voice.streamId === streamId && voice.connected;
-    if (isConnected) {
-      setViewingVoice(streamId);
-    } else {
-      voice.join(streamId);
-      setViewingVoice(streamId);
-    }
-  };
+  const handleVoiceClick = useCallback(
+    (streamId: string) => {
+      const isConn = voiceStreamId === streamId && voiceConnected;
+      if (isConn) {
+        setViewingVoice(streamId);
+      } else {
+        voiceJoin(streamId);
+        setViewingVoice(streamId);
+      }
+    },
+    [voiceStreamId, voiceConnected, voiceJoin, setViewingVoice],
+  );
+
+  const closeHubSettings = useCallback(() => setShowHubSettings(false), []);
+  const closeCreateChannel = useCallback(() => setShowCreateChannel(false), []);
+  const closeCreateCategory = useCallback(() => setShowCreateCategory(false), []);
+  const closeInviteModal = useCallback(() => setShowInviteModal(false), []);
 
   const handleHeaderContext = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -196,7 +212,7 @@ export default function StreamSidebar() {
       </div>
 
       {showHubSettings && activeHub && (
-        <HubSettingsModal hub={activeHub} onClose={() => setShowHubSettings(false)} />
+        <HubSettingsModal hub={activeHub} onClose={closeHubSettings} />
       )}
 
       {/* Invite popover */}
@@ -245,15 +261,13 @@ export default function StreamSidebar() {
             streamUnreads={streamUnreads}
             onSelect={setActiveStream}
             onVoiceClick={handleVoiceClick}
-            voice={voice}
-            voiceParticipants={voice.participants}
             voiceMembers={voiceMembers}
             hubMembers={hubMembers}
           />
         )}
 
         {/* Categorized channels */}
-        {categories.map((cat) => {
+        {categoriesForHub.map((cat) => {
           const catStreams = grouped[cat.id] || [];
           const isCollapsed = collapsed.has(cat.id);
           return (
@@ -288,8 +302,6 @@ export default function StreamSidebar() {
                   streamUnreads={streamUnreads}
                   onSelect={setActiveStream}
                   onVoiceClick={handleVoiceClick}
-                  voice={voice}
-                  voiceParticipants={voice.participants}
                   voiceMembers={voiceMembers}
                   hubMembers={hubMembers}
                 />
@@ -313,27 +325,27 @@ export default function StreamSidebar() {
 
       {/* Voice panel */}
       <VoicePanel
-        connected={voice.connected}
-        connecting={voice.connecting}
-        isCameraOn={voice.isCameraOn}
-        isScreenSharing={voice.isScreenSharing}
-        streamName={streams.find((s) => s.id === voice.streamId)?.name || ''}
+        connected={voiceConnected}
+        connecting={voiceConnecting}
+        isCameraOn={voiceIsCameraOn}
+        isScreenSharing={voiceIsScreenSharing}
+        streamName={streams.find((s) => s.id === voiceStreamId)?.name || ''}
         hubName={activeHub?.name || ''}
-        onLeave={voice.leave}
-        onToggleCamera={voice.toggleCamera}
-        onToggleScreenShare={voice.toggleScreenShare}
+        onLeave={voiceLeave}
+        onToggleCamera={voiceToggleCamera}
+        onToggleScreenShare={voiceToggleScreenShare}
       />
 
       <UserBar user={user} logout={logout} />
 
       {showCreateChannel && activeHubId && (
-        <CreateChannelModal hubId={activeHubId} categoryId={createChannelFor} onClose={() => setShowCreateChannel(false)} />
+        <CreateChannelModal hubId={activeHubId} categoryId={createChannelFor} onClose={closeCreateChannel} />
       )}
       {showCreateCategory && activeHubId && (
-        <CreateCategoryModal hubId={activeHubId} onClose={() => setShowCreateCategory(false)} />
+        <CreateCategoryModal hubId={activeHubId} onClose={closeCreateCategory} />
       )}
       {showInviteModal && activeHub && (
-        <InviteToServerModal hub={activeHub} onClose={() => setShowInviteModal(false)} />
+        <InviteToServerModal hub={activeHub} onClose={closeInviteModal} />
       )}
     </div>
   );
@@ -348,13 +360,23 @@ interface ChannelGroupProps {
   streamUnreads: Record<string, number>;
   onSelect: (id: string) => Promise<void>;
   onVoiceClick: (streamId: string) => void;
-  voice: { streamId: string | null; connected: boolean };
-  voiceParticipants: import('../../stores/voiceStore').VoiceParticipant[];
   voiceMembers: Record<string, string[]>;
   hubMembers: Record<string, User>;
 }
 
-function ChannelGroup({ streams, activeStreamId, viewingVoiceStreamId, streamUnreads, onSelect, onVoiceClick, voice, voiceParticipants, voiceMembers, hubMembers }: ChannelGroupProps) {
+function ChannelGroup({
+  streams,
+  activeStreamId,
+  viewingVoiceStreamId,
+  streamUnreads,
+  onSelect,
+  onVoiceClick,
+  voiceMembers,
+  hubMembers,
+}: ChannelGroupProps) {
+  const voiceStreamId = useVoiceStore((s) => s.streamId);
+  const voiceConnected = useVoiceStore((s) => s.connected);
+  const voiceParticipants = useVoiceStore((s) => s.participants);
   const textStreams = streams.filter((s) => s.type === 0);
   const voiceStreams = streams.filter((s) => s.type === 1);
 
@@ -382,7 +404,7 @@ function ChannelGroup({ streams, activeStreamId, viewingVoiceStreamId, streamUnr
         );
       })}
       {voiceStreams.map((stream) => {
-        const isConnected = voice.streamId === stream.id && voice.connected;
+        const isConnected = voiceStreamId === stream.id && voiceConnected;
         const isViewing = viewingVoiceStreamId === stream.id;
         const memberIds = voiceMembers[stream.id] || [];
         const hasMembers = isConnected ? voiceParticipants.length > 0 : memberIds.length > 0;
@@ -509,7 +531,11 @@ function UserBar({ user }: { user: User | null; logout: () => void }) {
   const [showSettings, setShowSettings] = useState(false);
   const liveStatus = usePresenceStore((s) => user ? s.presence[user.id] : undefined);
   const openSelfProfile = useSelfProfileStore((s) => s.open);
-  const voice = useVoiceStore();
+  const voiceIsMuted = useVoiceStore((s) => s.isMuted);
+  const voiceIsDeafened = useVoiceStore((s) => s.isDeafened);
+  const voiceToggleMute = useVoiceStore((s) => s.toggleMute);
+  const voiceToggleDeafen = useVoiceStore((s) => s.toggleDeafen);
+  const closeSettings = useCallback(() => setShowSettings(false), []);
 
   const handleAvatarClick = useCallback((e: React.MouseEvent) => {
     openSelfProfile((e.currentTarget as HTMLElement).getBoundingClientRect());
@@ -559,15 +585,15 @@ function UserBar({ user }: { user: User | null; logout: () => void }) {
         <div className="flex items-center flex-shrink-0">
           {/* Mic */}
           <button
-            onClick={voice.toggleMute}
-            title={voice.isMuted ? 'Unmute' : 'Mute'}
+            onClick={voiceToggleMute}
+            title={voiceIsMuted ? 'Unmute' : 'Mute'}
             className={`w-8 h-8 rounded-md flex items-center justify-center transition-all duration-150 active:scale-90 ${
-              voice.isMuted
+              voiceIsMuted
                 ? 'text-riftapp-danger hover:bg-riftapp-danger/10'
                 : 'text-riftapp-text-dim hover:text-riftapp-text hover:bg-riftapp-panel/60'
             }`}
           >
-            {voice.isMuted ? (
+            {voiceIsMuted ? (
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <line x1="1" y1="1" x2="23" y2="23" />
                 <path d="M9 9v3a3 3 0 005.12 2.12M15 9.34V4a3 3 0 00-5.94-.6" />
@@ -585,15 +611,15 @@ function UserBar({ user }: { user: User | null; logout: () => void }) {
 
           {/* Deafen */}
           <button
-            onClick={voice.toggleDeafen}
-            title={voice.isDeafened ? 'Undeafen' : 'Deafen'}
+            onClick={voiceToggleDeafen}
+            title={voiceIsDeafened ? 'Undeafen' : 'Deafen'}
             className={`w-8 h-8 rounded-md flex items-center justify-center transition-all duration-150 active:scale-90 ${
-              voice.isDeafened
+              voiceIsDeafened
                 ? 'text-riftapp-danger hover:bg-riftapp-danger/10'
                 : 'text-riftapp-text-dim hover:text-riftapp-text hover:bg-riftapp-panel/60'
             }`}
           >
-            {voice.isDeafened ? (
+            {voiceIsDeafened ? (
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <line x1="1" y1="1" x2="23" y2="23" />
                 <path d="M9 9a3 3 0 015-2.24M21 12a9 9 0 00-7.48-8.86" />
@@ -621,7 +647,7 @@ function UserBar({ user }: { user: User | null; logout: () => void }) {
           </button>
         </div>
       </div>
-      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {showSettings && <SettingsModal onClose={closeSettings} />}
     </>
   );
 }
