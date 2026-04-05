@@ -34,4 +34,4 @@ WHERE icon_url IS NOT NULL AND icon_url LIKE '/s3/s3/%';
 
 -- +goose Down
 -- No reliable rollback: the original host prefixes are lost.
--- If you need to restore, re-run the upload/avatar/icon update flows.
+SELECT 1;

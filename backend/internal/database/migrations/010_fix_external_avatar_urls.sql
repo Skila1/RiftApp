@@ -30,3 +30,4 @@ WHERE url LIKE '/s3/avatars/%'
 
 -- +goose Down
 -- No rollback needed; this is a data fix.
+SELECT 1;
