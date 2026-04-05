@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import type { HubNotificationSettings, Stream } from '../../types';
 import { useStreamStore } from '../../stores/streamStore';
 import { useVoiceChannelUiStore } from '../../stores/voiceChannelUiStore';
+import ConfirmModal from '../modals/ConfirmModal';
 
 const DEFAULT_HUB_NOTIFICATION: HubNotificationSettings = {
   notification_level: 'mentions_only',
@@ -71,6 +72,9 @@ export default function ChannelContextMenu({
   const [hubNotifSettings, setHubNotifSettings] = useState<HubNotificationSettings | null>(null);
   const [muteSubOpen, setMuteSubOpen] = useState(false);
   const [notifSubOpen, setNotifSubOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -119,20 +123,25 @@ export default function ChannelContextMenu({
   };
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete #${stream.name}? This cannot be undone.`)) return;
-    onClose();
+    setDeleteBusy(true);
+    setDeleteError(null);
     try {
       await deleteStream(stream.id);
+      setDeleteOpen(false);
+      onClose();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : 'Could not delete channel');
+      setDeleteError(e instanceof Error ? e.message : 'Could not delete channel');
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
   const markReadDisabled = !isText || unreadCount <= 0;
 
   return (
-    <MenuOverlay x={x} y={y} onClose={onClose}>
-      <div className="bg-[#111214] rounded-md border border-black/40 shadow-modal py-1.5 min-w-[220px] max-h-[min(90vh,520px)] overflow-y-auto text-[13px] text-[#dbdee1] select-none">
+    <>
+      <MenuOverlay x={x} y={y} onClose={onClose}>
+        <div className="bg-[#111214] rounded-md border border-black/40 shadow-modal py-1.5 min-w-[220px] max-h-[min(90vh,520px)] overflow-y-auto text-[13px] text-[#dbdee1] select-none">
         <button
           type="button"
           disabled={markReadDisabled}
@@ -362,7 +371,10 @@ export default function ChannelContextMenu({
             </button>
             <button
               type="button"
-              onClick={() => void handleDelete()}
+              onClick={() => {
+                setDeleteError(null);
+                setDeleteOpen(true);
+              }}
               className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)] text-[#f23f42]"
             >
               <span className="w-4 shrink-0" aria-hidden />
@@ -404,7 +416,25 @@ export default function ChannelContextMenu({
           <span>Copy Channel ID</span>
           <span className="text-[10px] font-mono font-semibold px-1 py-0.5 rounded bg-[#1e1f22] border border-[#3f4147] text-[#b5bac1]">ID</span>
         </button>
-      </div>
-    </MenuOverlay>
+        </div>
+      </MenuOverlay>
+
+      <ConfirmModal
+        isOpen={deleteOpen}
+        title="Delete Channel"
+        description={`Delete #${stream.name}? This cannot be undone.`}
+        confirmText="Delete Channel"
+        variant="danger"
+        onConfirm={handleDelete}
+        onCancel={() => {
+          setDeleteOpen(false);
+          setDeleteError(null);
+          onClose();
+        }}
+        loading={deleteBusy}
+      >
+        {deleteError && <p className="text-sm text-[#f23f42]">{deleteError}</p>}
+      </ConfirmModal>
+    </>
   );
 }

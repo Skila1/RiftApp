@@ -6,6 +6,9 @@ interface VoicePanelProps {
   connecting: boolean;
   isCameraOn: boolean;
   isScreenSharing: boolean;
+  screenShareRequesting: boolean;
+  screenShareSurfaceLabel?: string | null;
+  screenShareNotice?: { tone: 'info' | 'error'; message: string } | null;
   streamName: string;
   hubName: string;
   hubId?: string | null;
@@ -14,6 +17,7 @@ interface VoicePanelProps {
   onToggleCamera: () => void;
   onToggleScreenShare: () => void;
   onToggleNoiseSuppression: () => void;
+  onDismissScreenShareNotice: () => void;
 }
 
 function KrispWaveformIcon({ active }: { active: boolean }) {
@@ -33,6 +37,9 @@ export default function VoicePanel({
   connecting,
   isCameraOn,
   isScreenSharing,
+  screenShareRequesting,
+  screenShareSurfaceLabel,
+  screenShareNotice,
   streamName,
   hubName,
   hubId,
@@ -41,6 +48,7 @@ export default function VoicePanel({
   onToggleCamera,
   onToggleScreenShare,
   onToggleNoiseSuppression,
+  onDismissScreenShareNotice,
 }: VoicePanelProps) {
   const [soundboardOpen, setSoundboardOpen] = useState(false);
 
@@ -112,6 +120,46 @@ export default function VoicePanel({
         {streamName} / {hubName}
       </p>
 
+      {screenShareNotice && (
+        <div className={`mb-3 flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-[12px] ${
+          screenShareNotice.tone === 'error'
+            ? 'border-[#f23f42]/30 bg-[#f23f42]/10 text-[#ffb3b5]'
+            : 'border-[#5865f2]/30 bg-[#5865f2]/10 text-[#cdd3ff]'
+        }`}>
+          <span>{screenShareNotice.message}</span>
+          <button
+            type="button"
+            onClick={onDismissScreenShareNotice}
+            className="text-[#dbdee1] hover:text-white transition-colors"
+            aria-label="Dismiss screen share notice"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {connected && isScreenSharing && screenShareSurfaceLabel && (
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-[#ed4245]/30 bg-[#ed4245]/10 px-3 py-2.5">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="rounded bg-[#ed4245] px-1.5 py-0.5 text-[10px] font-bold text-white">LIVE</span>
+              <p className="text-[13px] font-semibold text-white truncate">Sharing {screenShareSurfaceLabel}</p>
+            </div>
+            <p className="text-[11px] text-[#ffcccf] mt-1 truncate">Your browser picker is active only when starting a new share.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onToggleScreenShare}
+            className="px-3 py-2 rounded-xl bg-[#ed4245] text-white text-[12px] font-semibold hover:bg-[#c93b3e] transition-colors"
+          >
+            Stop Sharing
+          </button>
+        </div>
+      )}
+
       {/* Big control buttons */}
       {connected && (
         <div className="flex gap-2 justify-center">
@@ -141,18 +189,23 @@ export default function VoicePanel({
           <button
             onClick={onToggleScreenShare}
             title={isScreenSharing ? 'Stop sharing' : 'Share your screen'}
+            disabled={screenShareRequesting}
             className={`w-[68px] h-[42px] rounded-xl flex items-center justify-center transition-all duration-150 active:scale-95 ${
               isScreenSharing
                 ? 'bg-riftapp-text text-riftapp-bg'
                 : 'bg-riftapp-surface hover:bg-riftapp-surface-hover text-riftapp-text-muted hover:text-riftapp-text'
-            }`}
+            } disabled:opacity-50`}
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-              <line x1="8" y1="21" x2="16" y2="21" />
-              <line x1="12" y1="17" x2="12" y2="21" />
-              {isScreenSharing && <path d="M9 10l2 2 4-4" />}
-            </svg>
+            {screenShareRequesting ? (
+              <span className="w-5 h-5 border-2 border-current/30 border-t-current rounded-full animate-spin" />
+            ) : (
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                <line x1="8" y1="21" x2="16" y2="21" />
+                <line x1="12" y1="17" x2="12" y2="21" />
+                {isScreenSharing && <path d="M9 10l2 2 4-4" />}
+              </svg>
+            )}
           </button>
 
           {/* Activities (placeholder) */}

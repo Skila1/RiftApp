@@ -64,6 +64,10 @@ export default function StreamSidebar() {
   const voiceLeave = useVoiceStore((s) => s.leave);
   const voiceToggleCamera = useVoiceStore((s) => s.toggleCamera);
   const voiceToggleScreenShare = useVoiceStore((s) => s.toggleScreenShare);
+  const voiceScreenShareRequesting = useVoiceStore((s) => s.screenShareRequesting);
+  const voiceScreenShareSurfaceLabel = useVoiceStore((s) => s.screenShareSurfaceLabel);
+  const voiceScreenShareNotice = useVoiceStore((s) => s.screenShareNotice);
+  const voiceDismissScreenShareNotice = useVoiceStore((s) => s.dismissScreenShareNotice);
   const voiceNoiseSuppressionEnabled = useVoiceStore((s) => s.noiseSuppressionMode !== 'off');
   const voiceToggleNoiseSuppression = useVoiceStore((s) => s.toggleNoiseSuppression);
   const voiceMembers = useStreamStore((s) => s.voiceMembers);
@@ -386,6 +390,9 @@ export default function StreamSidebar() {
         connecting={voiceConnecting}
         isCameraOn={voiceIsCameraOn}
         isScreenSharing={voiceIsScreenSharing}
+        screenShareRequesting={voiceScreenShareRequesting}
+        screenShareSurfaceLabel={voiceScreenShareSurfaceLabel}
+        screenShareNotice={voiceScreenShareNotice}
         streamName={streams.find((s) => s.id === voiceStreamId)?.name || ''}
         hubName={activeHub?.name || ''}
         hubId={activeHubId}
@@ -394,6 +401,7 @@ export default function StreamSidebar() {
         onToggleCamera={voiceToggleCamera}
         onToggleScreenShare={voiceToggleScreenShare}
         onToggleNoiseSuppression={voiceToggleNoiseSuppression}
+        onDismissScreenShareNotice={voiceDismissScreenShareNotice}
       />
 
       <UserBar user={user} logout={logout} />

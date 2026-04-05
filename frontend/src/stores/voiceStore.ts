@@ -18,6 +18,12 @@ import { wsSend } from '../hooks/useWebSocket';
 const NS_STORAGE_KEY = 'riftapp-noise-suppression-mode';
 
 export type NoiseSuppressionMode = 'krisp' | 'standard' | 'off';
+export type ScreenShareKind = 'screen' | 'window' | 'tab';
+
+type ScreenShareNotice = {
+  tone: 'info' | 'error';
+  message: string;
+};
 
 function loadNoiseSuppressionMode(): NoiseSuppressionMode {
   try {
@@ -71,6 +77,11 @@ interface VoiceStore {
   streamAttenuationEnabled: boolean;
   /** 0–100, higher = stronger ducking */
   streamAttenuationStrength: number;
+  screenShareModalOpen: boolean;
+  screenShareRequesting: boolean;
+  screenShareKind: ScreenShareKind;
+  screenShareSurfaceLabel: string | null;
+  screenShareNotice: ScreenShareNotice | null;
   /**
    * Browser capture processing (Discord-style labels; uses WebRTC constraints, not the Krisp SDK).
    * `krisp` prefers experimental voice isolation where supported; `standard` uses classic noise suppression.
@@ -83,6 +94,10 @@ interface VoiceStore {
   toggleDeafen: () => Promise<void>;
   toggleCamera: () => void;
   toggleScreenShare: () => void;
+  confirmScreenShare: () => Promise<void>;
+  cancelScreenShareModal: () => void;
+  setScreenShareKind: (kind: ScreenShareKind) => void;
+  dismissScreenShareNotice: () => void;
   togglePTT: () => void;
   setParticipantVolume: (identity: string, volume: number) => void;
   toggleVoiceOutputMute: () => void;
@@ -112,6 +127,69 @@ let roomRef: Room | null = null;
 let joiningLock = false;
 let pttModeRef = false;
 let wasMutedBeforeDeafen = false;
+let screenShareNoticeTimer: number | null = null;
+
+function clearScreenShareNoticeTimer() {
+  if (screenShareNoticeTimer != null) {
+    window.clearTimeout(screenShareNoticeTimer);
+    screenShareNoticeTimer = null;
+  }
+}
+
+function setScreenShareNotice(notice: ScreenShareNotice | null) {
+  clearScreenShareNoticeTimer();
+  useVoiceStore.setState({ screenShareNotice: notice });
+  if (notice) {
+    screenShareNoticeTimer = window.setTimeout(() => {
+      useVoiceStore.setState({ screenShareNotice: null });
+      screenShareNoticeTimer = null;
+    }, 3200);
+  }
+}
+
+function requestedSurfaceLabel(kind: ScreenShareKind): string {
+  if (kind === 'tab') return 'Tab';
+  if (kind === 'window') return 'Window';
+  return 'Screen';
+}
+
+function inferSurfaceLabel(kind: ScreenShareKind): string {
+  const pub = roomRef?.localParticipant.getTrackPublication(Track.Source.ScreenShare) as LocalTrackPublication | undefined;
+  const mediaTrack = (pub?.track as { mediaStreamTrack?: MediaStreamTrack } | undefined)?.mediaStreamTrack;
+  const displaySurface = mediaTrack?.getSettings?.().displaySurface;
+  if (displaySurface === 'browser') return 'Tab';
+  if (displaySurface === 'window') return 'Window';
+  if (displaySurface === 'monitor') return 'Screen';
+  return requestedSurfaceLabel(kind);
+}
+
+function buildScreenShareOptions(kind: ScreenShareKind) {
+  const options: Record<string, unknown> = {
+    resolution: { width: 3840, height: 2160, frameRate: 60 },
+    contentHint: 'detail',
+    surfaceSwitching: 'include',
+  };
+  if (kind === 'tab') {
+    options.preferCurrentTab = true;
+    options.selfBrowserSurface = 'include';
+  } else if (kind === 'window') {
+    options.selfBrowserSurface = 'exclude';
+    options.preferCurrentTab = false;
+  } else {
+    options.monitorTypeSurfaces = 'include';
+    options.preferCurrentTab = false;
+  }
+  return options;
+}
+
+async function stopScreenShare(room: Room) {
+  const pub = room.localParticipant.getTrackPublication(Track.Source.ScreenShare) as LocalTrackPublication | undefined;
+  if (pub?.track) {
+    pub.track.stop();
+    await room.localParticipant.unpublishTrack(pub.track);
+  }
+  useVoiceStore.setState({ isScreenSharing: false, screenShareSurfaceLabel: null, screenShareRequesting: false, screenShareModalOpen: false });
+}
 
 function playTone(frequency: number, duration: number, gain: number) {
   try {
@@ -182,10 +260,14 @@ function buildParticipants(room: Room): VoiceParticipant[] {
 function syncParticipants() {
   if (!roomRef || roomRef.state !== ConnectionState.Connected) return;
   const participants = buildParticipants(roomRef);
+  const localSharing = roomRef.localParticipant.isScreenShareEnabled;
   useVoiceStore.setState({
     participants,
     isCameraOn: roomRef.localParticipant.isCameraEnabled,
-    isScreenSharing: roomRef.localParticipant.isScreenShareEnabled,
+    isScreenSharing: localSharing,
+    screenShareSurfaceLabel: localSharing
+      ? useVoiceStore.getState().screenShareSurfaceLabel ?? requestedSurfaceLabel(useVoiceStore.getState().screenShareKind)
+      : null,
   });
   reapplyAllRemoteVoiceVolumes();
 }
@@ -224,6 +306,7 @@ function reapplyAllRemoteVoiceVolumes() {
 }
 
 function resetState() {
+  clearScreenShareNoticeTimer();
   useVoiceStore.setState({
     connected: false,
     connecting: false,
@@ -241,6 +324,11 @@ function resetState() {
     streamAudioMuted: {},
     streamAttenuationEnabled: false,
     streamAttenuationStrength: 40,
+    screenShareModalOpen: false,
+    screenShareRequesting: false,
+    screenShareKind: 'screen',
+    screenShareSurfaceLabel: null,
+    screenShareNotice: null,
   });
 }
 
@@ -269,6 +357,11 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   streamAudioMuted: {},
   streamAttenuationEnabled: false,
   streamAttenuationStrength: 40,
+  screenShareModalOpen: false,
+  screenShareRequesting: false,
+  screenShareKind: 'screen',
+  screenShareSurfaceLabel: null,
+  screenShareNotice: null,
   noiseSuppressionMode: loadNoiseSuppressionMode(),
 
   join: async (sid) => {
@@ -400,19 +493,54 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   toggleScreenShare: async () => {
     if (!roomRef || roomRef.state !== ConnectionState.Connected) return;
     if (roomRef.localParticipant.isScreenShareEnabled) {
-      const pub = roomRef.localParticipant.getTrackPublication(Track.Source.ScreenShare) as LocalTrackPublication | undefined;
-      if (pub?.track) { pub.track.stop(); await roomRef.localParticipant.unpublishTrack(pub.track); }
-      set({ isScreenSharing: false });
+      await stopScreenShare(roomRef);
     } else {
-      try {
-        await roomRef.localParticipant.setScreenShareEnabled(true, {
-          resolution: { width: 3840, height: 2160, frameRate: 60 },
-          contentHint: 'detail',
-        });
-        set({ isScreenSharing: true });
-      } catch { /* User cancelled */ }
+      set({ screenShareModalOpen: true });
     }
     syncParticipants();
+  },
+
+  confirmScreenShare: async () => {
+    if (!roomRef || roomRef.state !== ConnectionState.Connected) return;
+    const kind = get().screenShareKind;
+    set({ screenShareRequesting: true });
+    setScreenShareNotice(null);
+    try {
+      await roomRef.localParticipant.setScreenShareEnabled(true, buildScreenShareOptions(kind) as never);
+      set({
+        isScreenSharing: true,
+        screenShareModalOpen: false,
+        screenShareRequesting: false,
+        screenShareSurfaceLabel: inferSurfaceLabel(kind),
+      });
+    } catch (err) {
+      const name = err instanceof DOMException ? err.name : '';
+      const message = err instanceof Error ? err.message.toLowerCase() : '';
+      set({ screenShareModalOpen: false, screenShareRequesting: false });
+      if (name === 'AbortError' || message.includes('cancel')) {
+        setScreenShareNotice({ tone: 'info', message: 'Screen share cancelled' });
+      } else if (name === 'NotFoundError' || message.includes('available')) {
+        setScreenShareNotice({ tone: 'error', message: 'No screen available to share' });
+      } else if (name === 'NotAllowedError') {
+        setScreenShareNotice({ tone: 'error', message: 'Permission denied' });
+      } else {
+        setScreenShareNotice({ tone: 'error', message: 'Unable to start screen share' });
+      }
+    }
+    syncParticipants();
+  },
+
+  cancelScreenShareModal: () => {
+    if (get().screenShareRequesting) return;
+    set({ screenShareModalOpen: false });
+  },
+
+  setScreenShareKind: (kind) => {
+    set({ screenShareKind: kind });
+  },
+
+  dismissScreenShareNotice: () => {
+    setScreenShareNotice(null);
   },
 
   toggleDeafen: async () => {

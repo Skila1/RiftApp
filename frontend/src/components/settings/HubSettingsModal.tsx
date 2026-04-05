@@ -5,6 +5,7 @@ import { useHubStore } from '../../stores/hubStore';
 import { useDMStore } from '../../stores/dmStore';
 import { useAuthStore } from '../../stores/auth';
 import { api } from '../../api/client';
+import ConfirmModal from '../modals/ConfirmModal';
 import StatusDot from '../shared/StatusDot';
 import type { Hub, User, HubEmoji, HubSticker, HubSound, HubRole } from '../../types';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
@@ -243,20 +244,6 @@ function OverviewTab({ hub, isOwner, onCloseSettings }: { hub: Hub; isOwner: boo
   const [bannerDragOver, setBannerDragOver] = useState(false);
 
   const deleteNameMatches = deleteConfirmName.trim() === hub.name.trim() && hub.name.trim().length > 0;
-
-  useEffect(() => {
-    if (!deleteOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        setDeleteOpen(false);
-        setDeleteConfirmName('');
-        setDeleteError(null);
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [deleteOpen]);
 
   useEffect(() => {
     setName(hub.name);
@@ -561,74 +548,35 @@ function OverviewTab({ hub, isOwner, onCloseSettings }: { hub: Hub; isOwner: boo
         </button>
       </div>
 
-      {/* ── Delete confirmation sub-modal ── */}
-      {deleteOpen &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-[310] flex items-center justify-center bg-black/60"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                setDeleteOpen(false);
-                setDeleteConfirmName('');
-                setDeleteError(null);
-              }
-            }}
-          >
-            <div
-              className="bg-[#313338] rounded-xl w-[440px] shadow-modal animate-scale-in overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="px-5 pt-5 pb-3">
-                <h3 className="text-[18px] font-bold text-white mb-1">
-                  Delete '{hub.name}'
-                </h3>
-                <p className="text-[14px] text-[#b5bac1] leading-relaxed">
-                  This will permanently delete the server for everyone. Type the server name below to confirm.
-                </p>
-              </div>
-              <div className="px-5 pb-4">
-                <label className="text-[12px] font-bold uppercase tracking-wider text-[#b5bac1] mb-1.5 block">
-                  Server Name
-                </label>
-                <input
-                  value={deleteConfirmName}
-                  onChange={(e) => setDeleteConfirmName(e.target.value)}
-                  autoComplete="off"
-                  placeholder={hub.name}
-                  className="w-full px-3 py-2.5 rounded-[4px] bg-[#1e1f22] text-sm text-white
-                    focus:outline-none focus:ring-1 focus:ring-[#5865f2] transition-all"
-                />
-                {deleteError && (
-                  <p className="text-[13px] text-[#f23f42] bg-[#f23f42]/10 rounded-md px-3 py-2 mt-3">{deleteError}</p>
-                )}
-              </div>
-              <div className="px-5 py-4 bg-[#2b2d31] flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  disabled={deleteBusy}
-                  onClick={() => {
-                    setDeleteOpen(false);
-                    setDeleteConfirmName('');
-                    setDeleteError(null);
-                  }}
-                  className="px-4 py-2.5 text-[13px] font-medium text-[#dbdee1] hover:underline"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={!deleteNameMatches || deleteBusy}
-                  onClick={() => void handleDeleteServer()}
-                  className="px-5 py-2.5 rounded-[4px] bg-[#da373c] text-white text-[13px] font-medium
-                    hover:bg-[#a12828] active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {deleteBusy ? 'Deleting…' : 'Delete Server'}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body,
+      <ConfirmModal
+        isOpen={deleteOpen}
+        title={`Delete '${hub.name}'`}
+        description="This will permanently delete the server for everyone. Type the server name below to confirm."
+        confirmText="Delete Server"
+        variant="danger"
+        onConfirm={handleDeleteServer}
+        onCancel={() => {
+          setDeleteOpen(false);
+          setDeleteConfirmName('');
+          setDeleteError(null);
+        }}
+        loading={deleteBusy}
+        confirmDisabled={!deleteNameMatches}
+      >
+        <label className="text-[12px] font-bold uppercase tracking-wider text-[#b5bac1] mb-1.5 block">
+          Server Name
+        </label>
+        <input
+          value={deleteConfirmName}
+          onChange={(e) => setDeleteConfirmName(e.target.value)}
+          autoComplete="off"
+          placeholder={hub.name}
+          className="w-full px-3 py-2.5 rounded-[4px] bg-[#1e1f22] text-sm text-white focus:outline-none focus:ring-1 focus:ring-[#5865f2] transition-all"
+        />
+        {deleteError && (
+          <p className="text-[13px] text-[#f23f42] bg-[#f23f42]/10 rounded-md px-3 py-2 mt-3">{deleteError}</p>
         )}
+      </ConfirmModal>
     </div>
   );
 }
@@ -992,17 +940,6 @@ function CustomizationTab({ hub, isOwner, kind }: { hub: Hub; isOwner: boolean; 
     void handleUpload(file);
   }, [isOwner, handleUpload]);
 
-  // Enter confirms delete, Escape cancels
-  useEffect(() => {
-    if (!confirmDeleteId) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') void handleDelete(confirmDeleteId);
-      if (e.key === 'Escape') setConfirmDeleteId(null);
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [confirmDeleteId, handleDelete]);
-
   const isImage = kind !== 'sounds';
 
   if (loading) {
@@ -1150,29 +1087,6 @@ function CustomizationTab({ hub, isOwner, kind }: { hub: Hub; isOwner: boolean; 
                 newItemId === item.id ? 'animate-fade-in' : ''
               } ${fadingOutId === item.id ? 'animate-fade-out' : ''}`}
             >
-              {/* Delete confirmation overlay */}
-              {confirmDeleteId === item.id && (
-                <div className="absolute inset-0 z-10 bg-[#1e1f22]/95 rounded-lg flex flex-col items-center justify-center gap-2 animate-fade-in">
-                  <p className="text-[11px] text-[#dbdee1] font-medium">Delete?</p>
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={() => void handleDelete(item.id)}
-                      disabled={deletingId === item.id}
-                      className="px-3 py-1 rounded bg-[#f23f42] text-white text-[11px] font-medium
-                        hover:bg-[#d83c3e] transition-colors disabled:opacity-50"
-                    >
-                      {deletingId === item.id ? '…' : 'Yes'}
-                    </button>
-                    <button
-                      onClick={() => setConfirmDeleteId(null)}
-                      className="px-3 py-1 rounded bg-[#404249] text-[#dbdee1] text-[11px] font-medium
-                        hover:bg-[#4e5058] transition-colors"
-                    >
-                      No
-                    </button>
-                  </div>
-                </div>
-              )}
               <img
                 src={publicAssetUrl(item.file_url)}
                 alt={item.name}
@@ -1224,28 +1138,7 @@ function CustomizationTab({ hub, isOwner, kind }: { hub: Hub; isOwner: boolean; 
                   {new Date(item.created_at).toLocaleDateString()}
                 </p>
               </div>
-              {/* Delete confirmation inline */}
-              {confirmDeleteId === item.id ? (
-                <div className="flex items-center gap-1.5 animate-fade-in">
-                  <span className="text-[11px] text-[#949ba4] mr-1">Delete?</span>
-                  <button
-                    onClick={() => void handleDelete(item.id)}
-                    disabled={deletingId === item.id}
-                    className="px-2.5 py-1 rounded bg-[#f23f42] text-white text-[11px] font-medium
-                      hover:bg-[#d83c3e] transition-colors disabled:opacity-50"
-                  >
-                    {deletingId === item.id ? '…' : 'Yes'}
-                  </button>
-                  <button
-                    onClick={() => setConfirmDeleteId(null)}
-                    className="px-2.5 py-1 rounded bg-[#404249] text-[#dbdee1] text-[11px] font-medium
-                      hover:bg-[#4e5058] transition-colors"
-                  >
-                    No
-                  </button>
-                </div>
-              ) : (
-                <>
+              <>
                   {/* Play button */}
                   <button
                     onClick={() => {
@@ -1304,11 +1197,23 @@ function CustomizationTab({ hub, isOwner, kind }: { hub: Hub; isOwner: boolean; 
                     </button>
                   )}
                 </>
-              )}
             </div>
           ))}
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmDeleteId != null}
+        title={`Delete ${cfg.singular}`}
+        description={confirmDeleteId
+          ? `Remove ${items.find((item) => item.id === confirmDeleteId)?.name ?? cfg.singular}? This cannot be undone.`
+          : ''}
+        confirmText={`Delete ${cfg.singular}`}
+        variant="danger"
+        onConfirm={() => confirmDeleteId ? handleDelete(confirmDeleteId) : Promise.resolve()}
+        onCancel={() => setConfirmDeleteId(null)}
+        loading={confirmDeleteId ? deletingId === confirmDeleteId : false}
+      />
     </div>
   );
 }
@@ -1340,6 +1245,7 @@ function RolesTab({ hub }: { hub: Hub }) {
   const [newColor, setNewColor] = useState('#99aab5');
   const [newPerms, setNewPerms] = useState<number>(PermViewStreams | PermSendMessages | PermConnectVoice | PermSpeakVoice | PermUseSoundboard);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [confirmDeleteRoleId, setConfirmDeleteRoleId] = useState<string | null>(null);
   const hubPermissions = useHubStore((s) => s.hubPermissions[hub.id]);
   const canManage = hasPermission(hubPermissions, PermManageRanks);
 
@@ -1458,7 +1364,7 @@ function RolesTab({ hub }: { hub: Hub }) {
                 <span className="text-[13px] text-white truncate">{role.name}</span>
               </div>
               <button
-                onClick={() => void deleteRole(role.id)}
+                onClick={() => setConfirmDeleteRoleId(role.id)}
                 disabled={busyId === role.id}
                 className="text-[12px] px-2.5 py-1 rounded bg-[#f23f42]/10 text-[#f23f42] hover:bg-[#f23f42]/20 disabled:opacity-40"
               >
@@ -1468,6 +1374,23 @@ function RolesTab({ hub }: { hub: Hub }) {
           ))
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={confirmDeleteRoleId != null}
+        title="Delete Role"
+        description={confirmDeleteRoleId
+          ? `Delete ${roles.find((role) => role.id === confirmDeleteRoleId)?.name ?? 'this role'}? Members assigned to it will lose the role.`
+          : ''}
+        confirmText="Delete Role"
+        variant="danger"
+        onConfirm={async () => {
+          if (!confirmDeleteRoleId) return;
+          await deleteRole(confirmDeleteRoleId);
+          setConfirmDeleteRoleId(null);
+        }}
+        onCancel={() => setConfirmDeleteRoleId(null)}
+        loading={confirmDeleteRoleId ? busyId === confirmDeleteRoleId : false}
+      />
     </div>
   );
 }

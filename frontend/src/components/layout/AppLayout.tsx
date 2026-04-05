@@ -10,6 +10,7 @@ import FriendsPage from '../friends/FriendsPage';
 import UserProfilePopover from '../shared/UserProfilePopover';
 import SelfProfilePopover from '../shared/SelfProfilePopover';
 import UserContextMenu from '../shared/UserContextMenu';
+import ScreenShareModal from '../voice/ScreenShareModal';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useHubStore } from '../../stores/hubStore';
 import { useStreamStore } from '../../stores/streamStore';
@@ -84,6 +85,7 @@ export default function AppLayout() {
       <UserProfilePopover />
       <SelfProfilePopover />
       <UserContextMenu />
+      <ScreenShareModal />
     </div>
   );
 }

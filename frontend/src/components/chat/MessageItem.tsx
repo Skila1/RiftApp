@@ -274,6 +274,7 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
   const [editing, setEditing] = useState(false);
   const [editDraft, setEditDraft] = useState(message.content);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   const canDelete =
     isOwn ||
@@ -365,7 +366,10 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
   }, []);
 
   useEffect(() => {
-    if (!editing) setEditDraft(message.content);
+    if (!editing) {
+      setEditDraft(message.content);
+      setEditError(null);
+    }
   }, [message.content, editing]);
 
   useEffect(() => {
@@ -384,12 +388,13 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
     const t = editDraft.trim();
     if (!t || savingEdit) return;
     setSavingEdit(true);
+    setEditError(null);
     try {
       if (isDM) await editDMMessage(message.id, t);
       else await editStreamMessage(message.id, t);
       setEditing(false);
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'Could not save edit');
+      setEditError(err instanceof Error ? err.message : 'Could not save edit');
     } finally {
       setSavingEdit(false);
     }
@@ -451,7 +456,10 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
       <div className="mt-1 space-y-2">
         <textarea
           value={editDraft}
-          onChange={(e) => setEditDraft(e.target.value)}
+          onChange={(e) => {
+            setEditDraft(e.target.value);
+            if (editError) setEditError(null);
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
@@ -461,6 +469,9 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
           className="w-full min-h-[80px] bg-riftapp-bg border border-riftapp-border/60 rounded-lg px-3 py-2 text-[15px] text-riftapp-text outline-none focus:ring-2 focus:ring-riftapp-accent/30 resize-y"
           maxLength={4000}
         />
+        {editError && (
+          <p className="text-sm text-riftapp-danger">{editError}</p>
+        )}
         <div className="flex gap-2">
           <button
             type="button"
