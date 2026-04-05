@@ -217,6 +217,10 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
     return set;
   }, [hubMembers]);
 
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const openProfile = useProfilePopoverStore((s) => s.open);
+  const openContextMenu = useUserContextMenuStore((s) => s.open);
+
   const handleMentionClick = useCallback((username: string, rect: DOMRect) => {
     const user = Object.values(hubMembers).find(
       (u) => u.username.toLowerCase() === username.toLowerCase(),
@@ -235,9 +239,6 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
     const re = new RegExp(`@${currentUsername.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w.\\-])`, 'i');
     return re.test(message.content);
   }, [message.content, currentUsername]);
-  const pickerRef = useRef<HTMLDivElement>(null);
-  const openProfile = useProfilePopoverStore((s) => s.open);
-  const openContextMenu = useUserContextMenuStore((s) => s.open);
 
   const handleProfileClick = useCallback((e: React.MouseEvent) => {
     if (author) {
