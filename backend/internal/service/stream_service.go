@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,6 +37,7 @@ func (s *StreamService) Create(ctx context.Context, hubID, userID, name string, 
 	if !s.hubService.HasPermission(ctx, hubID, userID, models.PermManageStreams) {
 		return nil, apperror.Forbidden("you do not have permission to manage channels")
 	}
+	name = normalizeStreamName(name)
 	if name == "" {
 		return nil, apperror.BadRequest("name is required")
 	}
@@ -87,6 +89,39 @@ func (s *StreamService) Delete(ctx context.Context, streamID, userID string) err
 		return apperror.Internal("failed to delete stream", err)
 	}
 	return nil
+}
+
+func normalizeStreamName(raw string) string {
+	s := strings.TrimSpace(strings.ToLower(raw))
+	s = strings.ReplaceAll(s, " ", "-")
+	var b strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// Patch updates editable stream fields (name). Requires manage channels permission.
+func (s *StreamService) Patch(ctx context.Context, streamID, userID string, name *string) (*models.Stream, error) {
+	hubID, err := s.streamRepo.GetHubID(ctx, streamID)
+	if err != nil {
+		return nil, apperror.NotFound("stream not found")
+	}
+	if !s.hubService.HasPermission(ctx, hubID, userID, models.PermManageStreams) {
+		return nil, apperror.Forbidden("you do not have permission to manage channels")
+	}
+	if name != nil {
+		n := normalizeStreamName(*name)
+		if n == "" {
+			return nil, apperror.BadRequest("name is required")
+		}
+		if err := s.streamRepo.UpdateName(ctx, streamID, n); err != nil {
+			return nil, apperror.Internal("failed to update stream", err)
+		}
+	}
+	return s.streamRepo.GetByID(ctx, streamID)
 }
 
 func (s *StreamService) Ack(ctx context.Context, streamID, userID, messageID string) error {

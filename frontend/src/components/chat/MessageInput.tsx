@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useMessageStore } from '../../stores/messageStore';
+import { useReplyDraftStore } from '../../stores/replyDraftStore';
 import { api } from '../../api/client';
 import type { Attachment } from '../../types';
 
@@ -20,16 +21,31 @@ interface MessageInputProps {
   onTypingStop?: () => void;
   isDMMode?: boolean;
   onSendDM?: (content: string, attachmentIds?: string[]) => Promise<void>;
+  /** When this changes (channel / DM switch), reply draft is cleared. */
+  replyScopeKey?: string;
 }
 
-export default function MessageInput({ streamName, onTyping, onTypingStop, isDMMode, onSendDM }: MessageInputProps) {
+export default function MessageInput({
+  streamName,
+  onTyping,
+  onTypingStop,
+  isDMMode,
+  onSendDM,
+  replyScopeKey = '',
+}: MessageInputProps) {
   const [content, setContent] = useState('');
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [dragging, setDragging] = useState(false);
   const sendMessage = useMessageStore((s) => s.sendMessage);
+  const replyTo = useReplyDraftStore((s) => s.replyTo);
+  const setReplyTo = useReplyDraftStore((s) => s.setReplyTo);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastTypingRef = useRef(0);
+
+  useEffect(() => {
+    setReplyTo(null);
+  }, [replyScopeKey, setReplyTo]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -88,6 +104,14 @@ export default function MessageInput({ streamName, onTyping, onTypingStop, isDMM
     const readyAttachments = pendingFiles.filter((f) => f.attachment).map((f) => f.attachment!);
     if (!trimmed && readyAttachments.length === 0) return;
 
+    let body = trimmed;
+    if (replyTo) {
+      const author = replyTo.author?.display_name || 'User';
+      const snippet = (replyTo.content || '').split('\n')[0].slice(0, 200);
+      body = `> **@${author}** ${snippet}\n\n${trimmed}`;
+      setReplyTo(null);
+    }
+
     // Revoke any object URLs to prevent memory leaks
     for (const pf of pendingFiles) {
       if (pf.preview) URL.revokeObjectURL(pf.preview);
@@ -103,11 +127,11 @@ export default function MessageInput({ streamName, onTyping, onTypingStop, isDMM
 
     const attachmentIds = readyAttachments.map((a) => a.id);
     if (isDMMode && onSendDM) {
-      await onSendDM(trimmed, attachmentIds.length > 0 ? attachmentIds : undefined);
+      await onSendDM(body, attachmentIds.length > 0 ? attachmentIds : undefined);
     } else {
-      await sendMessage(trimmed, attachmentIds.length > 0 ? attachmentIds : undefined);
+      await sendMessage(body, attachmentIds.length > 0 ? attachmentIds : undefined);
     }
-  }, [content, pendingFiles, sendMessage, onTypingStop, isDMMode, onSendDM]);
+  }, [content, pendingFiles, sendMessage, onTypingStop, isDMMode, onSendDM, replyTo, setReplyTo]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -228,6 +252,26 @@ export default function MessageInput({ streamName, onTyping, onTypingStop, isDMM
         </div>
       )}
 
+      {replyTo && (
+        <div className="mb-2 flex items-start gap-2 px-3 py-2 rounded-lg bg-riftapp-accent/10 border border-riftapp-accent/25 text-[13px]">
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-semibold text-riftapp-accent uppercase tracking-wide mb-0.5">Replying to {replyTo.author?.display_name || 'User'}</p>
+            <p className="text-riftapp-text-dim truncate">{(replyTo.content || '').split('\n')[0] || '…'}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReplyTo(null)}
+            className="text-riftapp-text-dim hover:text-riftapp-text p-1 rounded-md hover:bg-riftapp-surface-hover flex-shrink-0"
+            aria-label="Cancel reply"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       <div className={`bg-riftapp-surface rounded-xl border flex items-end transition-all duration-200 ${
         dragging ? 'border-riftapp-accent shadow-glow' : 'border-riftapp-border/60 hover:border-riftapp-border'
       }`}>
@@ -253,6 +297,7 @@ export default function MessageInput({ streamName, onTyping, onTypingStop, isDMM
 
         <textarea
           ref={textareaRef}
+          data-riftapp-message-input
           value={content}
           onChange={handleChange}
           onKeyDown={handleKeyDown}

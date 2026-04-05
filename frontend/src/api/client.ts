@@ -131,6 +131,12 @@ class ApiClient {
 
   getStreams(hubId: string) { return this.request<Stream[]>(`/hubs/${hubId}/streams`); }
   createStream(hubId: string, name: string, type: number = 0, categoryId?: string) { return this.request<Stream>(`/hubs/${hubId}/streams`, { method: 'POST', body: JSON.stringify({ name, type, category_id: categoryId }) }); }
+  patchStream(streamId: string, body: { name: string }) {
+    return this.request<Stream>(`/streams/${streamId}`, { method: 'PATCH', body: JSON.stringify(body) });
+  }
+  deleteStream(streamId: string) {
+    return this.request<void>(`/streams/${streamId}`, { method: 'DELETE' });
+  }
 
   getCategories(hubId: string) { return this.request<Category[]>(`/hubs/${hubId}/categories`); }
   createCategory(hubId: string, name: string) { return this.request<Category>(`/hubs/${hubId}/categories`, { method: 'POST', body: JSON.stringify({ name }) }); }

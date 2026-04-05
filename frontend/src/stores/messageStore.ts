@@ -54,7 +54,10 @@ interface MessageState {
   updateMessage: (message: Message) => void;
   removeMessage: (messageId: string) => void;
   deleteMessage: (messageId: string) => Promise<void>;
+  editMessageContent: (messageId: string, content: string) => Promise<void>;
   clearMessages: () => void;
+  /** Drop cached history for one stream (e.g. after channel delete). */
+  removeStreamCache: (streamId: string) => void;
   /** Drop all cached streams + visible messages (logout). */
   clearSessionCaches: () => void;
 
@@ -208,7 +211,24 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     get().removeMessage(messageId);
   },
 
+  editMessageContent: async (messageId, content) => {
+    const msg = await api.editMessage(messageId, content);
+    get().updateMessage(msg);
+  },
+
   clearMessages: () => set({ messages: [], messagesLoading: false }),
+
+  removeStreamCache: (streamId) => {
+    const active = useStreamStore.getState().activeStreamId;
+    set((s) => {
+      const streamMessagesCache = { ...s.streamMessagesCache };
+      delete streamMessagesCache[streamId];
+      if (active === streamId) {
+        return { messages: [], messagesLoading: false, streamMessagesCache };
+      }
+      return { streamMessagesCache };
+    });
+  },
 
   clearSessionCaches: () =>
     set({

@@ -33,6 +33,10 @@ interface StreamState {
   setActiveStream: (streamId: string) => Promise<void>;
   setViewingVoice: (streamId: string | null) => void;
   createStream: (hubId: string, name: string, type?: number, categoryId?: string) => Promise<Stream>;
+  patchStream: (streamId: string, name: string) => Promise<Stream>;
+  deleteStream: (streamId: string) => Promise<void>;
+  /** Mark a text channel read using latest message on server (works when channel not open). */
+  markStreamRead: (streamId: string) => Promise<void>;
   createCategory: (hubId: string, name: string) => Promise<Category>;
   deleteCategory: (hubId: string, categoryId: string) => Promise<void>;
   loadReadStates: (hubId: string) => Promise<void>;
@@ -170,6 +174,105 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       return { streams, hubLayoutCache };
     });
     return stream;
+  },
+
+  patchStream: async (streamId, name) => {
+    const updated = await api.patchStream(streamId, { name });
+    set((s) => {
+      const streams = s.streams.map((st) => (st.id === streamId ? updated : st));
+      const hubLayoutCache = { ...s.hubLayoutCache };
+      const hubId = updated.hub_id;
+      const prev = hubLayoutCache[hubId];
+      if (prev) {
+        hubLayoutCache[hubId] = {
+          ...prev,
+          at: Date.now(),
+          streams: prev.streams.map((st) => (st.id === streamId ? updated : st)),
+        };
+      }
+      return { streams, hubLayoutCache };
+    });
+    return updated;
+  },
+
+  deleteStream: async (streamId) => {
+    const st = get().streams.find((x) => x.id === streamId);
+    const hubId = st?.hub_id;
+    await api.deleteStream(streamId);
+    const { useMessageStore } = await import('./messageStore');
+    useMessageStore.getState().removeStreamCache(streamId);
+    set((s) => {
+      const streams = s.streams.filter((x) => x.id !== streamId);
+      const streamUnreads = { ...s.streamUnreads };
+      delete streamUnreads[streamId];
+      const lastReadMessageIds = { ...s.lastReadMessageIds };
+      delete lastReadMessageIds[streamId];
+      const streamHubMap = { ...s.streamHubMap };
+      delete streamHubMap[streamId];
+      const voiceMembers = { ...s.voiceMembers };
+      delete voiceMembers[streamId];
+      let activeStreamId = s.activeStreamId;
+      let viewingVoiceStreamId = s.viewingVoiceStreamId;
+      if (activeStreamId === streamId) activeStreamId = null;
+      if (viewingVoiceStreamId === streamId) viewingVoiceStreamId = null;
+      const hubLayoutCache = { ...s.hubLayoutCache };
+      if (hubId && hubLayoutCache[hubId]) {
+        const prev = hubLayoutCache[hubId];
+        hubLayoutCache[hubId] = {
+          ...prev,
+          at: Date.now(),
+          streams: prev.streams.filter((x) => x.id !== streamId),
+          voiceMembers: Object.fromEntries(
+            Object.entries(prev.voiceMembers).filter(([k]) => k !== streamId),
+          ),
+        };
+      }
+      return {
+        streams,
+        streamUnreads,
+        lastReadMessageIds,
+        streamHubMap,
+        voiceMembers,
+        activeStreamId,
+        viewingVoiceStreamId,
+        hubLayoutCache,
+      };
+    });
+    const { useHubStore } = await import('./hubStore');
+    const { useVoiceStore } = await import('./voiceStore');
+    if (useVoiceStore.getState().streamId === streamId) {
+      useVoiceStore.getState().leave();
+    }
+    if (hubId && useHubStore.getState().activeHubId === hubId) {
+      const text = get().streams.find((x) => x.type === 0);
+      if (text && get().activeStreamId == null) {
+        await get().setActiveStream(text.id);
+      }
+    }
+  },
+
+  markStreamRead: async (streamId) => {
+    const st = get().streams.find((x) => x.id === streamId);
+    if (!st || st.type !== 0) return;
+    const hubId = st.hub_id;
+    try {
+      const latest = await api.getMessages(streamId, undefined, 1);
+      if (latest.length === 0) {
+        set((s) => ({
+          streamUnreads: { ...s.streamUnreads, [streamId]: 0 },
+        }));
+        await get().mergeReadStatesForHub(hubId);
+        return;
+      }
+      await api.ackStream(streamId, latest[0].id);
+      set((s) => ({
+        streamUnreads: { ...s.streamUnreads, [streamId]: 0 },
+        lastReadMessageIds: { ...s.lastReadMessageIds, [streamId]: latest[0].id },
+      }));
+      await get().mergeReadStatesForHub(hubId);
+    } catch {
+      /* ignore */
+    }
   },
 
   createCategory: async (hubId, name) => {

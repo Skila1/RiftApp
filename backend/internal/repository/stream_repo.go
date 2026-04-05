@@ -65,6 +65,11 @@ func (r *StreamRepo) Delete(ctx context.Context, streamID string) error {
 	return err
 }
 
+func (r *StreamRepo) UpdateName(ctx context.Context, streamID, name string) error {
+	_, err := r.db.Exec(ctx, `UPDATE streams SET name = $1 WHERE id = $2`, name, streamID)
+	return err
+}
+
 func (r *StreamRepo) GetHubID(ctx context.Context, streamID string) (string, error) {
 	var hubID string
 	err := r.db.QueryRow(ctx, `SELECT hub_id FROM streams WHERE id = $1`, streamID).Scan(&hubID)

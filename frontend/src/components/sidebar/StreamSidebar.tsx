@@ -5,13 +5,17 @@ import { usePresenceStore } from '../../stores/presenceStore';
 import { useAuthStore } from '../../stores/auth';
 import { useSelfProfileStore } from '../../stores/selfProfileStore';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { useVoiceChannelUiStore } from '../../stores/voiceChannelUiStore';
 import SettingsModal from '../settings/SettingsModal';
 import HubSettingsModal from '../settings/HubSettingsModal';
 import VoicePanel from '../voice/VoicePanel';
 import StatusDot, { statusLabel } from '../shared/StatusDot';
 import CreateChannelModal from '../modals/CreateChannelModal';
 import CreateCategoryModal from '../modals/CreateCategoryModal';
+import EditChannelModal from '../modals/EditChannelModal';
 import InviteToServerModal from '../modals/InviteToServerModal';
+import ChannelContextMenu, { type ChannelMenuTarget } from '../context-menus/ChannelContextMenu';
+import { MenuOverlay } from '../context-menus/MenuOverlay';
 import { api } from '../../api/client';
 import type { User, Stream } from '../../types';
 
@@ -25,6 +29,8 @@ export default function StreamSidebar() {
   const setViewingVoice = useStreamStore((s) => s.setViewingVoice);
   const hubs = useHubStore((s) => s.hubs);
   const user = useAuthStore((s) => s.user);
+  const myHubRole = usePresenceStore((s) => (user?.id ? s.hubMembers[user.id]?.role : undefined));
+  const canManageChannels = myHubRole === 'owner' || myHubRole === 'admin';
   const logout = useAuthStore((s) => s.logout);
   const streamUnreads = useStreamStore((s) => s.streamUnreads);
   const hubMembers = usePresenceStore((s) => s.hubMembers);
@@ -50,6 +56,9 @@ export default function StreamSidebar() {
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showCreateCategory, setShowCreateCategory] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [channelMenu, setChannelMenu] = useState<ChannelMenuTarget | null>(null);
+  const [editChannelStream, setEditChannelStream] = useState<Stream | null>(null);
+  const [createChannelInitialType, setCreateChannelInitialType] = useState<number | undefined>(undefined);
 
   // Collapsible categories
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -69,6 +78,11 @@ export default function StreamSidebar() {
   );
 
   // Group streams by category
+  const firstTextStreamId = useMemo(
+    () => streamsForHub.find((s) => s.type === 0)?.id,
+    [streamsForHub],
+  );
+
   const { uncategorized, grouped } = useMemo(() => {
     const uncategorized: Stream[] = [];
     const grouped: Record<string, Stream[]> = {};
@@ -142,14 +156,6 @@ export default function StreamSidebar() {
     e.preventDefault();
     setHeaderMenu({ x: e.clientX, y: e.clientY });
   };
-
-  // Close header context menu on outside click
-  useEffect(() => {
-    if (!headerMenu) return;
-    const handler = () => setHeaderMenu(null);
-    window.addEventListener('click', handler);
-    return () => window.removeEventListener('click', handler);
-  }, [headerMenu]);
 
   if (!activeHubId) {
     return (
@@ -239,14 +245,79 @@ export default function StreamSidebar() {
         </div>
       )}
 
-      {/* Header right-click context menu */}
       {headerMenu && (
-        <HeaderContextMenu
-          x={headerMenu.x}
-          y={headerMenu.y}
-          onCreateChannel={() => { setCreateChannelFor(undefined); setShowCreateChannel(true); setHeaderMenu(null); }}
-          onCreateCategory={() => { setShowCreateCategory(true); setHeaderMenu(null); }}
-          onInvite={() => { setShowInviteModal(true); setHeaderMenu(null); }}
+        <MenuOverlay x={headerMenu.x} y={headerMenu.y} onClose={() => setHeaderMenu(null)}>
+          <div className="bg-[#111214] rounded-md border border-black/40 shadow-modal py-1.5 min-w-[200px] text-[13px] text-[#dbdee1] select-none">
+            <button
+              type="button"
+              onClick={() => {
+                setCreateChannelInitialType(undefined);
+                setCreateChannelFor(undefined);
+                setShowCreateChannel(true);
+                setHeaderMenu(null);
+              }}
+              className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#949ba4] shrink-0">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Create Channel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateCategory(true);
+                setHeaderMenu(null);
+              }}
+              className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#949ba4] shrink-0">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+              </svg>
+              Create Category
+            </button>
+            <div className="mx-2 my-1 h-px bg-white/[0.06]" />
+            <button
+              type="button"
+              onClick={() => {
+                setShowInviteModal(true);
+                setHeaderMenu(null);
+              }}
+              className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#949ba4] shrink-0">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="8.5" cy="7" r="4" />
+                <line x1="20" y1="8" x2="20" y2="14" />
+                <line x1="23" y1="11" x2="17" y2="11" />
+              </svg>
+              Invite to Server
+            </button>
+          </div>
+        </MenuOverlay>
+      )}
+
+      {channelMenu && activeHubId && (
+        <ChannelContextMenu
+          hubId={activeHubId}
+          target={channelMenu}
+          unreadCount={streamUnreads[channelMenu.stream.id] || 0}
+          canManageChannels={canManageChannels}
+          firstTextStreamId={firstTextStreamId}
+          onClose={() => setChannelMenu(null)}
+          onInviteServer={() => setShowInviteModal(true)}
+          onCreateTextChannel={(catId) => {
+            setCreateChannelInitialType(0);
+            setCreateChannelFor(catId ?? undefined);
+            setShowCreateChannel(true);
+          }}
+          onCreateVoiceChannel={(catId) => {
+            setCreateChannelInitialType(1);
+            setCreateChannelFor(catId ?? undefined);
+            setShowCreateChannel(true);
+          }}
+          onEditChannel={(s) => setEditChannelStream(s)}
         />
       )}
 
@@ -263,6 +334,10 @@ export default function StreamSidebar() {
             onVoiceClick={handleVoiceClick}
             voiceMembers={voiceMembers}
             hubMembers={hubMembers}
+            onChannelContext={(stream, e) => {
+              e.preventDefault();
+              setChannelMenu({ stream, x: e.clientX, y: e.clientY });
+            }}
           />
         )}
 
@@ -304,6 +379,10 @@ export default function StreamSidebar() {
                   onVoiceClick={handleVoiceClick}
                   voiceMembers={voiceMembers}
                   hubMembers={hubMembers}
+                  onChannelContext={(stream, e) => {
+                    e.preventDefault();
+                    setChannelMenu({ stream, x: e.clientX, y: e.clientY });
+                  }}
                 />
               )}
             </div>
@@ -339,8 +418,17 @@ export default function StreamSidebar() {
       <UserBar user={user} logout={logout} />
 
       {showCreateChannel && activeHubId && (
-        <CreateChannelModal hubId={activeHubId} categoryId={createChannelFor} onClose={closeCreateChannel} />
+        <CreateChannelModal
+          hubId={activeHubId}
+          categoryId={createChannelFor}
+          initialType={createChannelInitialType}
+          onClose={() => {
+            setCreateChannelInitialType(undefined);
+            closeCreateChannel();
+          }}
+        />
       )}
+      {editChannelStream && <EditChannelModal stream={editChannelStream} onClose={() => setEditChannelStream(null)} />}
       {showCreateCategory && activeHubId && (
         <CreateCategoryModal hubId={activeHubId} onClose={closeCreateCategory} />
       )}
@@ -362,6 +450,7 @@ interface ChannelGroupProps {
   onVoiceClick: (streamId: string) => void;
   voiceMembers: Record<string, string[]>;
   hubMembers: Record<string, User>;
+  onChannelContext: (stream: Stream, e: React.MouseEvent) => void;
 }
 
 function ChannelGroup({
@@ -373,10 +462,12 @@ function ChannelGroup({
   onVoiceClick,
   voiceMembers,
   hubMembers,
+  onChannelContext,
 }: ChannelGroupProps) {
   const voiceStreamId = useVoiceStore((s) => s.streamId);
   const voiceConnected = useVoiceStore((s) => s.connected);
   const voiceParticipants = useVoiceStore((s) => s.participants);
+  const hideNamesByStream = useVoiceChannelUiStore((s) => s.hideNamesByStream);
   const textStreams = streams.filter((s) => s.type === 0);
   const voiceStreams = streams.filter((s) => s.type === 1);
 
@@ -389,7 +480,9 @@ function ChannelGroup({
         return (
           <button
             key={stream.id}
+            type="button"
             onClick={() => onSelect(stream.id)}
+            onContextMenu={(e) => onChannelContext(stream, e)}
             title={`#${stream.name}`}
             className={`channel-item ${isActive ? 'channel-item-active' : 'channel-item-idle'} ${hasUnread ? '!text-riftapp-text font-semibold' : ''}`}
           >
@@ -408,10 +501,13 @@ function ChannelGroup({
         const isViewing = viewingVoiceStreamId === stream.id;
         const memberIds = voiceMembers[stream.id] || [];
         const hasMembers = isConnected ? voiceParticipants.length > 0 : memberIds.length > 0;
+        const hideVcNames = hideNamesByStream[stream.id] ?? false;
         return (
           <div key={stream.id}>
             <button
+              type="button"
               onClick={() => onVoiceClick(stream.id)}
+              onContextMenu={(e) => onChannelContext(stream, e)}
               title={isConnected ? stream.name : `Join ${stream.name}`}
               className={`channel-item ${isViewing ? 'channel-item-active !text-riftapp-success' : isConnected ? '!text-riftapp-success channel-item-idle' : hasMembers ? '!text-riftapp-success/70 channel-item-idle' : 'channel-item-idle'}`}
             >
@@ -443,7 +539,7 @@ function ChannelGroup({
                         )}
                       </div>
                       <span className={`text-[13px] truncate flex-1 ${p.isSpeaking ? 'text-riftapp-success font-medium' : 'text-riftapp-text-muted'}`}>
-                        {name}
+                        {hideVcNames ? 'User' : name}
                       </span>
                       {p.isMuted && (
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-riftapp-danger/70 flex-shrink-0">
@@ -478,7 +574,7 @@ function ChannelGroup({
                           </div>
                         )}
                       </div>
-                      <span className="text-[13px] truncate flex-1 text-riftapp-text-muted">{name}</span>
+                      <span className="text-[13px] truncate flex-1 text-riftapp-text-muted">{hideVcNames ? 'User' : name}</span>
                     </div>
                   );
                 })}
@@ -487,40 +583,6 @@ function ChannelGroup({
           </div>
         );
       })}
-    </div>
-  );
-}
-
-/* ───── Header Context Menu ───── */
-
-function HeaderContextMenu({ x, y, onCreateChannel, onCreateCategory, onInvite }: {
-  x: number; y: number;
-  onCreateChannel: () => void;
-  onCreateCategory: () => void;
-  onInvite: () => void;
-}) {
-  return (
-    <div
-      className="fixed z-[200] animate-scale-in"
-      style={{ left: x, top: y }}
-    >
-      <div className="bg-riftapp-panel rounded-lg border border-riftapp-border/50 shadow-modal py-1.5 min-w-[180px]">
-        <button onClick={onCreateChannel} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-riftapp-accent hover:text-white transition-colors text-left">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-          Create Channel
-        </button>
-        <button onClick={onCreateCategory} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-riftapp-accent hover:text-white transition-colors text-left">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>
-          Create Category
-        </button>
-        <div className="mx-2 my-1 border-t border-riftapp-border/30" />
-        <button onClick={onInvite} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-riftapp-accent hover:text-white transition-colors text-left">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" /><line x1="20" y1="8" x2="20" y2="14" /><line x1="23" y1="11" x2="17" y2="11" />
-          </svg>
-          Invite to Server
-        </button>
-      </div>
     </div>
   );
 }

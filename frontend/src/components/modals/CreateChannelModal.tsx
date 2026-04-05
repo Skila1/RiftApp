@@ -5,6 +5,8 @@ import { useStreamStore } from '../../stores/streamStore';
 interface Props {
   hubId: string;
   categoryId?: string;
+  /** When opening from context menu, pre-select text (0) or voice (1). */
+  initialType?: number;
   onClose: () => void;
 }
 
@@ -33,8 +35,8 @@ const CHANNEL_TYPES = [
   },
 ];
 
-export default function CreateChannelModal({ hubId, categoryId, onClose }: Props) {
-  const [type, setType] = useState(0);
+export default function CreateChannelModal({ hubId, categoryId, initialType, onClose }: Props) {
+  const [type, setType] = useState(initialType ?? 0);
   const [name, setName] = useState('');
   const [isPrivate, setIsPrivate] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -53,6 +55,10 @@ export default function CreateChannelModal({ hubId, categoryId, onClose }: Props
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
+
+  useEffect(() => {
+    if (initialType === 0 || initialType === 1) setType(initialType);
+  }, [initialType]);
 
   const handleCreate = async () => {
     const trimmed = name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');

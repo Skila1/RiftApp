@@ -1,6 +1,7 @@
 import { useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStreamStore } from '../../stores/streamStore';
+import { useHubStore } from '../../stores/hubStore';
 import { useMessageStore } from '../../stores/messageStore';
 import { useDMStore } from '../../stores/dmStore';
 import { useAuthStore } from '../../stores/auth';
@@ -14,6 +15,7 @@ export default function ChatPanel() {
   const activeStreamId = useStreamStore((s) => s.activeStreamId);
   const streams = useStreamStore((s) => s.streams);
   const user = useAuthStore((s) => s.user);
+  const activeHubId = useHubStore((s) => s.activeHubId);
   const bottomRef = useRef<HTMLDivElement>(null);
   const unreadRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -261,6 +263,7 @@ export default function ChatPanel() {
                     showHeader={showHeader}
                     isOwn={msg.author_id === user?.id}
                     isDM={isDMMode}
+                    hubId={activeHubId}
                   />
                 </div>
               );
@@ -280,6 +283,7 @@ export default function ChatPanel() {
         onTypingStop={isDMMode ? undefined : onTypingStop}
         isDMMode={isDMMode}
         onSendDM={isDMMode ? sendDMMessage : undefined}
+        replyScopeKey={activeStreamId || activeConversationId || ''}
       />
     </div>
   );

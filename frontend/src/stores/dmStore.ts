@@ -21,6 +21,7 @@ interface DMState {
   addDMMessage: (message: Message) => void;
   removeDMMessage: (messageId: string) => void;
   deleteDMMessage: (messageId: string) => Promise<void>;
+  editDMMessage: (messageId: string, content: string) => Promise<void>;
   addConversation: (conv: Conversation) => void;
   ackDM: (convId: string) => Promise<void>;
   readStates: () => Promise<void>;
@@ -144,6 +145,13 @@ export const useDMStore = create<DMState>((set, get) => ({
   deleteDMMessage: async (messageId) => {
     await api.deleteMessage(messageId);
     get().removeDMMessage(messageId);
+  },
+
+  editDMMessage: async (messageId, content) => {
+    const msg = await api.editMessage(messageId, content);
+    set((s) => ({
+      dmMessages: s.dmMessages.map((m) => (m.id === messageId ? msg : m)),
+    }));
   },
 
   addConversation: (conv) => {

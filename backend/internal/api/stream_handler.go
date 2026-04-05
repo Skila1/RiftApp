@@ -69,6 +69,28 @@ func (h *StreamHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *StreamHandler) Patch(w http.ResponseWriter, r *http.Request) {
+	streamID := chi.URLParam(r, "streamID")
+	userID := middleware.GetUserID(r.Context())
+	var body struct {
+		Name *string `json:"name"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if body.Name == nil {
+		writeError(w, http.StatusBadRequest, "no fields to update")
+		return
+	}
+	stream, err := h.svc.Patch(r.Context(), streamID, userID, body.Name)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, stream)
+}
+
 func (h *StreamHandler) Ack(w http.ResponseWriter, r *http.Request) {
 	streamID := chi.URLParam(r, "streamID")
 	userID := middleware.GetUserID(r.Context())

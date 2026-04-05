@@ -7,6 +7,7 @@ import { usePresenceStore } from '../../stores/presenceStore';
 import { useProfilePopoverStore } from '../../stores/profilePopoverStore';
 import { useUserContextMenuStore } from '../../stores/userContextMenuStore';
 import InviteEmbed from '../shared/InviteEmbed';
+import MessageContextMenu from '../context-menus/MessageContextMenu';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '🔥', '👀', '😮', '🙏'];
 
@@ -129,26 +130,36 @@ interface MessageItemProps {
   isOwn: boolean;
   /** Direct messages: only the author may delete. Hub streams: author or hub owner/admin. */
   isDM?: boolean;
+  /** Active hub (for message link in context menu). */
+  hubId?: string | null;
 }
 
 function roleCanModerateMessages(role: string | undefined): boolean {
   return role === 'owner' || role === 'admin';
 }
 
-const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM = false }: MessageItemProps) {
+const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM = false, hubId = null }: MessageItemProps) {
   const author = message.author;
   const authorName = author?.display_name || 'Unknown';
   const toggleReaction = useMessageStore((s) => s.toggleReaction);
   const deleteStreamMessage = useMessageStore((s) => s.deleteMessage);
   const deleteDMMessage = useDMStore((s) => s.deleteDMMessage);
+  const editStreamMessage = useMessageStore((s) => s.editMessageContent);
+  const editDMMessage = useDMStore((s) => s.editDMMessage);
   const currentUserId = useAuthStore((s) => s.user?.id);
   const myHubRole = usePresenceStore((s) => (currentUserId ? s.hubMembers[currentUserId]?.role : undefined));
   const [pickerOpen, setPickerOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [messageMenu, setMessageMenu] = useState<{ x: number; y: number } | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState(message.content);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const canDelete =
     isOwn ||
     (!isDM && !!message.stream_id && roleCanModerateMessages(myHubRole));
+
+  const canEdit = isOwn && Boolean((message.content || '').trim());
 
   const color = useMemo(() => nameColor(authorName), [authorName]);
   const bg = useMemo(() => avatarBg(authorName), [authorName]);
@@ -166,12 +177,52 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
     }
   }, [author, openProfile]);
 
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    if (author) {
-      e.preventDefault();
-      openContextMenu(author, e.clientX, e.clientY);
+  const handleUserContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (author) {
+        e.preventDefault();
+        openContextMenu(author, e.clientX, e.clientY);
+      }
+    },
+    [author, openContextMenu],
+  );
+
+  const handleMessageContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setMessageMenu({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  useEffect(() => {
+    if (!editing) setEditDraft(message.content);
+  }, [message.content, editing]);
+
+  useEffect(() => {
+    if (!editing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setEditing(false);
+        setEditDraft(message.content);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [editing, message.content]);
+
+  const saveEdit = useCallback(async () => {
+    const t = editDraft.trim();
+    if (!t || savingEdit) return;
+    setSavingEdit(true);
+    try {
+      if (isDM) await editDMMessage(message.id, t);
+      else await editStreamMessage(message.id, t);
+      setEditing(false);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Could not save edit');
+    } finally {
+      setSavingEdit(false);
     }
-  }, [author, openContextMenu]);
+  }, [editDraft, editDMMessage, editStreamMessage, isDM, message.id, savingEdit]);
 
   useEffect(() => {
     if (!pickerOpen) return;
@@ -208,8 +259,56 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
 
   const reactions = message.reactions || [];
 
+  const contentBlock =
+    editing ? (
+      <div className="mt-1 space-y-2">
+        <textarea
+          value={editDraft}
+          onChange={(e) => setEditDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              void saveEdit();
+            }
+          }}
+          className="w-full min-h-[80px] bg-riftapp-bg border border-riftapp-border/60 rounded-lg px-3 py-2 text-[15px] text-riftapp-text outline-none focus:ring-2 focus:ring-riftapp-accent/30 resize-y"
+          maxLength={4000}
+        />
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={savingEdit || !editDraft.trim()}
+            onClick={() => void saveEdit()}
+            className="px-3 py-1.5 rounded-md text-sm font-medium bg-riftapp-accent text-white hover:bg-riftapp-accent-hover disabled:opacity-50"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            disabled={savingEdit}
+            onClick={() => {
+              setEditing(false);
+              setEditDraft(message.content);
+            }}
+            className="px-3 py-1.5 rounded-md text-sm text-riftapp-text-dim hover:text-riftapp-text hover:bg-riftapp-surface-hover"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    ) : (
+      <>
+        <div className="text-[15px] leading-[1.375rem] text-riftapp-text/[0.90]">{renderedContent}</div>
+        <Attachments message={message} />
+        {reactions.length > 0 && (
+          <ReactionPills reactions={reactions} currentUserId={currentUserId} onToggle={handleToggle} />
+        )}
+      </>
+    );
+
   return (
     <div
+      onContextMenu={handleMessageContextMenu}
       className={`group relative py-0.5 -mx-4 px-4 hover:bg-riftapp-surface/20 transition-colors duration-100 ${
         showHeader ? 'mt-[17px]' : ''
       }`}
@@ -276,14 +375,14 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
           {/* Avatar */}
           <div
             onClick={handleProfileClick}
-            onContextMenu={handleContextMenu}
+            onContextMenu={handleUserContextMenu}
             className={`w-10 h-10 rounded-full ${bg} flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-0.5 cursor-pointer hover:opacity-80 transition-opacity`}
           >
             {authorName.slice(0, 2).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-2 mb-0.5">
-              <span onClick={handleProfileClick} onContextMenu={handleContextMenu} className={`font-semibold text-[15px] cursor-pointer hover:underline ${isOwn ? 'text-riftapp-accent-hover' : color}`}>
+              <span onClick={handleProfileClick} onContextMenu={handleUserContextMenu} className={`font-semibold text-[15px] cursor-pointer hover:underline ${isOwn ? 'text-riftapp-accent-hover' : color}`}>
                 {authorName}
               </span>
               <span className="text-[11px] text-riftapp-text-dim/80 select-none">
@@ -293,28 +392,30 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
                 <span className="text-[10px] text-riftapp-text-dim/60 select-none" title={`Edited ${formatTime(message.edited_at)}`}>(edited)</span>
               )}
             </div>
-            {/* Content */}
-            <div className="text-[15px] leading-[1.375rem] text-riftapp-text/[0.90]">
-              {renderedContent}
-            </div>
-            {/* Attachments */}
-            <Attachments message={message} />
-            {/* Reactions */}
-            {reactions.length > 0 && (
-              <ReactionPills reactions={reactions} currentUserId={currentUserId} onToggle={handleToggle} />
-            )}
+            {contentBlock}
           </div>
         </div>
       ) : (
-        <div className="pl-[52px]">
-          <div className="text-[15px] leading-[1.375rem] text-riftapp-text/[0.90]">
-            {renderedContent}
-          </div>
-          <Attachments message={message} />
-          {reactions.length > 0 && (
-            <ReactionPills reactions={reactions} currentUserId={currentUserId} onToggle={handleToggle} />
-          )}
-        </div>
+        <div className="pl-[52px]">{contentBlock}</div>
+      )}
+
+      {messageMenu && (
+        <MessageContextMenu
+          message={message}
+          x={messageMenu.x}
+          y={messageMenu.y}
+          isDM={isDM}
+          hubId={hubId}
+          isOwn={isOwn}
+          canEdit={canEdit}
+          canDelete={canDelete}
+          onClose={() => setMessageMenu(null)}
+          onEdit={() => {
+            setMessageMenu(null);
+            setEditDraft(message.content);
+            setEditing(true);
+          }}
+        />
       )}
     </div>
   );
