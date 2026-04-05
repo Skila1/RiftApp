@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/riptide-cloud/riptide/internal/auth"
-	"github.com/riptide-cloud/riptide/internal/repository"
-	"github.com/riptide-cloud/riptide/internal/service"
-	"github.com/riptide-cloud/riptide/internal/ws"
+	"github.com/riftapp-cloud/riftapp/internal/auth"
+	"github.com/riftapp-cloud/riftapp/internal/repository"
+	"github.com/riftapp-cloud/riftapp/internal/service"
+	"github.com/riftapp-cloud/riftapp/internal/ws"
 )
 
 func setupHubTest(t *testing.T) (*service.HubService, string) {

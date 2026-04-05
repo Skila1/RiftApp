@@ -1,4 +1,4 @@
-# Riptide
+# RiftApp
 
 > **Fast. Clean. Yours.** — Instant communication.
 
@@ -37,7 +37,7 @@ docker-compose up postgres redis minio -d
 cd backend
 cp ../.env.example .env
 go mod tidy
-go run ./cmd/riptide
+go run ./cmd/riftapp
 ```
 
 **3. Run frontend:**
@@ -64,9 +64,9 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full details including database schem
 ## Project Structure
 
 ```
-riptide/
+RiftApp/
 ├── backend/
-│   ├── cmd/riptide/          # Entry point
+│   ├── cmd/riftapp/          # Entry point
 │   ├── internal/
 │   │   ├── api/              # HTTP handlers + router
 │   │   ├── auth/             # Auth service + JWT
@@ -96,7 +96,7 @@ riptide/
 
 ## Naming
 
-| Traditional    | Riptide        |
+| Traditional    | RiftApp        |
 |---------------|----------------|
 | Server        | **Hub**        |
 | Channel       | **Stream**     |

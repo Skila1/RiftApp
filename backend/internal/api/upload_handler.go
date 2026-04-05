@@ -14,8 +14,8 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 
-	"github.com/riptide-cloud/riptide/internal/config"
-	"github.com/riptide-cloud/riptide/internal/middleware"
+	"github.com/riftapp-cloud/riftapp/internal/config"
+	"github.com/riftapp-cloud/riftapp/internal/middleware"
 )
 
 const maxUploadSize = 2 << 30 // 2 GB

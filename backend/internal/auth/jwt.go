@@ -26,7 +26,7 @@ func (j *JWTManager) GenerateAccessToken(userID string) (string, error) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Issuer:    "riptide",
+			Issuer:    "riftapp",
 			Subject:   "access",
 		},
 	}
@@ -40,7 +40,7 @@ func (j *JWTManager) GenerateRefreshToken(userID string) (string, error) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Issuer:    "riptide",
+			Issuer:    "riftapp",
 			Subject:   "refresh",
 		},
 	}

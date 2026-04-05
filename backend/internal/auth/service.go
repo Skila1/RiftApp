@@ -12,8 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/riptide-cloud/riptide/internal/apperror"
-	"github.com/riptide-cloud/riptide/internal/models"
+	"github.com/riftapp-cloud/riftapp/internal/apperror"
+	"github.com/riftapp-cloud/riftapp/internal/models"
 )
 
 var (

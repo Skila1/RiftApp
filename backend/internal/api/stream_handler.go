@@ -6,8 +6,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/riptide-cloud/riptide/internal/middleware"
-	"github.com/riptide-cloud/riptide/internal/service"
+	"github.com/riftapp-cloud/riftapp/internal/middleware"
+	"github.com/riftapp-cloud/riftapp/internal/service"
 )
 
 type StreamHandler struct {

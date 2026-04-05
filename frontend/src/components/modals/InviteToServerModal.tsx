@@ -90,7 +90,7 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
   return createPortal(
     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60" onClick={onClose}>
       <div
-        className="bg-riptide-surface rounded-xl w-[440px] max-h-[600px] flex flex-col shadow-modal animate-scale-in overflow-hidden"
+        className="bg-riftapp-surface rounded-xl w-[440px] max-h-[600px] flex flex-col shadow-modal animate-scale-in overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -98,11 +98,11 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
           <div className="flex items-start justify-between mb-1">
             <div>
               <h2 className="text-lg font-bold">Invite friends to {hub.name}</h2>
-              <p className="text-[13px] text-riptide-text-dim mt-0.5">
+              <p className="text-[13px] text-riftapp-text-dim mt-0.5">
                 They'll receive a DM with the invite link
               </p>
             </div>
-            <button onClick={onClose} className="text-riptide-text-dim hover:text-riptide-text p-1 -mr-1 -mt-1 transition-colors">
+            <button onClick={onClose} className="text-riftapp-text-dim hover:text-riftapp-text p-1 -mr-1 -mt-1 transition-colors">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -112,7 +112,7 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
           {/* Search */}
           <div className="relative mt-3 mb-3">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-riptide-text-dim pointer-events-none">
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-riftapp-text-dim pointer-events-none">
               <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input
@@ -121,8 +121,8 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search for friends"
-              className="w-full pl-10 pr-3 py-2 rounded-lg bg-riptide-bg border border-riptide-border/50 text-sm
-                placeholder-riptide-text-dim focus:outline-none focus:border-riptide-accent/50 transition-colors"
+              className="w-full pl-10 pr-3 py-2 rounded-lg bg-riftapp-bg border border-riftapp-border/50 text-sm
+                placeholder-riftapp-text-dim focus:outline-none focus:border-riftapp-accent/50 transition-colors"
             />
           </div>
         </div>
@@ -130,7 +130,7 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
         {/* Friends list */}
         <div className="flex-1 overflow-y-auto px-2 pb-2 min-h-0">
           {friends.length === 0 && !generating && (
-            <div className="text-center py-8 text-riptide-text-dim text-sm">
+            <div className="text-center py-8 text-riftapp-text-dim text-sm">
               No friends to invite yet
             </div>
           )}
@@ -140,26 +140,26 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
             const isSent = sentTo.has(u.id);
             const isSending = sending.has(u.id);
             return (
-              <div key={u.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-riptide-surface-hover/60 transition-colors">
+              <div key={u.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-riftapp-surface-hover/60 transition-colors">
                 {/* Avatar */}
                 <div className="relative flex-shrink-0">
-                  <div className="w-9 h-9 rounded-full bg-riptide-panel flex items-center justify-center overflow-hidden">
+                  <div className="w-9 h-9 rounded-full bg-riftapp-panel flex items-center justify-center overflow-hidden">
                     {u.avatar_url ? (
                       <img src={u.avatar_url} alt="" className="w-full h-full object-cover" />
                     ) : (
-                      <span className="text-xs font-semibold text-riptide-text-muted">
+                      <span className="text-xs font-semibold text-riftapp-text-muted">
                         {u.display_name.slice(0, 2).toUpperCase()}
                       </span>
                     )}
                   </div>
                   <StatusDot userId={u.id} fallbackStatus={u.status} size="md"
-                    className="absolute -bottom-0.5 -right-0.5 border-2 border-riptide-surface" />
+                    className="absolute -bottom-0.5 -right-0.5 border-2 border-riftapp-surface" />
                 </div>
 
                 {/* Name */}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{u.display_name}</p>
-                  <p className="text-[11px] text-riptide-text-dim truncate">{u.username}</p>
+                  <p className="text-[11px] text-riftapp-text-dim truncate">{u.username}</p>
                 </div>
 
                 {/* Invite button */}
@@ -168,8 +168,8 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
                   disabled={isSent || isSending || !inviteUrl}
                   className={`flex-shrink-0 px-4 py-1.5 rounded-md text-[13px] font-medium transition-all ${
                     isSent
-                      ? 'bg-riptide-success/20 text-riptide-success border border-riptide-success/30 cursor-default'
-                      : 'bg-riptide-surface border border-riptide-border/60 text-riptide-text hover:bg-riptide-surface-hover hover:border-riptide-border active:scale-95'
+                      ? 'bg-riftapp-success/20 text-riftapp-success border border-riftapp-success/30 cursor-default'
+                      : 'bg-riftapp-surface border border-riftapp-border/60 text-riftapp-text hover:bg-riftapp-surface-hover hover:border-riftapp-border active:scale-95'
                   } disabled:opacity-50`}
                 >
                   {isSent ? 'Sent' : isSending ? 'Sending...' : 'Invite'}
@@ -180,12 +180,12 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
         </div>
 
         {/* Footer: invite link */}
-        <div className="px-5 py-4 border-t border-riptide-border/40 flex-shrink-0 bg-riptide-bg/30">
-          <p className="text-[12px] text-riptide-text-dim mb-2 font-medium">
+        <div className="px-5 py-4 border-t border-riftapp-border/40 flex-shrink-0 bg-riftapp-bg/30">
+          <p className="text-[12px] text-riftapp-text-dim mb-2 font-medium">
             Or, send a server invite link to a friend
           </p>
           <div className="flex gap-2">
-            <div className="flex-1 px-3 py-2 rounded-lg bg-riptide-bg border border-riptide-border/50 text-sm text-riptide-text font-mono truncate select-all">
+            <div className="flex-1 px-3 py-2 rounded-lg bg-riftapp-bg border border-riftapp-border/50 text-sm text-riftapp-text font-mono truncate select-all">
               {generating ? 'Generating...' : inviteUrl || '—'}
             </div>
             <button
@@ -196,7 +196,7 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
               {copied ? 'Copied!' : 'Copy'}
             </button>
           </div>
-          <p className="text-[11px] text-riptide-text-dim mt-2">
+          <p className="text-[11px] text-riftapp-text-dim mt-2">
             Your invite link expires in 7 days.
           </p>
         </div>

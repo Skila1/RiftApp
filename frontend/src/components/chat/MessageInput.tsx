@@ -173,7 +173,7 @@ export default function MessageInput({ streamName, onTyping, onTypingStop, isDMM
     >
       {/* Drag overlay */}
       {dragging && (
-        <div className="mb-2 border-2 border-dashed border-riptide-accent rounded-xl p-8 text-center text-sm text-riptide-accent bg-riptide-accent/5 animate-fade-in">
+        <div className="mb-2 border-2 border-dashed border-riftapp-accent rounded-xl p-8 text-center text-sm text-riftapp-accent bg-riftapp-accent/5 animate-fade-in">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-2 opacity-70">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
             <polyline points="17 8 12 3 7 8" />
@@ -189,33 +189,33 @@ export default function MessageInput({ streamName, onTyping, onTypingStop, isDMM
           {pendingFiles.map((pf, i) => (
             <div
               key={i}
-              className="relative bg-riptide-surface border border-riptide-border/60 rounded-xl p-2.5 flex items-center gap-2.5 max-w-[220px] shadow-elevation-low group/file"
+              className="relative bg-riftapp-surface border border-riftapp-border/60 rounded-xl p-2.5 flex items-center gap-2.5 max-w-[220px] shadow-elevation-low group/file"
             >
               {pf.preview ? (
                 <img src={pf.preview} alt="" className="w-12 h-12 rounded-lg object-cover" />
               ) : (
-                <div className="w-12 h-12 rounded-lg bg-riptide-bg flex items-center justify-center">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-riptide-text-dim">
+                <div className="w-12 h-12 rounded-lg bg-riftapp-bg flex items-center justify-center">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-riftapp-text-dim">
                     <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
                     <polyline points="13 2 13 9 20 9" />
                   </svg>
                 </div>
               )}
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-riptide-text truncate">{pf.file.name}</p>
+                <p className="text-xs font-medium text-riftapp-text truncate">{pf.file.name}</p>
                 {pf.uploading && (
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    <div className="w-3 h-3 border border-riptide-accent border-t-transparent rounded-full animate-spin" />
-                    <p className="text-[10px] text-riptide-accent">Uploading…</p>
+                    <div className="w-3 h-3 border border-riftapp-accent border-t-transparent rounded-full animate-spin" />
+                    <p className="text-[10px] text-riftapp-accent">Uploading…</p>
                   </div>
                 )}
-                {pf.error && <p className="text-[10px] text-riptide-danger mt-0.5">{pf.error}</p>}
-                {pf.attachment && <p className="text-[10px] text-riptide-success mt-0.5">Ready</p>}
+                {pf.error && <p className="text-[10px] text-riftapp-danger mt-0.5">{pf.error}</p>}
+                {pf.attachment && <p className="text-[10px] text-riftapp-success mt-0.5">Ready</p>}
               </div>
               <button
                 onClick={() => removeFile(pf.file)}
-                className="absolute -top-2 -right-2 w-6 h-6 bg-riptide-panel border border-riptide-border rounded-full flex items-center justify-center
-                  text-riptide-text-dim hover:text-white hover:bg-riptide-danger hover:border-riptide-danger transition-all duration-150
+                className="absolute -top-2 -right-2 w-6 h-6 bg-riftapp-panel border border-riftapp-border rounded-full flex items-center justify-center
+                  text-riftapp-text-dim hover:text-white hover:bg-riftapp-danger hover:border-riftapp-danger transition-all duration-150
                   opacity-0 group-hover/file:opacity-100 shadow-elevation-low"
               >
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
@@ -228,13 +228,13 @@ export default function MessageInput({ streamName, onTyping, onTypingStop, isDMM
         </div>
       )}
 
-      <div className={`bg-riptide-surface rounded-xl border flex items-end transition-all duration-200 ${
-        dragging ? 'border-riptide-accent shadow-glow' : 'border-riptide-border/60 hover:border-riptide-border'
+      <div className={`bg-riftapp-surface rounded-xl border flex items-end transition-all duration-200 ${
+        dragging ? 'border-riftapp-accent shadow-glow' : 'border-riftapp-border/60 hover:border-riftapp-border'
       }`}>
         {/* File attach button */}
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="px-3 py-3 text-riptide-text-dim hover:text-riptide-text active:scale-95 transition-all duration-150"
+          className="px-3 py-3 text-riftapp-text-dim hover:text-riftapp-text active:scale-95 transition-all duration-150"
           title="Attach file"
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -258,7 +258,7 @@ export default function MessageInput({ streamName, onTyping, onTypingStop, isDMM
           onKeyDown={handleKeyDown}
           placeholder={isDMMode ? `Message @${streamName}` : `Message #${streamName}`}
           rows={1}
-          className="flex-1 px-1 py-3 bg-transparent text-[15px] text-riptide-text placeholder:text-riptide-text-dim/60 resize-none focus:outline-none max-h-[200px] leading-relaxed"
+          className="flex-1 px-1 py-3 bg-transparent text-[15px] text-riftapp-text placeholder:text-riftapp-text-dim/60 resize-none focus:outline-none max-h-[200px] leading-relaxed"
           maxLength={4000}
         />
         <button
@@ -266,8 +266,8 @@ export default function MessageInput({ streamName, onTyping, onTypingStop, isDMM
           disabled={!canSend}
           className={`px-3 py-3 transition-all duration-150 ${
             canSend
-              ? 'text-riptide-accent hover:text-riptide-accent-hover active:scale-95 scale-100'
-              : 'text-riptide-text-dim/40 scale-95 cursor-not-allowed'
+              ? 'text-riftapp-accent hover:text-riftapp-accent-hover active:scale-95 scale-100'
+              : 'text-riftapp-text-dim/40 scale-95 cursor-not-allowed'
           }`}
           title="Send message"
         >

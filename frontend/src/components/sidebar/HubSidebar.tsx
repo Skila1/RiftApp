@@ -116,7 +116,7 @@ export default function HubSidebar() {
   };
 
   return (
-    <div className="w-[72px] flex-shrink-0 bg-riptide-bg flex flex-col items-center py-3 gap-2 overflow-y-auto">
+    <div className="w-[72px] flex-shrink-0 bg-riftapp-bg flex flex-col items-center py-3 gap-2 overflow-y-auto">
       {/* DM Button */}
       <div
         className="relative flex items-center justify-center w-full"
@@ -142,7 +142,7 @@ export default function HubSidebar() {
           </svg>
           {dmTotalUnread > 0 && (
             <span
-              className="absolute -bottom-1 -right-1 z-20 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white border-2 border-riptide-bg leading-none"
+              className="absolute -bottom-1 -right-1 z-20 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white border-2 border-riftapp-bg leading-none"
               aria-label={`${dmTotalUnread} unread direct messages`}
             >
               {formatMentionBadge(dmTotalUnread)}
@@ -150,14 +150,14 @@ export default function HubSidebar() {
           )}
         </button>
         {dmHovered && (
-          <div className="absolute left-[68px] z-50 px-3 py-1.5 rounded-lg bg-riptide-panel text-sm text-riptide-text shadow-elevation-high font-medium whitespace-nowrap animate-fade-in pointer-events-none">
+          <div className="absolute left-[68px] z-50 px-3 py-1.5 rounded-lg bg-riftapp-panel text-sm text-riftapp-text shadow-elevation-high font-medium whitespace-nowrap animate-fade-in pointer-events-none">
             Direct Messages
           </div>
         )}
       </div>
 
       {/* Separator */}
-      <div className="w-8 h-0.5 rounded-full bg-riptide-border my-0.5" />
+      <div className="w-8 h-0.5 rounded-full bg-riftapp-border my-0.5" />
 
       {/* Hub list */}
       {hubs.map((hub) => {
@@ -210,7 +210,7 @@ export default function HubSidebar() {
               )}
               {mentions > 0 && (
                 <span
-                  className="absolute -bottom-1 -right-1 z-20 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white border-2 border-riptide-bg leading-none"
+                  className="absolute -bottom-1 -right-1 z-20 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white border-2 border-riftapp-bg leading-none"
                   aria-label={`${mentions} mentions`}
                 >
                   {formatMentionBadge(mentions)}
@@ -220,7 +220,7 @@ export default function HubSidebar() {
 
             {/* Tooltip */}
             {isHovered && (
-              <div className="absolute left-[68px] z-50 px-3 py-1.5 rounded-lg bg-riptide-panel text-sm text-riptide-text shadow-elevation-high font-medium whitespace-nowrap animate-fade-in pointer-events-none">
+              <div className="absolute left-[68px] z-50 px-3 py-1.5 rounded-lg bg-riftapp-panel text-sm text-riftapp-text shadow-elevation-high font-medium whitespace-nowrap animate-fade-in pointer-events-none">
                 {hub.name}
               </div>
             )}
@@ -229,13 +229,13 @@ export default function HubSidebar() {
       })}
 
       {/* Separator */}
-      <div className="w-8 h-0.5 rounded-full bg-riptide-border my-0.5" />
+      <div className="w-8 h-0.5 rounded-full bg-riftapp-border my-0.5" />
 
       {/* Create hub button */}
       <div className="relative flex items-center justify-center w-full">
         <button
           onClick={() => { setShowCreate(!showCreate); setShowJoin(false); }}
-          className="hub-icon rounded-3xl bg-riptide-surface text-riptide-success hover:rounded-2xl hover:bg-riptide-success hover:text-white transition-all duration-300"
+          className="hub-icon rounded-3xl bg-riftapp-surface text-riftapp-success hover:rounded-2xl hover:bg-riftapp-success hover:text-white transition-all duration-300"
           title="Create Hub"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -249,7 +249,7 @@ export default function HubSidebar() {
       <div className="relative flex items-center justify-center w-full">
         <button
           onClick={() => { setShowJoin(!showJoin); setShowCreate(false); }}
-          className="hub-icon rounded-3xl bg-riptide-surface text-riptide-accent hover:rounded-2xl hover:bg-riptide-accent hover:text-white transition-all duration-300"
+          className="hub-icon rounded-3xl bg-riftapp-surface text-riftapp-accent hover:rounded-2xl hover:bg-riftapp-accent hover:text-white transition-all duration-300"
           title="Join a hub with an invite code"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -264,12 +264,12 @@ export default function HubSidebar() {
       {showCreate && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => { setShowCreate(false); setNewName(''); }}>
           <div
-            className="bg-riptide-surface border border-riptide-border/60 rounded-xl p-6 w-[420px] shadow-modal animate-scale-in"
+            className="bg-riftapp-surface border border-riftapp-border/60 rounded-xl p-6 w-[420px] shadow-modal animate-scale-in"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-xl font-bold mb-1">Create a Hub</h2>
-            <p className="text-sm text-riptide-text-dim mb-5">Give your new hub a name to get started.</p>
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-riptide-text-dim mb-1.5 block">Hub Name</label>
+            <p className="text-sm text-riftapp-text-dim mb-5">Give your new hub a name to get started.</p>
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-riftapp-text-dim mb-1.5 block">Hub Name</label>
             <input
               type="text"
               value={newName}
@@ -303,12 +303,12 @@ export default function HubSidebar() {
       {showJoin && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => { setShowJoin(false); setJoinCode(''); setJoinError(null); }}>
           <div
-            className="bg-riptide-surface border border-riptide-border/60 rounded-xl p-6 w-[420px] shadow-modal animate-scale-in"
+            className="bg-riftapp-surface border border-riftapp-border/60 rounded-xl p-6 w-[420px] shadow-modal animate-scale-in"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-xl font-bold mb-1">Join a Hub</h2>
-            <p className="text-sm text-riptide-text-dim mb-5">Enter an invite link or code to join an existing hub.</p>
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-riptide-text-dim mb-1.5 block">Invite Link</label>
+            <p className="text-sm text-riftapp-text-dim mb-5">Enter an invite link or code to join an existing hub.</p>
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-riftapp-text-dim mb-1.5 block">Invite Link</label>
             <input
               type="text"
               value={joinCode}
@@ -323,7 +323,7 @@ export default function HubSidebar() {
               maxLength={256}
             />
             {joinError && (
-              <p className="text-sm text-riptide-danger mt-2">{joinError}</p>
+              <p className="text-sm text-riftapp-danger mt-2">{joinError}</p>
             )}
             <div className="flex justify-end gap-3 mt-6">
               <button
@@ -353,13 +353,13 @@ export default function HubSidebar() {
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="bg-riptide-panel rounded-lg border border-riptide-border/50 shadow-modal py-1.5 min-w-[180px]">
+            <div className="bg-riftapp-panel rounded-lg border border-riftapp-border/50 shadow-modal py-1.5 min-w-[180px]">
               <button
                 onClick={() => {
                   setInviteHub(contextMenu.hub);
                   setContextMenu(null);
                 }}
-                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm hover:bg-riptide-accent hover:text-white transition-colors text-left"
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm hover:bg-riftapp-accent hover:text-white transition-colors text-left"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                   <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" />
@@ -367,13 +367,13 @@ export default function HubSidebar() {
                 </svg>
                 Invite to Server
               </button>
-              <div className="mx-2 my-1 border-t border-riptide-border/30" />
+              <div className="mx-2 my-1 border-t border-riftapp-border/30" />
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(contextMenu.hub.id);
                   setContextMenu(null);
                 }}
-                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm hover:bg-riptide-surface-hover transition-colors text-left text-riptide-text-dim"
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-sm hover:bg-riftapp-surface-hover transition-colors text-left text-riftapp-text-dim"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                   <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />

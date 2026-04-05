@@ -6,8 +6,8 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/riptide-cloud/riptide/internal/auth"
-	wsHub "github.com/riptide-cloud/riptide/internal/ws"
+	"github.com/riftapp-cloud/riftapp/internal/auth"
+	wsHub "github.com/riftapp-cloud/riftapp/internal/ws"
 )
 
 type WSHandler struct {

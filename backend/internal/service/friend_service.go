@@ -5,9 +5,9 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/riptide-cloud/riptide/internal/models"
-	"github.com/riptide-cloud/riptide/internal/repository"
-	"github.com/riptide-cloud/riptide/internal/ws"
+	"github.com/riftapp-cloud/riftapp/internal/models"
+	"github.com/riftapp-cloud/riftapp/internal/repository"
+	"github.com/riftapp-cloud/riftapp/internal/ws"
 )
 
 type FriendService struct {

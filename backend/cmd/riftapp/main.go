@@ -9,15 +9,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/riptide-cloud/riptide/internal/api"
-	"github.com/riptide-cloud/riptide/internal/auth"
-	"github.com/riptide-cloud/riptide/internal/config"
-	"github.com/riptide-cloud/riptide/internal/database"
-	"github.com/riptide-cloud/riptide/internal/pubsub"
-	"github.com/riptide-cloud/riptide/internal/repository"
-	"github.com/riptide-cloud/riptide/internal/service"
-	"github.com/riptide-cloud/riptide/internal/user"
-	"github.com/riptide-cloud/riptide/internal/ws"
+	"github.com/riftapp-cloud/riftapp/internal/api"
+	"github.com/riftapp-cloud/riftapp/internal/auth"
+	"github.com/riftapp-cloud/riftapp/internal/config"
+	"github.com/riftapp-cloud/riftapp/internal/database"
+	"github.com/riftapp-cloud/riftapp/internal/pubsub"
+	"github.com/riftapp-cloud/riftapp/internal/repository"
+	"github.com/riftapp-cloud/riftapp/internal/service"
+	"github.com/riftapp-cloud/riftapp/internal/user"
+	"github.com/riftapp-cloud/riftapp/internal/ws"
 )
 
 func main() {
@@ -105,7 +105,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("riptide server starting on :%s", cfg.Port)
+		log.Printf("riftapp server starting on :%s", cfg.Port)
 		log.Printf("  → REST API: http://localhost:%s/api", cfg.Port)
 		log.Printf("  → WebSocket: ws://localhost:%s/ws", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

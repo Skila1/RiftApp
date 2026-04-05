@@ -5,7 +5,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        riptide: {
+        riftapp: {
           bg: '#0f1117',
           'bg-alt': '#121520',
           surface: '#161922',

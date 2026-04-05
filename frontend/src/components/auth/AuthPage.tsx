@@ -30,14 +30,14 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-riptide-bg">
+    <div className="min-h-screen flex items-center justify-center bg-riftapp-bg">
       <div className="w-full max-w-sm animate-fade-in">
         {/* Brand */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-riptide-accent tracking-tight font-display">
-            riptide
+          <h1 className="text-4xl font-bold text-riftapp-accent tracking-tight font-display">
+            riftapp
           </h1>
-          <p className="text-riptide-text-muted mt-2 text-sm">
+          <p className="text-riftapp-text-muted mt-2 text-sm">
             Instant communication.
           </p>
         </div>
@@ -45,14 +45,14 @@ export default function AuthPage() {
         {/* Form */}
         <form
           onSubmit={handleSubmit}
-          className="bg-riptide-surface rounded-xl p-6 border border-riptide-border/60 shadow-elevation-md"
+          className="bg-riftapp-surface rounded-xl p-6 border border-riftapp-border/60 shadow-elevation-md"
         >
           <h2 className="text-lg font-bold mb-4 tracking-tight">
             {isLogin ? 'Welcome back' : 'Create account'}
           </h2>
 
           {error && (
-            <div className="mb-4 px-3 py-2 rounded-lg bg-riptide-danger/10 text-riptide-danger text-sm animate-fade-in">
+            <div className="mb-4 px-3 py-2 rounded-lg bg-riftapp-danger/10 text-riftapp-danger text-sm animate-fade-in">
               {error}
             </div>
           )}
@@ -78,7 +78,7 @@ export default function AuthPage() {
             {!isLogin && (
               <div className="animate-fade-in">
                 <label className="section-label mb-1.5">
-                  Email <span className="text-riptide-text-dim font-normal normal-case tracking-normal">(optional)</span>
+                  Email <span className="text-riftapp-text-dim font-normal normal-case tracking-normal">(optional)</span>
                 </label>
                 <input
                   type="email"
@@ -109,9 +109,9 @@ export default function AuthPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-5 py-2.5 rounded-lg bg-riptide-accent hover:bg-riptide-accent-hover
+            className="w-full mt-5 py-2.5 rounded-lg bg-riftapp-accent hover:bg-riftapp-accent-hover
               text-white font-medium transition-all duration-150 disabled:opacity-50
-              active:translate-y-px shadow-lg shadow-riptide-accent/20 hover:shadow-riptide-accent/30"
+              active:translate-y-px shadow-lg shadow-riftapp-accent/20 hover:shadow-riftapp-accent/30"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
@@ -123,7 +123,7 @@ export default function AuthPage() {
             ) : isLogin ? 'Log In' : 'Register'}
           </button>
 
-          <p className="text-center text-sm text-riptide-text-muted mt-4">
+          <p className="text-center text-sm text-riftapp-text-muted mt-4">
             {isLogin ? "Don't have an account?" : 'Already have an account?'}{' '}
             <button
               type="button"
@@ -131,14 +131,14 @@ export default function AuthPage() {
                 setIsLogin(!isLogin);
                 setError('');
               }}
-              className="text-riptide-accent hover:underline font-medium"
+              className="text-riftapp-accent hover:underline font-medium"
             >
               {isLogin ? 'Register' : 'Log In'}
             </button>
           </p>
         </form>
 
-        <p className="text-center text-xs text-riptide-text-dim mt-6">
+        <p className="text-center text-xs text-riftapp-text-dim mt-6">
           Fast. Clean. Yours.
         </p>
       </div>

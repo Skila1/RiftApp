@@ -140,12 +140,12 @@ export default function UserProfilePopover() {
         pointerEvents: visible ? 'auto' : 'none',
       }}
     >
-      <div className="bg-riptide-surface rounded-xl border border-riptide-border/50 shadow-modal overflow-hidden">
+      <div className="bg-riftapp-surface rounded-xl border border-riftapp-border/50 shadow-modal overflow-hidden">
         {/* Banner area */}
         <div className="h-16 relative" style={{ backgroundColor: accent + '40' }}>
           <div className="absolute -bottom-8 left-4">
             <div
-              className="w-[72px] h-[72px] rounded-full border-[4px] border-riptide-surface flex items-center justify-center overflow-hidden"
+              className="w-[72px] h-[72px] rounded-full border-[4px] border-riftapp-surface flex items-center justify-center overflow-hidden"
               style={{ backgroundColor: accent }}
             >
               {user.avatar_url ? (
@@ -156,7 +156,7 @@ export default function UserProfilePopover() {
                 </span>
               )}
             </div>
-            <div className="absolute bottom-[2px] right-[2px] border-[3px] border-riptide-surface rounded-full">
+            <div className="absolute bottom-[2px] right-[2px] border-[3px] border-riftapp-surface rounded-full">
               <StatusDot userId={user.id} fallbackStatus={user.status} size="lg" />
             </div>
           </div>
@@ -165,29 +165,29 @@ export default function UserProfilePopover() {
         {/* Body */}
         <div className="pt-10 px-4 pb-4">
           <p className="text-lg font-bold leading-tight">{user.display_name || user.username}</p>
-          <p className="text-sm text-riptide-text-dim">@{user.username}</p>
+          <p className="text-sm text-riftapp-text-dim">@{user.username}</p>
 
-          <div className="mt-3 pt-3 border-t border-riptide-border/40 space-y-2.5">
+          <div className="mt-3 pt-3 border-t border-riftapp-border/40 space-y-2.5">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-riptide-text-dim mb-0.5">Status</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-riftapp-text-dim mb-0.5">Status</p>
               <p className="text-sm">{statusLabel(status)}</p>
             </div>
 
             {user.bio && (
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-riptide-text-dim mb-0.5">About Me</p>
-                <p className="text-sm text-riptide-text-muted leading-relaxed">{user.bio}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-riftapp-text-dim mb-0.5">About Me</p>
+                <p className="text-sm text-riftapp-text-muted leading-relaxed">{user.bio}</p>
               </div>
             )}
 
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-riptide-text-dim mb-0.5">Member Since</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-riftapp-text-dim mb-0.5">Member Since</p>
               <p className="text-sm">{new Date(user.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</p>
             </div>
           </div>
 
           {!isSelf && (
-            <div className="mt-3 pt-3 border-t border-riptide-border/40 flex gap-2">
+            <div className="mt-3 pt-3 border-t border-riftapp-border/40 flex gap-2">
               <button
                 onClick={handleMessage}
                 className="flex-1 btn-primary py-1.5 text-sm font-medium"
@@ -195,31 +195,31 @@ export default function UserProfilePopover() {
                 Message
               </button>
               {rel === 'none' && (
-                <button onClick={handleAddFriend} disabled={relLoading} className="flex-1 py-1.5 text-sm font-medium rounded-lg bg-riptide-success/20 text-riptide-success hover:bg-riptide-success/30 transition-colors">
+                <button onClick={handleAddFriend} disabled={relLoading} className="flex-1 py-1.5 text-sm font-medium rounded-lg bg-riftapp-success/20 text-riftapp-success hover:bg-riftapp-success/30 transition-colors">
                   {relLoading ? '...' : 'Add Friend'}
                 </button>
               )}
               {rel === 'pending_incoming' && (
-                <button onClick={handleAccept} disabled={relLoading} className="flex-1 py-1.5 text-sm font-medium rounded-lg bg-riptide-success/20 text-riptide-success hover:bg-riptide-success/30 transition-colors">
+                <button onClick={handleAccept} disabled={relLoading} className="flex-1 py-1.5 text-sm font-medium rounded-lg bg-riftapp-success/20 text-riftapp-success hover:bg-riftapp-success/30 transition-colors">
                   {relLoading ? '...' : 'Accept Request'}
                 </button>
               )}
               {rel === 'pending_outgoing' && (
-                <button disabled className="flex-1 py-1.5 text-sm font-medium rounded-lg bg-riptide-surface text-riptide-text-dim cursor-default border border-riptide-border/40">
+                <button disabled className="flex-1 py-1.5 text-sm font-medium rounded-lg bg-riftapp-surface text-riftapp-text-dim cursor-default border border-riftapp-border/40">
                   Pending
                 </button>
               )}
               {rel === 'friends' && (
-                <button onClick={handleRemoveFriend} disabled={relLoading} className="flex-1 py-1.5 text-sm font-medium rounded-lg bg-riptide-danger/10 text-riptide-danger hover:bg-riptide-danger/20 transition-colors">
+                <button onClick={handleRemoveFriend} disabled={relLoading} className="flex-1 py-1.5 text-sm font-medium rounded-lg bg-riftapp-danger/10 text-riftapp-danger hover:bg-riftapp-danger/20 transition-colors">
                   {relLoading ? '...' : 'Unfriend'}
                 </button>
               )}
               {rel === 'blocked' ? (
-                <button onClick={handleUnblock} disabled={relLoading} className="py-1.5 px-3 text-sm font-medium rounded-lg bg-riptide-surface text-riptide-text-dim hover:text-riptide-text border border-riptide-border/40 transition-colors">
+                <button onClick={handleUnblock} disabled={relLoading} className="py-1.5 px-3 text-sm font-medium rounded-lg bg-riftapp-surface text-riftapp-text-dim hover:text-riftapp-text border border-riftapp-border/40 transition-colors">
                   {relLoading ? '...' : 'Unblock'}
                 </button>
               ) : (
-                <button onClick={handleBlock} disabled={relLoading} className="py-1.5 px-3 text-sm font-medium rounded-lg text-riptide-danger/60 hover:bg-riptide-danger/10 hover:text-riptide-danger transition-colors" title="Block User">
+                <button onClick={handleBlock} disabled={relLoading} className="py-1.5 px-3 text-sm font-medium rounded-lg text-riftapp-danger/60 hover:bg-riftapp-danger/10 hover:text-riftapp-danger transition-colors" title="Block User">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" /></svg>
                 </button>
               )}

@@ -27,8 +27,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const res = await api.login(username, password);
     api.setToken(res.access_token);
     api.setRefreshToken(res.refresh_token);
-    localStorage.setItem('riptide_token', res.access_token);
-    localStorage.setItem('riptide_refresh', res.refresh_token);
+    localStorage.setItem('riftapp_token', res.access_token);
+    localStorage.setItem('riftapp_refresh', res.refresh_token);
     set({
       user: res.user,
       token: res.access_token,
@@ -41,8 +41,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const res = await api.register(username, password, email);
     api.setToken(res.access_token);
     api.setRefreshToken(res.refresh_token);
-    localStorage.setItem('riptide_token', res.access_token);
-    localStorage.setItem('riptide_refresh', res.refresh_token);
+    localStorage.setItem('riftapp_token', res.access_token);
+    localStorage.setItem('riftapp_refresh', res.refresh_token);
     set({
       user: res.user,
       token: res.access_token,
@@ -58,8 +58,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     api.setToken(null);
     api.setRefreshToken(null);
-    localStorage.removeItem('riptide_token');
-    localStorage.removeItem('riptide_refresh');
+    localStorage.removeItem('riftapp_token');
+    localStorage.removeItem('riftapp_refresh');
     set({
       user: null,
       token: null,
@@ -69,8 +69,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   restore: async () => {
-    const token = localStorage.getItem('riptide_token');
-    const refresh = localStorage.getItem('riptide_refresh');
+    const token = localStorage.getItem('riftapp_token');
+    const refresh = localStorage.getItem('riftapp_refresh');
     if (!token) {
       set({ isLoading: false });
       return;
@@ -87,8 +87,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           const res = await api.refreshToken(refresh);
           api.setToken(res.access_token);
           api.setRefreshToken(res.refresh_token);
-          localStorage.setItem('riptide_token', res.access_token);
-          localStorage.setItem('riptide_refresh', res.refresh_token);
+          localStorage.setItem('riftapp_token', res.access_token);
+          localStorage.setItem('riftapp_refresh', res.refresh_token);
           set({
             user: res.user,
             token: res.access_token,

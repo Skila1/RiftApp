@@ -53,18 +53,18 @@ export default function InviteEmbed({ code }: { code: string }) {
   if (error) return null;
   if (!info) {
     return (
-      <div className="mt-2 w-[380px] h-[72px] rounded-xl bg-riptide-surface border border-riptide-border/40 animate-pulse" />
+      <div className="mt-2 w-[380px] h-[72px] rounded-xl bg-riftapp-surface border border-riftapp-border/40 animate-pulse" />
     );
   }
 
   return (
-    <div className="mt-2 w-[380px] rounded-xl bg-riptide-surface border border-riptide-border/40 p-4 flex items-center gap-3">
+    <div className="mt-2 w-[380px] rounded-xl bg-riftapp-surface border border-riftapp-border/40 p-4 flex items-center gap-3">
       {/* Hub icon */}
-      <div className="w-12 h-12 rounded-2xl bg-riptide-panel flex items-center justify-center flex-shrink-0 overflow-hidden">
+      <div className="w-12 h-12 rounded-2xl bg-riftapp-panel flex items-center justify-center flex-shrink-0 overflow-hidden">
         {info.hub_icon_url ? (
           <img src={info.hub_icon_url} alt="" className="w-full h-full object-cover" />
         ) : (
-          <span className="text-sm font-bold text-riptide-text-muted">
+          <span className="text-sm font-bold text-riftapp-text-muted">
             {info.hub_name.slice(0, 2).toUpperCase()}
           </span>
         )}
@@ -74,8 +74,8 @@ export default function InviteEmbed({ code }: { code: string }) {
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold truncate">{info.hub_name}</p>
         <div className="flex items-center gap-1.5 mt-0.5">
-          <span className="w-2 h-2 rounded-full bg-riptide-text-dim/40 flex-shrink-0" />
-          <span className="text-[12px] text-riptide-text-dim">
+          <span className="w-2 h-2 rounded-full bg-riftapp-text-dim/40 flex-shrink-0" />
+          <span className="text-[12px] text-riftapp-text-dim">
             {info.member_count} {info.member_count === 1 ? 'Member' : 'Members'}
           </span>
         </div>
@@ -85,7 +85,7 @@ export default function InviteEmbed({ code }: { code: string }) {
       {alreadyMember || joined ? (
         <button
           onClick={handleGoTo}
-          className="btn-ghost px-4 py-1.5 text-[13px] font-medium flex-shrink-0 border border-riptide-border/50"
+          className="btn-ghost px-4 py-1.5 text-[13px] font-medium flex-shrink-0 border border-riftapp-border/50"
         >
           Joined
         </button>

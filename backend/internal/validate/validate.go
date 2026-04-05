@@ -5,7 +5,7 @@ import (
 	"net/mail"
 	"unicode/utf8"
 
-	"github.com/riptide-cloud/riptide/internal/apperror"
+	"github.com/riftapp-cloud/riftapp/internal/apperror"
 )
 
 func Username(u string) error {

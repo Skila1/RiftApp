@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/riptide-cloud/riptide/internal/models"
+	"github.com/riftapp-cloud/riftapp/internal/models"
 )
 
 // Validation limits

@@ -7,8 +7,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/riptide-cloud/riptide/internal/middleware"
-	"github.com/riptide-cloud/riptide/internal/user"
+	"github.com/riftapp-cloud/riftapp/internal/middleware"
+	"github.com/riftapp-cloud/riftapp/internal/user"
 )
 
 // UserHandler handles user profile endpoints.

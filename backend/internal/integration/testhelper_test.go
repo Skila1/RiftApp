@@ -12,7 +12,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/riptide-cloud/riptide/internal/database"
+	"github.com/riftapp-cloud/riftapp/internal/database"
 )
 
 var testPool *pgxpool.Pool
@@ -22,7 +22,7 @@ func TestMain(m *testing.M) {
 
 	pgContainer, err := postgres.Run(ctx,
 		"postgres:16-alpine",
-		postgres.WithDatabase("riptide_test"),
+		postgres.WithDatabase("riftapp_test"),
 		postgres.WithUsername("test"),
 		postgres.WithPassword("test"),
 		testcontainers.WithWaitStrategy(

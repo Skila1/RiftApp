@@ -3,9 +3,9 @@ package service
 import (
 	"context"
 
-	"github.com/riptide-cloud/riptide/internal/apperror"
-	"github.com/riptide-cloud/riptide/internal/models"
-	"github.com/riptide-cloud/riptide/internal/repository"
+	"github.com/riftapp-cloud/riftapp/internal/apperror"
+	"github.com/riftapp-cloud/riftapp/internal/models"
+	"github.com/riftapp-cloud/riftapp/internal/repository"
 )
 
 type CategoryService struct {

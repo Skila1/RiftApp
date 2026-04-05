@@ -52,14 +52,14 @@ class ApiClient {
       const res = await this.refreshPromise;
       this.token = res.access_token;
       this.refreshTokenValue = res.refresh_token;
-      localStorage.setItem('riptide_token', res.access_token);
-      localStorage.setItem('riptide_refresh', res.refresh_token);
+      localStorage.setItem('riftapp_token', res.access_token);
+      localStorage.setItem('riftapp_refresh', res.refresh_token);
       return true;
     } catch {
       this.token = null;
       this.refreshTokenValue = null;
-      localStorage.removeItem('riptide_token');
-      localStorage.removeItem('riptide_refresh');
+      localStorage.removeItem('riftapp_token');
+      localStorage.removeItem('riftapp_refresh');
       return false;
     } finally {
       this.refreshPromise = null;

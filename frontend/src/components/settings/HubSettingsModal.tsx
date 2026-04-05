@@ -45,7 +45,7 @@ export default function HubSettingsModal({ hub, onClose }: { hub: Hub; onClose: 
         transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
       >
         {/* Sidebar nav */}
-        <nav className="w-[180px] bg-riptide-panel/80 p-3 flex flex-col flex-shrink-0">
+        <nav className="w-[180px] bg-riftapp-panel/80 p-3 flex flex-col flex-shrink-0">
           <h3 className="px-2 text-[13px] font-bold truncate mb-0.5">
             {hub.name}
           </h3>
@@ -57,8 +57,8 @@ export default function HubSettingsModal({ hub, onClose }: { hub: Hub; onClose: 
                 onClick={() => setActiveTab(tab.id)}
                 className={`w-full text-left px-3 py-1.5 rounded-md text-sm transition-all duration-150 ${
                   activeTab === tab.id
-                    ? 'bg-riptide-accent/15 text-riptide-text font-medium'
-                    : 'text-riptide-text-muted hover:text-riptide-text hover:bg-riptide-bg/30'
+                    ? 'bg-riftapp-accent/15 text-riftapp-text font-medium'
+                    : 'text-riftapp-text-muted hover:text-riftapp-text hover:bg-riftapp-bg/30'
                 }`}
               >
                 {tab.label}
@@ -69,14 +69,14 @@ export default function HubSettingsModal({ hub, onClose }: { hub: Hub; onClose: 
 
         {/* Content */}
         <div className="flex-1 flex flex-col min-w-0">
-          <div className="flex items-center justify-between px-6 h-14 border-b border-riptide-border/40 flex-shrink-0">
+          <div className="flex items-center justify-between px-6 h-14 border-b border-riftapp-border/40 flex-shrink-0">
             <h2 className="text-[17px] font-bold tracking-tight">
               {activeTab === 'overview' ? 'Hub Overview' : 'Members'}
             </h2>
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-riptide-text-dim
-                hover:text-riptide-text hover:bg-riptide-panel transition-all duration-150"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-riftapp-text-dim
+                hover:text-riftapp-text hover:bg-riftapp-panel transition-all duration-150"
               title="Close (Esc)"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -150,14 +150,14 @@ function OverviewTab({ hub, isOwner }: { hub: Hub; isOwner: boolean }) {
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
             />
           ) : (
-            <div className="w-16 h-16 rounded-2xl bg-riptide-panel flex items-center justify-center text-lg font-semibold text-riptide-text-muted">
+            <div className="w-16 h-16 rounded-2xl bg-riftapp-panel flex items-center justify-center text-lg font-semibold text-riftapp-text-muted">
               {name.slice(0, 2).toUpperCase()}
             </div>
           )}
         </div>
         <div>
           <p className="text-sm font-medium">{name}</p>
-          <p className="text-xs text-riptide-text-dim">
+          <p className="text-xs text-riftapp-text-dim">
             Created {new Date(hub.created_at).toLocaleDateString()}
           </p>
         </div>
@@ -167,7 +167,7 @@ function OverviewTab({ hub, isOwner }: { hub: Hub; isOwner: boolean }) {
       {isOwner ? (
         <>
           <label className="block">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-riptide-text-dim flex justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-riftapp-text-dim flex justify-between">
               Hub Name <span className="font-normal">max 100</span>
             </span>
             <input
@@ -179,7 +179,7 @@ function OverviewTab({ hub, isOwner }: { hub: Hub; isOwner: boolean }) {
           </label>
 
           <label className="block">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-riptide-text-dim flex justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-riftapp-text-dim flex justify-between">
               Icon URL <span className="font-normal">max 512</span>
             </span>
             <input
@@ -192,7 +192,7 @@ function OverviewTab({ hub, isOwner }: { hub: Hub; isOwner: boolean }) {
           </label>
 
           {error && (
-            <p className="text-sm text-riptide-danger bg-riptide-danger/10 rounded-md px-3 py-2">
+            <p className="text-sm text-riftapp-danger bg-riftapp-danger/10 rounded-md px-3 py-2">
               {error}
             </p>
           )}
@@ -213,19 +213,19 @@ function OverviewTab({ hub, isOwner }: { hub: Hub; isOwner: boolean }) {
           </div>
         </>
       ) : (
-        <div className="bg-riptide-panel rounded-lg p-4">
+        <div className="bg-riftapp-panel rounded-lg p-4">
           <h3 className="text-sm font-semibold mb-3">Hub Information</h3>
           <div className="space-y-3 text-sm">
             <div>
-              <p className="text-riptide-text-dim text-xs uppercase tracking-wide mb-0.5">Name</p>
+              <p className="text-riftapp-text-dim text-xs uppercase tracking-wide mb-0.5">Name</p>
               <p>{hub.name}</p>
             </div>
             <div>
-              <p className="text-riptide-text-dim text-xs uppercase tracking-wide mb-0.5">Created</p>
+              <p className="text-riftapp-text-dim text-xs uppercase tracking-wide mb-0.5">Created</p>
               <p>{new Date(hub.created_at).toLocaleDateString()}</p>
             </div>
           </div>
-          <p className="text-xs text-riptide-text-dim mt-4">
+          <p className="text-xs text-riftapp-text-dim mt-4">
             Only the hub owner can edit settings.
           </p>
         </div>
@@ -268,15 +268,15 @@ function InviteSection({ hubId, isOwner }: { hubId: string; isOwner: boolean }) 
   };
 
   return (
-    <div className="bg-riptide-panel/60 rounded-xl p-4 border border-riptide-border/30">
+    <div className="bg-riftapp-panel/60 rounded-xl p-4 border border-riftapp-border/30">
       <h3 className="text-sm font-semibold mb-1">Invite People</h3>
-      <p className="text-xs text-riptide-text-dim mb-3">
+      <p className="text-xs text-riftapp-text-dim mb-3">
         Generate an invite link to share with others.
       </p>
 
       {inviteUrl ? (
         <div className="flex items-center gap-2">
-          <code className="flex-1 px-3 py-1.5 rounded-md bg-riptide-bg border border-riptide-border text-sm font-mono text-riptide-accent select-all truncate">
+          <code className="flex-1 px-3 py-1.5 rounded-md bg-riftapp-bg border border-riftapp-border text-sm font-mono text-riftapp-accent select-all truncate">
             {inviteUrl}
           </code>
           <button
@@ -297,7 +297,7 @@ function InviteSection({ hubId, isOwner }: { hubId: string; isOwner: boolean }) 
       )}
 
       {error && (
-        <p className="text-sm text-riptide-danger mt-2">{error}</p>
+        <p className="text-sm text-riftapp-danger mt-2">{error}</p>
       )}
     </div>
   );
@@ -337,10 +337,10 @@ function MembersTab({ hub }: { hub: Hub }) {
       <div className="space-y-2">
         {[...Array(4)].map((_, i) => (
           <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg">
-            <div className="w-9 h-9 rounded-full bg-riptide-surface/60 animate-pulse flex-shrink-0" />
+            <div className="w-9 h-9 rounded-full bg-riftapp-surface/60 animate-pulse flex-shrink-0" />
             <div className="flex-1 space-y-1.5">
-              <div className="h-3 rounded-full bg-riptide-surface/80 animate-pulse" style={{ width: `${50 + (i * 20) % 40}%` }} />
-              <div className="h-2.5 rounded-full bg-riptide-surface/50 animate-pulse w-24" />
+              <div className="h-3 rounded-full bg-riftapp-surface/80 animate-pulse" style={{ width: `${50 + (i * 20) % 40}%` }} />
+              <div className="h-2.5 rounded-full bg-riftapp-surface/50 animate-pulse w-24" />
             </div>
           </div>
         ))}
@@ -350,7 +350,7 @@ function MembersTab({ hub }: { hub: Hub }) {
 
   if (error) {
     return (
-      <p className="text-sm text-riptide-danger bg-riptide-danger/10 rounded-md px-3 py-2">
+      <p className="text-sm text-riftapp-danger bg-riftapp-danger/10 rounded-md px-3 py-2">
         {error}
       </p>
     );
@@ -367,14 +367,14 @@ function MembersTab({ hub }: { hub: Hub }) {
 
   return (
     <div className="space-y-1">
-      <p className="text-xs text-riptide-text-dim mb-3">
+      <p className="text-xs text-riftapp-text-dim mb-3">
         {members.length} {members.length === 1 ? 'member' : 'members'}
       </p>
 
       {members.map((member) => (
         <div
           key={member.id}
-          className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-riptide-surface-hover transition-all duration-150 group/member"
+          className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-riftapp-surface-hover transition-all duration-150 group/member"
         >
           {/* Avatar */}
           {member.avatar_url ? (
@@ -384,7 +384,7 @@ function MembersTab({ hub }: { hub: Hub }) {
               className="w-9 h-9 rounded-full object-cover flex-shrink-0"
             />
           ) : (
-            <div className="w-9 h-9 rounded-full bg-riptide-accent flex items-center justify-center text-xs font-semibold text-white flex-shrink-0">
+            <div className="w-9 h-9 rounded-full bg-riftapp-accent flex items-center justify-center text-xs font-semibold text-white flex-shrink-0">
               {member.display_name.slice(0, 2).toUpperCase()}
             </div>
           )}
@@ -394,12 +394,12 @@ function MembersTab({ hub }: { hub: Hub }) {
             <div className="flex items-center gap-2">
               <p className="text-sm font-medium truncate">{member.display_name}</p>
               {member.id === hub.owner_id && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-riptide-accent/20 text-riptide-accent font-medium flex-shrink-0">
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-riftapp-accent/20 text-riftapp-accent font-medium flex-shrink-0">
                   Owner
                 </span>
               )}
             </div>
-            <p className="text-xs text-riptide-text-dim truncate">@{member.username}</p>
+            <p className="text-xs text-riftapp-text-dim truncate">@{member.username}</p>
           </div>
 
           {/* Status + Message button */}
@@ -410,7 +410,7 @@ function MembersTab({ hub }: { hub: Hub }) {
                 onClick={() => handleMessage(member)}
                 title={`Message ${member.display_name}`}
                 className="opacity-0 group-hover/member:opacity-100 w-7 h-7 rounded-md flex items-center justify-center
-                  text-riptide-text-dim hover:text-riptide-accent hover:bg-riptide-accent/10 transition-all duration-150 active:scale-95"
+                  text-riftapp-text-dim hover:text-riftapp-accent hover:bg-riftapp-accent/10 transition-all duration-150 active:scale-95"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />

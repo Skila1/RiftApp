@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/riptide-cloud/riptide/internal/apperror"
+	"github.com/riftapp-cloud/riftapp/internal/apperror"
 )
 
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {

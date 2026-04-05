@@ -177,7 +177,7 @@ export default function UserContextMenu() {
         pointerEvents: visible ? 'auto' : 'none',
       }}
     >
-      <div className="bg-riptide-panel rounded-lg border border-riptide-border/50 shadow-modal py-1.5 overflow-hidden">
+      <div className="bg-riftapp-panel rounded-lg border border-riftapp-border/50 shadow-modal py-1.5 overflow-hidden">
         <MenuItem icon={<ProfileIcon />} label="Profile" onClick={handleProfile} />
 
         {!isSelf && (
@@ -256,8 +256,8 @@ function MenuItem({ icon, label, onClick, danger }: { icon: React.ReactNode; lab
       onClick={onClick}
       className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-sm transition-colors ${
         danger
-          ? 'text-riptide-danger hover:bg-riptide-danger hover:text-white'
-          : 'text-riptide-text-muted hover:bg-riptide-accent hover:text-white'
+          ? 'text-riftapp-danger hover:bg-riftapp-danger hover:text-white'
+          : 'text-riftapp-text-muted hover:bg-riftapp-accent hover:text-white'
       }`}
     >
       <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">{icon}</span>
@@ -267,7 +267,7 @@ function MenuItem({ icon, label, onClick, danger }: { icon: React.ReactNode; lab
 }
 
 function Separator() {
-  return <div className="mx-2 my-1 border-t border-riptide-border/40" />;
+  return <div className="mx-2 my-1 border-t border-riftapp-border/40" />;
 }
 
 function ProfileIcon() {

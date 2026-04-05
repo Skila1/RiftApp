@@ -1,4 +1,4 @@
-module github.com/riptide-cloud/riptide
+module github.com/riftapp-cloud/riftapp
 
 go 1.25.0
 

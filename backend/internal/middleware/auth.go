@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/riptide-cloud/riptide/internal/auth"
+	"github.com/riftapp-cloud/riftapp/internal/auth"
 )
 
 type contextKey string

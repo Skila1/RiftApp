@@ -82,7 +82,7 @@ func TestExpiredToken(t *testing.T) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(-1 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now().Add(-2 * time.Hour)),
-			Issuer:    "riptide",
+			Issuer:    "riftapp",
 			Subject:   "access",
 		},
 	}

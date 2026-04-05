@@ -4,8 +4,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/riptide-cloud/riptide/internal/auth"
-	"github.com/riptide-cloud/riptide/internal/middleware"
+	"github.com/riftapp-cloud/riftapp/internal/auth"
+	"github.com/riftapp-cloud/riftapp/internal/middleware"
 )
 
 type AuthHandler struct {

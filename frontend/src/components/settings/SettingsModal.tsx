@@ -48,7 +48,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
         transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
       >
         {/* Sidebar nav */}
-        <nav className="w-[180px] bg-riptide-panel/80 p-3 flex flex-col flex-shrink-0">
+        <nav className="w-[180px] bg-riftapp-panel/80 p-3 flex flex-col flex-shrink-0">
           <h3 className="section-label px-2 mb-3">
             User Settings
           </h3>
@@ -59,28 +59,28 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
                 onClick={() => setActiveTab(tab.id)}
                 className={`w-full text-left px-3 py-1.5 rounded-md text-sm transition-all duration-150 ${
                   activeTab === tab.id
-                    ? 'bg-riptide-accent/15 text-riptide-text font-medium'
-                    : 'text-riptide-text-muted hover:text-riptide-text hover:bg-riptide-bg/30'
+                    ? 'bg-riftapp-accent/15 text-riftapp-text font-medium'
+                    : 'text-riftapp-text-muted hover:text-riftapp-text hover:bg-riftapp-bg/30'
                 }`}
               >
                 {tab.label}
               </button>
             ))}
           </div>
-          <div className="mt-auto border-t border-riptide-border/40 pt-2">
+          <div className="mt-auto border-t border-riftapp-border/40 pt-2">
             {confirmLogout ? (
-              <div className="px-2 py-2 rounded-md bg-riptide-danger/10 border border-riptide-danger/20">
-                <p className="text-[11px] text-riptide-danger font-medium mb-2">Log out of Riptide?</p>
+              <div className="px-2 py-2 rounded-md bg-riftapp-danger/10 border border-riftapp-danger/20">
+                <p className="text-[11px] text-riftapp-danger font-medium mb-2">Log out of RiftApp?</p>
                 <div className="flex gap-1.5">
                   <button
                     onClick={() => { logout(); onClose(); }}
-                    className="flex-1 py-1 rounded-md bg-riptide-danger text-white text-[11px] font-semibold hover:bg-riptide-danger/90 active:scale-95 transition-all duration-150"
+                    className="flex-1 py-1 rounded-md bg-riftapp-danger text-white text-[11px] font-semibold hover:bg-riftapp-danger/90 active:scale-95 transition-all duration-150"
                   >
                     Log Out
                   </button>
                   <button
                     onClick={() => setConfirmLogout(false)}
-                    className="flex-1 py-1 rounded-md text-[11px] text-riptide-text-muted hover:bg-riptide-bg/30 transition-all duration-150"
+                    className="flex-1 py-1 rounded-md text-[11px] text-riftapp-text-muted hover:bg-riftapp-bg/30 transition-all duration-150"
                   >
                     Cancel
                   </button>
@@ -89,7 +89,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
             ) : (
               <button
                 onClick={() => setConfirmLogout(true)}
-                className="w-full text-left px-3 py-1.5 rounded-md text-sm text-riptide-danger hover:bg-riptide-danger/10 transition-all duration-150"
+                className="w-full text-left px-3 py-1.5 rounded-md text-sm text-riftapp-danger hover:bg-riftapp-danger/10 transition-all duration-150"
               >
                 Log Out
               </button>
@@ -100,14 +100,14 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
         {/* Content */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 h-14 border-b border-riptide-border/40 flex-shrink-0">
+          <div className="flex items-center justify-between px-6 h-14 border-b border-riftapp-border/40 flex-shrink-0">
             <h2 className="text-[17px] font-bold tracking-tight">
               {activeTab === 'profile' ? 'Profile' : 'My Account'}
             </h2>
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-riptide-text-dim
-                hover:text-riptide-text hover:bg-riptide-panel transition-all duration-150"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-riftapp-text-dim
+                hover:text-riftapp-text hover:bg-riftapp-panel transition-all duration-150"
               title="Close (Esc)"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -222,7 +222,7 @@ function ProfileTab({
               onError={() => setImgError(true)}
             />
           ) : (
-            <div className="w-16 h-16 rounded-full bg-riptide-accent flex items-center justify-center text-lg font-semibold text-white">
+            <div className="w-16 h-16 rounded-full bg-riftapp-accent flex items-center justify-center text-lg font-semibold text-white">
               {(displayName || username).slice(0, 2).toUpperCase()}
             </div>
           )}
@@ -248,7 +248,7 @@ function ProfileTab({
         </button>
         <div>
           <p className="text-sm font-medium">{displayName || username}</p>
-          <p className="text-xs text-riptide-text-dim">@{username}</p>
+          <p className="text-xs text-riftapp-text-dim">@{username}</p>
         </div>
       </div>
 
@@ -280,14 +280,14 @@ function ProfileTab({
           className="settings-input resize-none"
           placeholder="Tell us about yourself"
         />
-        <p className="text-[11px] text-riptide-text-dim mt-1 text-right">
+        <p className="text-[11px] text-riftapp-text-dim mt-1 text-right">
           {bio.length}/190
         </p>
       </Field>
 
       {/* Error / Success */}
       {error && (
-        <p className="text-sm text-riptide-danger bg-riptide-danger/10 rounded-md px-3 py-2">
+        <p className="text-sm text-riftapp-danger bg-riftapp-danger/10 rounded-md px-3 py-2">
           {error}
         </p>
       )}
@@ -342,7 +342,7 @@ function AccountTab({
   return (
     <div className="space-y-6">
       {/* Status Selector */}
-      <div className="bg-riptide-panel rounded-lg p-4">
+      <div className="bg-riftapp-panel rounded-lg p-4">
         <h3 className="text-sm font-semibold mb-3">Status</h3>
         <div className="space-y-1">
           {statuses.map((s) => (
@@ -351,53 +351,53 @@ function AccountTab({
               onClick={() => handleStatusChange(s.value)}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-all duration-150 ${
                 currentStatus === s.value
-                  ? 'bg-riptide-accent/15 text-riptide-text'
-                  : 'text-riptide-text-muted hover:text-riptide-text hover:bg-riptide-bg/30'
+                  ? 'bg-riftapp-accent/15 text-riftapp-text'
+                  : 'text-riftapp-text-muted hover:text-riftapp-text hover:bg-riftapp-bg/30'
               }`}
             >
               <div className={`w-3 h-3 rounded-full ${statusColor(s.value)}`} />
               {s.label}
               {currentStatus === s.value && (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="ml-auto text-riptide-accent">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="ml-auto text-riftapp-accent">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
               )}
             </button>
           ))}
         </div>
-        <p className="text-[11px] text-riptide-text-dim mt-2">
+        <p className="text-[11px] text-riftapp-text-dim mt-2">
           Currently: {statusLabel(currentStatus)}
         </p>
       </div>
 
-      <div className="bg-riptide-panel rounded-lg p-4">
+      <div className="bg-riftapp-panel rounded-lg p-4">
         <h3 className="text-sm font-semibold mb-3">Account Details</h3>
         <div className="space-y-3 text-sm">
           <div>
-            <p className="text-riptide-text-dim text-xs uppercase tracking-wide mb-0.5">Username</p>
+            <p className="text-riftapp-text-dim text-xs uppercase tracking-wide mb-0.5">Username</p>
             <p>@{user.username}</p>
           </div>
           {user.email && (
             <div>
-              <p className="text-riptide-text-dim text-xs uppercase tracking-wide mb-0.5">Email</p>
+              <p className="text-riftapp-text-dim text-xs uppercase tracking-wide mb-0.5">Email</p>
               <p>{user.email}</p>
             </div>
           )}
           <div>
-            <p className="text-riptide-text-dim text-xs uppercase tracking-wide mb-0.5">Member Since</p>
+            <p className="text-riftapp-text-dim text-xs uppercase tracking-wide mb-0.5">Member Since</p>
             <p>{new Date(user.created_at).toLocaleDateString()}</p>
           </div>
         </div>
       </div>
 
-      <div className="bg-riptide-panel rounded-lg p-4">
-        <h3 className="text-sm font-semibold mb-1 text-riptide-danger">Danger Zone</h3>
-        <p className="text-xs text-riptide-text-dim mb-3">
+      <div className="bg-riftapp-panel rounded-lg p-4">
+        <h3 className="text-sm font-semibold mb-1 text-riftapp-danger">Danger Zone</h3>
+        <p className="text-xs text-riftapp-text-dim mb-3">
           Logging out will clear your session on this device.
         </p>
         {confirmLogout ? (
-          <div className="rounded-lg bg-riptide-danger/10 border border-riptide-danger/25 p-3">
-            <p className="text-sm text-riptide-danger font-medium mb-3">Are you sure you want to log out?</p>
+          <div className="rounded-lg bg-riftapp-danger/10 border border-riftapp-danger/25 p-3">
+            <p className="text-sm text-riftapp-danger font-medium mb-3">Are you sure you want to log out?</p>
             <div className="flex gap-2">
               <button
                 onClick={() => { logout(); onClose(); }}
@@ -439,7 +439,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-riptide-text-dim flex justify-between">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-riftapp-text-dim flex justify-between">
         {label}
         {maxLength && <span className="font-normal">max {maxLength}</span>}
       </span>

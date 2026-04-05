@@ -7,10 +7,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/livekit/protocol/auth"
 
-	"github.com/riptide-cloud/riptide/internal/config"
-	"github.com/riptide-cloud/riptide/internal/middleware"
-	"github.com/riptide-cloud/riptide/internal/service"
-	"github.com/riptide-cloud/riptide/internal/ws"
+	"github.com/riftapp-cloud/riftapp/internal/config"
+	"github.com/riftapp-cloud/riftapp/internal/middleware"
+	"github.com/riftapp-cloud/riftapp/internal/service"
+	"github.com/riftapp-cloud/riftapp/internal/ws"
 )
 
 type VoiceHandler struct {

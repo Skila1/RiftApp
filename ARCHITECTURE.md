@@ -1,4 +1,4 @@
-# Riptide — Architecture
+# RiftApp — Architecture
 
 > Fast. Clean. Yours. — Instant communication.
 
@@ -70,7 +70,7 @@ Client A sends message
 
 ## Naming Map
 
-| Traditional | Riptide   |
+| Traditional | RiftApp   |
 |------------|-----------|
 | Server     | Hub       |
 | Channel    | Stream    |

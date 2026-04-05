@@ -12,10 +12,10 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-riptide-bg">
+      <div className="h-screen flex items-center justify-center bg-riftapp-bg">
         <div className="text-center animate-fade-in">
-          <h1 className="text-3xl font-bold text-riptide-accent mb-4 font-display tracking-tight">riptide</h1>
-          <div className="w-8 h-8 border-2 border-riptide-accent border-t-transparent rounded-full animate-spin mx-auto" />
+          <h1 className="text-3xl font-bold text-riftapp-accent mb-4 font-display tracking-tight">riftapp</h1>
+          <div className="w-8 h-8 border-2 border-riftapp-accent border-t-transparent rounded-full animate-spin mx-auto" />
         </div>
       </div>
     );
@@ -34,10 +34,10 @@ function RequireGuest({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-riptide-bg">
+      <div className="h-screen flex items-center justify-center bg-riftapp-bg">
         <div className="text-center animate-fade-in">
-          <h1 className="text-3xl font-bold text-riptide-accent mb-4 font-display tracking-tight">riptide</h1>
-          <div className="w-8 h-8 border-2 border-riptide-accent border-t-transparent rounded-full animate-spin mx-auto" />
+          <h1 className="text-3xl font-bold text-riftapp-accent mb-4 font-display tracking-tight">riftapp</h1>
+          <div className="w-8 h-8 border-2 border-riftapp-accent border-t-transparent rounded-full animate-spin mx-auto" />
         </div>
       </div>
     );
@@ -60,10 +60,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <Suspense fallback={
-        <div className="h-screen flex items-center justify-center bg-riptide-bg">
+        <div className="h-screen flex items-center justify-center bg-riftapp-bg">
           <div className="text-center">
-            <h1 className="text-3xl font-bold text-riptide-accent mb-4 font-display tracking-tight">riptide</h1>
-            <div className="w-8 h-8 border-2 border-riptide-accent border-t-transparent rounded-full animate-spin mx-auto" />
+            <h1 className="text-3xl font-bold text-riftapp-accent mb-4 font-display tracking-tight">riftapp</h1>
+            <div className="w-8 h-8 border-2 border-riftapp-accent border-t-transparent rounded-full animate-spin mx-auto" />
           </div>
         </div>
       }>

@@ -76,7 +76,7 @@ function renderContent(content: string) {
       );
     }
     parts.push(
-      <pre key={key++} className="bg-riptide-bg border border-riptide-border/60 rounded-lg p-3 my-2 overflow-x-auto text-[13px] font-mono leading-relaxed">
+      <pre key={key++} className="bg-riftapp-bg border border-riftapp-border/60 rounded-lg p-3 my-2 overflow-x-auto text-[13px] font-mono leading-relaxed">
         <code>{match[2]}</code>
       </pre>
     );
@@ -112,7 +112,7 @@ function renderInline(text: string): React.ReactNode {
   return text.split(/(`[^`]+`)/).map((part, i) => {
     if (part.startsWith('`') && part.endsWith('`')) {
       return (
-        <code key={i} className="bg-riptide-bg/80 px-1.5 py-0.5 rounded text-[13px] font-mono text-riptide-accent-hover">
+        <code key={i} className="bg-riftapp-bg/80 px-1.5 py-0.5 rounded text-[13px] font-mono text-riftapp-accent-hover">
           {part.slice(1, -1)}
         </code>
       );
@@ -177,23 +177,23 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn }: Me
 
   return (
     <div
-      className={`group relative py-0.5 -mx-4 px-4 hover:bg-riptide-surface/20 transition-colors duration-100 ${
+      className={`group relative py-0.5 -mx-4 px-4 hover:bg-riftapp-surface/20 transition-colors duration-100 ${
         showHeader ? 'mt-[17px]' : ''
       }`}
     >
       {/* Hover timestamp for compact messages */}
       {!showHeader && (
-        <span className="absolute left-4 top-1 text-[10px] text-riptide-text-dim opacity-0 group-hover:opacity-100 transition-opacity duration-100 select-none w-10 text-right">
+        <span className="absolute left-4 top-1 text-[10px] text-riftapp-text-dim opacity-0 group-hover:opacity-100 transition-opacity duration-100 select-none w-10 text-right">
           {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>
       )}
 
       {/* Hover action bar */}
       <div className="absolute -top-3 right-4 opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200 ease-out z-10">
-        <div className="flex items-center bg-riptide-surface border border-riptide-border/60 rounded-lg shadow-elevation-low">
+        <div className="flex items-center bg-riftapp-surface border border-riftapp-border/60 rounded-lg shadow-elevation-low">
           <button
             onClick={() => setPickerOpen((v) => !v)}
-            className="px-2 py-1 text-riptide-text-dim hover:text-riptide-text hover:bg-riptide-surface-hover rounded-lg transition-colors duration-100"
+            className="px-2 py-1 text-riftapp-text-dim hover:text-riftapp-text hover:bg-riftapp-surface-hover rounded-lg transition-colors duration-100"
             title="Add Reaction"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -206,13 +206,13 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn }: Me
         </div>
         {/* Emoji picker */}
         {pickerOpen && (
-          <div ref={pickerRef} className="absolute right-0 top-full mt-1 bg-riptide-panel border border-riptide-border/60 rounded-xl shadow-elevation-high p-2 animate-scale-in z-50">
+          <div ref={pickerRef} className="absolute right-0 top-full mt-1 bg-riftapp-panel border border-riftapp-border/60 rounded-xl shadow-elevation-high p-2 animate-scale-in z-50">
             <div className="grid grid-cols-4 gap-1">
               {QUICK_EMOJIS.map((emoji) => (
                 <button
                   key={emoji}
                   onClick={() => handleToggle(emoji)}
-                  className="w-9 h-9 flex items-center justify-center text-lg rounded-lg hover:bg-riptide-surface-hover hover:scale-110 active:scale-95 transition-all duration-150"
+                  className="w-9 h-9 flex items-center justify-center text-lg rounded-lg hover:bg-riftapp-surface-hover hover:scale-110 active:scale-95 transition-all duration-150"
                 >
                   {emoji}
                 </button>
@@ -234,18 +234,18 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn }: Me
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-2 mb-0.5">
-              <span onClick={handleProfileClick} onContextMenu={handleContextMenu} className={`font-semibold text-[15px] cursor-pointer hover:underline ${isOwn ? 'text-riptide-accent-hover' : color}`}>
+              <span onClick={handleProfileClick} onContextMenu={handleContextMenu} className={`font-semibold text-[15px] cursor-pointer hover:underline ${isOwn ? 'text-riftapp-accent-hover' : color}`}>
                 {authorName}
               </span>
-              <span className="text-[11px] text-riptide-text-dim/80 select-none">
+              <span className="text-[11px] text-riftapp-text-dim/80 select-none">
                 {formatTime(message.created_at)}
               </span>
               {message.edited_at && (
-                <span className="text-[10px] text-riptide-text-dim/60 select-none" title={`Edited ${formatTime(message.edited_at)}`}>(edited)</span>
+                <span className="text-[10px] text-riftapp-text-dim/60 select-none" title={`Edited ${formatTime(message.edited_at)}`}>(edited)</span>
               )}
             </div>
             {/* Content */}
-            <div className="text-[15px] leading-[1.375rem] text-riptide-text/[0.90]">
+            <div className="text-[15px] leading-[1.375rem] text-riftapp-text/[0.90]">
               {renderedContent}
             </div>
             {/* Attachments */}
@@ -258,7 +258,7 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn }: Me
         </div>
       ) : (
         <div className="pl-[52px]">
-          <div className="text-[15px] leading-[1.375rem] text-riptide-text/[0.90]">
+          <div className="text-[15px] leading-[1.375rem] text-riftapp-text/[0.90]">
             {renderedContent}
           </div>
           <Attachments message={message} />
@@ -292,8 +292,8 @@ function ReactionPills({
             onClick={() => onToggle(r.emoji)}
             className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border transition-all duration-150 cursor-pointer ${
               reacted
-                ? 'bg-riptide-accent/15 border-riptide-accent/50 text-riptide-accent'
-                : 'bg-riptide-surface border-riptide-border/50 text-riptide-text-dim hover:border-riptide-border hover:bg-riptide-surface-hover'
+                ? 'bg-riftapp-accent/15 border-riftapp-accent/50 text-riftapp-accent'
+                : 'bg-riftapp-surface border-riftapp-border/50 text-riftapp-text-dim hover:border-riftapp-border hover:bg-riftapp-surface-hover'
             }`}
           >
             <span className="text-sm leading-none">{r.emoji}</span>
@@ -318,7 +318,7 @@ function Attachments({ message }: { message: Message }) {
               <img
                 src={att.url}
                 alt={att.filename}
-                className="max-w-[400px] max-h-[300px] rounded-xl border border-riptide-border/40 object-contain
+                className="max-w-[400px] max-h-[300px] rounded-xl border border-riftapp-border/40 object-contain
                   hover:shadow-elevation-md transition-shadow duration-200 cursor-pointer"
               />
             </a>
@@ -330,21 +330,21 @@ function Attachments({ message }: { message: Message }) {
             href={att.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-3 bg-riptide-surface border border-riptide-border/50 rounded-xl px-4 py-3
-              hover:bg-riptide-surface-hover hover:border-riptide-border transition-all duration-150 max-w-[380px] group/file"
+            className="inline-flex items-center gap-3 bg-riftapp-surface border border-riftapp-border/50 rounded-xl px-4 py-3
+              hover:bg-riftapp-surface-hover hover:border-riftapp-border transition-all duration-150 max-w-[380px] group/file"
           >
-            <div className="w-10 h-10 rounded-lg bg-riptide-accent/10 flex items-center justify-center flex-shrink-0">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-riptide-accent">
+            <div className="w-10 h-10 rounded-lg bg-riftapp-accent/10 flex items-center justify-center flex-shrink-0">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-riftapp-accent">
                 <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
                 <polyline points="13 2 13 9 20 9" />
               </svg>
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm text-riptide-accent group-hover/file:underline truncate font-medium">{att.filename}</p>
-              <p className="text-[11px] text-riptide-text-dim">{formatBytes(att.size_bytes)}</p>
+              <p className="text-sm text-riftapp-accent group-hover/file:underline truncate font-medium">{att.filename}</p>
+              <p className="text-[11px] text-riftapp-text-dim">{formatBytes(att.size_bytes)}</p>
             </div>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-              className="text-riptide-text-dim opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0">
+              className="text-riftapp-text-dim opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />

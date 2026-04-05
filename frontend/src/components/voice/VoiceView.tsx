@@ -28,15 +28,15 @@ export default function VoiceView() {
   return (
     <div className="flex-1 flex flex-col bg-[#1a1a2e] min-w-0">
       {/* Header */}
-      <div className="h-12 flex items-center px-4 border-b border-riptide-border/60 flex-shrink-0 shadow-[0_1px_0_rgba(0,0,0,0.2)]">
+      <div className="h-12 flex items-center px-4 border-b border-riftapp-border/60 flex-shrink-0 shadow-[0_1px_0_rgba(0,0,0,0.2)]">
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-riptide-text-dim flex-shrink-0">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-riftapp-text-dim flex-shrink-0">
             <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
             <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
           </svg>
           <h3 className="font-semibold text-[15px] truncate">{stream?.name || 'Voice Channel'}</h3>
           {connected && (
-            <span className="text-xs text-riptide-text-dim ml-2">
+            <span className="text-xs text-riftapp-text-dim ml-2">
               {participants.length} participant{participants.length !== 1 ? 's' : ''}
             </span>
           )}
@@ -48,26 +48,26 @@ export default function VoiceView() {
         {!connected && !connecting ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center animate-fade-in">
-              <div className="w-20 h-20 rounded-full bg-riptide-surface/30 flex items-center justify-center mx-auto mb-4">
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-riptide-text-dim">
+              <div className="w-20 h-20 rounded-full bg-riftapp-surface/30 flex items-center justify-center mx-auto mb-4">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-riftapp-text-dim">
                   <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                   <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
                   <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
                 </svg>
               </div>
-              <p className="text-riptide-text-dim text-sm">Not connected to this voice channel</p>
+              <p className="text-riftapp-text-dim text-sm">Not connected to this voice channel</p>
             </div>
           </div>
         ) : connecting ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center animate-fade-in">
-              <div className="w-20 h-20 rounded-full bg-riptide-surface/30 flex items-center justify-center mx-auto mb-4 animate-pulse">
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-riptide-warning">
+              <div className="w-20 h-20 rounded-full bg-riftapp-surface/30 flex items-center justify-center mx-auto mb-4 animate-pulse">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-riftapp-warning">
                   <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                   <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
                 </svg>
               </div>
-              <p className="text-riptide-warning text-sm font-medium">Connecting…</p>
+              <p className="text-riftapp-warning text-sm font-medium">Connecting…</p>
             </div>
           </div>
         ) : (
@@ -239,7 +239,7 @@ function ParticipantTile({ participant, hubMembers, compact }: {
     <div
       className={`relative rounded-xl overflow-hidden transition-all duration-200 ${
         participant.isSpeaking
-          ? 'ring-[3px] ring-riptide-success shadow-lg shadow-riptide-success/20'
+          ? 'ring-[3px] ring-riftapp-success shadow-lg shadow-riftapp-success/20'
           : 'ring-1 ring-white/10'
       } aspect-video`}
       style={{ backgroundColor: getAvatarColor(participant.identity) }}
@@ -252,7 +252,7 @@ function ParticipantTile({ participant, hubMembers, compact }: {
             {avatarUrl ? (
               <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full bg-riptide-surface/60 flex items-center justify-center">
+              <div className="w-full h-full bg-riftapp-surface/60 flex items-center justify-center">
                 <span className={`font-bold text-white ${compact ? 'text-xl' : 'text-2xl'}`}>
                   {displayName.slice(0, 2).toUpperCase()}
                 </span>
@@ -263,13 +263,13 @@ function ParticipantTile({ participant, hubMembers, compact }: {
       )}
 
       <div className="absolute bottom-0 left-0 right-0 p-2 flex items-end justify-between bg-gradient-to-t from-black/60 to-transparent">
-        <span className={`text-xs font-medium truncate ${participant.isSpeaking ? 'text-riptide-success' : 'text-white'}`}>
+        <span className={`text-xs font-medium truncate ${participant.isSpeaking ? 'text-riftapp-success' : 'text-white'}`}>
           {displayName}
         </span>
         <div className="flex items-center gap-1">
           {participant.isMuted && (
             <div className="bg-black/50 rounded-full p-1">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-riptide-danger">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-riftapp-danger">
                 <line x1="1" y1="1" x2="23" y2="23" />
                 <path d="M9 9v3a3 3 0 005.12 2.12M15 9.34V4a3 3 0 00-5.94-.6" />
               </svg>
@@ -277,7 +277,7 @@ function ParticipantTile({ participant, hubMembers, compact }: {
           )}
           {participant.isScreenSharing && (
             <div className="bg-black/50 rounded-full p-1">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-riptide-accent">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-riftapp-accent">
                 <rect x="2" y="3" width="20" height="14" rx="2" /><line x1="12" y1="17" x2="12" y2="21" />
               </svg>
             </div>
@@ -311,7 +311,7 @@ function ScreenShareTile({ participant, hubMembers }: {
     <div className="relative w-full h-full flex items-center justify-center">
       <video ref={videoRef} autoPlay playsInline className="max-w-full max-h-full rounded-lg shadow-2xl" />
       <div className="absolute bottom-3 left-3 bg-black/70 backdrop-blur-sm rounded-md px-2.5 py-1 flex items-center gap-1.5">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-riptide-accent">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-riftapp-accent">
           <rect x="2" y="3" width="20" height="14" rx="2" /><line x1="12" y1="17" x2="12" y2="21" />
         </svg>
         <span className="text-xs font-medium text-white">{displayName}'s screen</span>

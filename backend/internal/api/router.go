@@ -11,13 +11,13 @@ import (
 	"github.com/go-chi/cors"
 	"golang.org/x/time/rate"
 
-	"github.com/riptide-cloud/riptide/internal/auth"
-	"github.com/riptide-cloud/riptide/internal/config"
-	"github.com/riptide-cloud/riptide/internal/middleware"
-	"github.com/riptide-cloud/riptide/internal/repository"
-	"github.com/riptide-cloud/riptide/internal/service"
-	"github.com/riptide-cloud/riptide/internal/user"
-	"github.com/riptide-cloud/riptide/internal/ws"
+	"github.com/riftapp-cloud/riftapp/internal/auth"
+	"github.com/riftapp-cloud/riftapp/internal/config"
+	"github.com/riftapp-cloud/riftapp/internal/middleware"
+	"github.com/riftapp-cloud/riftapp/internal/repository"
+	"github.com/riftapp-cloud/riftapp/internal/service"
+	"github.com/riftapp-cloud/riftapp/internal/user"
+	"github.com/riftapp-cloud/riftapp/internal/ws"
 )
 
 type RouterDeps struct {

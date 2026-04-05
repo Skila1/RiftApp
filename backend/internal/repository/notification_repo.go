@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/riptide-cloud/riptide/internal/models"
+	"github.com/riftapp-cloud/riftapp/internal/models"
 )
 
 type NotificationRepo struct {
