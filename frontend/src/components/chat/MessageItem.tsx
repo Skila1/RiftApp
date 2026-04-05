@@ -440,13 +440,13 @@ function ReactionPills({
           <button
             key={r.emoji}
             onClick={() => onToggle(r.emoji)}
-            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border transition-all duration-150 cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 h-6 min-w-[42px] px-1.5 rounded-full text-xs font-medium border transition-colors duration-150 cursor-pointer select-none ${
               reacted
                 ? 'bg-riftapp-accent/15 border-riftapp-accent/50 text-riftapp-accent'
                 : 'bg-riftapp-surface border-riftapp-border/50 text-riftapp-text-dim hover:border-riftapp-border hover:bg-riftapp-surface-hover'
             }`}
           >
-            <span className="text-sm leading-none">{r.emoji}</span>
+            <span className="w-4 h-4 text-[15px] leading-4 text-center shrink-0">{r.emoji}</span>
             <span>{r.count}</span>
           </button>
         );
