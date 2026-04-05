@@ -10,6 +10,7 @@ import {
   type RemoteTrackPublication,
   type LocalTrackPublication,
   type Participant,
+  ConnectionQuality,
   ConnectionState,
 } from 'livekit-client';
 import { api } from '../api/client';
@@ -29,6 +30,21 @@ const VAD_THRESHOLD = 0.03;
 const VAD_RELEASE_MS = 110;
 const VAD_SPEAKING_BROADCAST_INTERVAL_MS = 80;
 const VAD_LEVEL_PUSH_INTERVAL_MS = 33;
+const CONNECTION_STATS_POLL_INTERVAL_MS = 1000;
+
+type VoiceConnectionTone = 'good' | 'medium' | 'bad' | 'neutral';
+type VoiceConnectionSource = 'webrtc' | 'livekit' | 'unknown';
+
+export interface VoiceConnectionStats {
+  state: ConnectionState;
+  pingMs: number | null;
+  jitterMs: number | null;
+  packetLossPct: number | null;
+  bars: 0 | 1 | 2 | 3 | 4;
+  tone: VoiceConnectionTone;
+  source: VoiceConnectionSource;
+  quality: ConnectionQuality;
+}
 
 function loadNoiseSuppressionMode(): NoiseSuppressionMode {
   try {
@@ -65,6 +81,7 @@ interface VoiceStore {
   streamId: string | null;
   participants: VoiceParticipant[];
   speakingSignals: Record<string, boolean>;
+  connectionStats: VoiceConnectionStats;
   isMuted: boolean;
   isDeafened: boolean;
   isCameraOn: boolean;
@@ -153,6 +170,253 @@ let micVadHoldUntil = 0;
 let micVadLastLevelPushAt = 0;
 let micVadLastSpeakingBroadcastAt = 0;
 let micVadDisplayLevel = 0;
+let connectionStatsTimer: number | null = null;
+
+function createDefaultConnectionStats(): VoiceConnectionStats {
+  return {
+    state: ConnectionState.Disconnected,
+    pingMs: null,
+    jitterMs: null,
+    packetLossPct: null,
+    bars: 0,
+    tone: 'neutral',
+    source: 'unknown',
+    quality: ConnectionQuality.Unknown,
+  };
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function averageNumbers(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function roundMetric(value: number | null, digits = 0): number | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
+function statHasAudioKind(stat: RTCStats & Record<string, unknown>): boolean {
+  return stat.kind === 'audio' || stat.mediaType === 'audio';
+}
+
+function getCandidatePairStats(report: RTCStatsReport): (RTCStats & Record<string, unknown>) | null {
+  let selectedCandidatePairId: string | null = null;
+  let fallbackPair: (RTCStats & Record<string, unknown>) | null = null;
+
+  report.forEach((rawStat) => {
+    const stat = rawStat as RTCStats & Record<string, unknown>;
+    if (stat.type === 'transport' && typeof stat.selectedCandidatePairId === 'string') {
+      selectedCandidatePairId = stat.selectedCandidatePairId;
+    }
+    if (stat.type !== 'candidate-pair') return;
+    if (
+      fallbackPair == null &&
+      (stat.nominated === true || stat.selected === true || stat.state === 'succeeded')
+    ) {
+      fallbackPair = stat;
+    }
+  });
+
+  if (selectedCandidatePairId) {
+    const selected = report.get(selectedCandidatePairId);
+    if (selected) {
+      return selected as RTCStats & Record<string, unknown>;
+    }
+  }
+  return fallbackPair;
+}
+
+function extractMetricsFromReport(report: RTCStatsReport) {
+  const audioJitterValues: number[] = [];
+  const packetLossValues: number[] = [];
+
+  report.forEach((rawStat) => {
+    const stat = rawStat as RTCStats & Record<string, unknown>;
+    if (!statHasAudioKind(stat)) return;
+
+    if (stat.type === 'inbound-rtp') {
+      const jitter = toFiniteNumber(stat.jitter);
+      if (jitter != null) {
+        audioJitterValues.push(jitter * 1000);
+      }
+
+      const packetsLost = toFiniteNumber(stat.packetsLost);
+      const packetsReceived = toFiniteNumber(stat.packetsReceived);
+      if (packetsLost != null && packetsReceived != null) {
+        const total = packetsLost + packetsReceived;
+        if (total > 0) {
+          packetLossValues.push((packetsLost / total) * 100);
+        }
+      }
+      return;
+    }
+
+    if (stat.type === 'remote-inbound-rtp') {
+      const jitter = toFiniteNumber(stat.jitter);
+      if (jitter != null) {
+        audioJitterValues.push(jitter * 1000);
+      }
+
+      const fractionLost = toFiniteNumber(stat.fractionLost);
+      if (fractionLost != null) {
+        packetLossValues.push((fractionLost <= 1 ? fractionLost : fractionLost / 256) * 100);
+      }
+    }
+  });
+
+  const candidatePair = getCandidatePairStats(report);
+  let pingMs: number | null = null;
+  if (candidatePair) {
+    const currentRoundTripTime = toFiniteNumber(candidatePair.currentRoundTripTime);
+    if (currentRoundTripTime != null) {
+      pingMs = currentRoundTripTime * 1000;
+    } else {
+      const totalRoundTripTime = toFiniteNumber(candidatePair.totalRoundTripTime);
+      const responsesReceived = toFiniteNumber(candidatePair.responsesReceived);
+      if (totalRoundTripTime != null && responsesReceived != null && responsesReceived > 0) {
+        pingMs = (totalRoundTripTime / responsesReceived) * 1000;
+      }
+    }
+  }
+
+  return {
+    pingMs: roundMetric(pingMs),
+    jitterMs: roundMetric(averageNumbers(audioJitterValues)),
+    packetLossPct: roundMetric(averageNumbers(packetLossValues), 1),
+  };
+}
+
+function deriveIndicatorFromMetrics(
+  pingMs: number | null,
+  quality: ConnectionQuality,
+  state: ConnectionState,
+): Pick<VoiceConnectionStats, 'bars' | 'tone' | 'source'> {
+  if (state === ConnectionState.Disconnected) {
+    return { bars: 0, tone: 'neutral', source: 'unknown' };
+  }
+
+  if (pingMs != null) {
+    if (pingMs < 50) return { bars: 4, tone: 'good', source: 'webrtc' };
+    if (pingMs < 100) return { bars: 3, tone: 'good', source: 'webrtc' };
+    if (pingMs < 200) return { bars: 2, tone: 'medium', source: 'webrtc' };
+    return { bars: 1, tone: 'bad', source: 'webrtc' };
+  }
+
+  switch (quality) {
+    case ConnectionQuality.Excellent:
+      return { bars: 4, tone: 'good', source: 'livekit' };
+    case ConnectionQuality.Good:
+      return { bars: 3, tone: 'good', source: 'livekit' };
+    case ConnectionQuality.Poor:
+      return { bars: 1, tone: 'bad', source: 'livekit' };
+    case ConnectionQuality.Lost:
+      return { bars: 0, tone: 'neutral', source: 'livekit' };
+    default:
+      return { bars: 0, tone: 'neutral', source: 'unknown' };
+  }
+}
+
+function syncConnectionStatsState(room: Room, rawMetrics?: Partial<Record<'pingMs' | 'jitterMs' | 'packetLossPct', number | null>>) {
+  const state = room.state;
+  const quality = room.localParticipant.connectionQuality;
+
+  useVoiceStore.setState((store) => {
+    const current = store.connectionStats;
+    const pingMs = state === ConnectionState.Disconnected
+      ? null
+      : rawMetrics && 'pingMs' in rawMetrics
+        ? rawMetrics.pingMs ?? current.pingMs
+        : current.pingMs;
+    const jitterMs = state === ConnectionState.Disconnected
+      ? null
+      : rawMetrics && 'jitterMs' in rawMetrics
+        ? rawMetrics.jitterMs ?? current.jitterMs
+        : current.jitterMs;
+    const packetLossPct = state === ConnectionState.Disconnected
+      ? null
+      : rawMetrics && 'packetLossPct' in rawMetrics
+        ? rawMetrics.packetLossPct ?? current.packetLossPct
+        : current.packetLossPct;
+    const hasRawMetrics = pingMs != null || jitterMs != null || packetLossPct != null;
+    const indicator = deriveIndicatorFromMetrics(pingMs, quality, state);
+
+    return {
+      connectionStats: {
+        state,
+        pingMs,
+        jitterMs,
+        packetLossPct,
+        bars: indicator.bars,
+        tone: indicator.tone,
+        source: hasRawMetrics ? 'webrtc' : indicator.source,
+        quality,
+      },
+    };
+  });
+}
+
+async function sampleConnectionStats(room: Room) {
+  if (roomRef !== room || room.state === ConnectionState.Disconnected) return;
+
+  const pcManager = room.engine.pcManager;
+  if (!pcManager) {
+    syncConnectionStatsState(room);
+    return;
+  }
+
+  const transports = [pcManager.publisher, pcManager.subscriber].filter(Boolean) as Array<{ getStats: () => Promise<RTCStatsReport> }>;
+  const results = await Promise.allSettled(transports.map((transport) => transport.getStats()));
+  if (roomRef !== room) return;
+
+  let pingMs: number | null = null;
+  const jitterValues: number[] = [];
+  const packetLossValues: number[] = [];
+
+  results.forEach((result) => {
+    if (result.status !== 'fulfilled') return;
+    const metrics = extractMetricsFromReport(result.value);
+    if (pingMs == null && metrics.pingMs != null) {
+      pingMs = metrics.pingMs;
+    }
+    if (metrics.jitterMs != null) {
+      jitterValues.push(metrics.jitterMs);
+    }
+    if (metrics.packetLossPct != null) {
+      packetLossValues.push(metrics.packetLossPct);
+    }
+  });
+
+  syncConnectionStatsState(room, {
+    pingMs,
+    jitterMs: roundMetric(averageNumbers(jitterValues)),
+    packetLossPct: roundMetric(averageNumbers(packetLossValues), 1),
+  });
+}
+
+function stopConnectionStatsMonitor() {
+  if (connectionStatsTimer != null) {
+    window.clearInterval(connectionStatsTimer);
+    connectionStatsTimer = null;
+  }
+}
+
+function startConnectionStatsMonitor(room: Room) {
+  stopConnectionStatsMonitor();
+  syncConnectionStatsState(room);
+  void sampleConnectionStats(room);
+  connectionStatsTimer = window.setInterval(() => {
+    if (roomRef !== room || room.state === ConnectionState.Disconnected) {
+      stopConnectionStatsMonitor();
+      return;
+    }
+    void sampleConnectionStats(room);
+  }, CONNECTION_STATS_POLL_INTERVAL_MS);
+}
 
 function hasOwnKey(record: Record<string, boolean>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, key);
@@ -518,6 +782,7 @@ function reapplyAllRemoteVoiceVolumes() {
 function resetState() {
   clearScreenShareNoticeTimer();
   clearTransientSpeaking();
+  stopConnectionStatsMonitor();
   stopMicActivityMonitor({ broadcast: false, identity: roomRef?.localParticipant.identity });
   useVoiceStore.setState({
     connected: false,
@@ -525,6 +790,7 @@ function resetState() {
     roomName: null,
     streamId: null,
     participants: [],
+    connectionStats: createDefaultConnectionStats(),
     isMuted: false,
     isDeafened: false,
     isCameraOn: false,
@@ -559,6 +825,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   streamId: null,
   participants: [],
   speakingSignals: {},
+  connectionStats: createDefaultConnectionStats(),
   isMuted: false,
   isDeafened: false,
   isCameraOn: false,
@@ -586,11 +853,15 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
 
     if (roomRef) {
       const old = roomRef;
+      stopConnectionStatsMonitor();
       roomRef = null;
       await destroyRoom(old);
     }
 
-    set({ connecting: true });
+    set({
+      connecting: true,
+      connectionStats: { ...createDefaultConnectionStats(), state: ConnectionState.Connecting },
+    });
     try {
       const { token, url } = await api.getVoiceToken(sid);
 
@@ -612,16 +883,24 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
       room.on(RoomEvent.ActiveSpeakersChanged, syncParticipants);
       room.on(RoomEvent.LocalTrackPublished, syncParticipants);
       room.on(RoomEvent.LocalTrackUnpublished, syncParticipants);
+      room.on(RoomEvent.ConnectionQualityChanged, (_quality, participant) => {
+        if (!participant.isLocal || roomRef !== room) return;
+        syncConnectionStatsState(room);
+      });
       room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
+        syncConnectionStatsState(room);
         if (state === ConnectionState.Disconnected && roomRef === room) {
           const currentSid = useVoiceStore.getState().streamId;
           if (currentSid) wsSend('voice_state_update', { stream_id: currentSid, action: 'leave' });
+          stopConnectionStatsMonitor();
           stopMicActivityMonitor({ broadcast: false, identity: room.localParticipant.identity });
           roomRef = null;
           detachAllRoomMedia(room);
           room.removeAllListeners();
           resetState();
+          return;
         }
+        void sampleConnectionStats(room);
       });
 
       room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, _pub: RemoteTrackPublication, participant: RemoteParticipant) => {
@@ -668,6 +947,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
         streamAttenuationEnabled: false,
         streamAttenuationStrength: 40,
       });
+      startConnectionStatsMonitor(room);
       wsSend('voice_state_update', { stream_id: sid, action: 'join' });
       playJoinSound();
     } catch (err) {
@@ -684,6 +964,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     const room = roomRef;
     const sid = get().streamId;
     if (!room) { resetState(); return; }
+    stopConnectionStatsMonitor();
     stopMicActivityMonitor({ broadcast: true, identity: room.localParticipant.identity });
     roomRef = null;
     if (sid) wsSend('voice_state_update', { stream_id: sid, action: 'leave' });

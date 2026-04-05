@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { ConnectionState, ConnectionQuality } from 'livekit-client';
 import SoundboardPanel from './SoundboardPanel';
 import { useAppSettingsStore } from '../../stores/appSettingsStore';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -34,6 +35,93 @@ function KrispWaveformIcon({ active }: { active: boolean }) {
   );
 }
 
+function qualityLabel(quality: ConnectionQuality) {
+  switch (quality) {
+    case ConnectionQuality.Excellent:
+      return 'Excellent';
+    case ConnectionQuality.Good:
+      return 'Good';
+    case ConnectionQuality.Poor:
+      return 'Poor';
+    case ConnectionQuality.Lost:
+      return 'Lost';
+    default:
+      return 'Unknown';
+  }
+}
+
+function ConnectionQualityIndicator() {
+  const connectionStats = useVoiceStore((s) => s.connectionStats);
+  const reconnecting =
+    connectionStats.state === ConnectionState.Reconnecting ||
+    connectionStats.state === ConnectionState.SignalReconnecting ||
+    connectionStats.state === ConnectionState.Connecting;
+  const toneClass = reconnecting
+    ? 'text-[#8e949c]'
+    : connectionStats.tone === 'good'
+      ? 'text-[#7bc78d]'
+      : connectionStats.tone === 'medium'
+        ? 'text-[#d4ba6e]'
+        : connectionStats.tone === 'bad'
+          ? 'text-[#d98181]'
+          : 'text-[#949ba4]';
+  const activeBars = reconnecting ? 4 : connectionStats.bars;
+  const hasDetailedStats =
+    connectionStats.pingMs != null ||
+    connectionStats.jitterMs != null ||
+    connectionStats.packetLossPct != null;
+
+  return (
+    <div className="relative group ml-auto">
+      <div
+        className={`h-[42px] w-[42px] rounded-xl border border-riftapp-border/40 bg-riftapp-surface/80 flex items-center justify-center transition-colors duration-150 group-hover:bg-riftapp-surface-hover ${toneClass}`}
+        aria-label="Voice connection quality"
+      >
+        <div className={`flex h-[16px] items-end gap-[2px] ${reconnecting ? 'animate-pulse-soft' : ''}`}>
+          {[0, 1, 2, 3].map((barIndex) => {
+            const heights = ['h-[5px]', 'h-[8px]', 'h-[11px]', 'h-[14px]'];
+            const active = activeBars > barIndex;
+            return (
+              <span
+                key={barIndex}
+                className={`block w-[3px] rounded-full transition-all duration-200 ${heights[barIndex]} ${active ? 'bg-current opacity-95' : 'bg-current opacity-20'}`}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      <div
+        className="pointer-events-none absolute bottom-full right-0 z-50 mb-2 w-max min-w-[180px] rounded-lg border border-black/50 bg-[#111214] px-3 py-2 text-[12px] leading-snug text-white shadow-[0_4px_16px_rgba(0,0,0,0.5)] opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+        role="tooltip"
+      >
+        <div className="font-semibold text-white">Connection Quality</div>
+        {reconnecting ? (
+          <div className="mt-1 text-[#b5bac1]">Status: Reconnecting…</div>
+        ) : connectionStats.state === ConnectionState.Connecting ? (
+          <div className="mt-1 text-[#b5bac1]">Status: Connecting…</div>
+        ) : connectionStats.state === ConnectionState.Disconnected ? (
+          <div className="mt-1 text-[#b5bac1]">Status: Disconnected</div>
+        ) : null}
+        {connectionStats.pingMs != null && <div className="mt-1 text-[#dbdee1]">Ping: {connectionStats.pingMs}ms</div>}
+        {connectionStats.jitterMs != null && <div className="text-[#dbdee1]">Jitter: {connectionStats.jitterMs}ms</div>}
+        {connectionStats.packetLossPct != null && <div className="text-[#dbdee1]">Packet Loss: {connectionStats.packetLossPct.toFixed(1)}%</div>}
+        {!hasDetailedStats && connectionStats.state === ConnectionState.Connected && (
+          <div className="mt-1 text-[#b5bac1]">
+            {connectionStats.source === 'livekit'
+              ? `Quality: ${qualityLabel(connectionStats.quality)}`
+              : 'Stats unavailable'}
+          </div>
+        )}
+        <div
+          className="absolute right-4 top-full h-0 w-0 border-x-[6px] border-x-transparent border-t-[6px] border-t-[#111214]"
+          aria-hidden
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function VoicePanel({
   connected,
   connecting,
@@ -57,9 +145,23 @@ export default function VoicePanel({
   const micLevel = useVoiceStore((s) => s.micLevel);
   const vadThreshold = useVoiceStore((s) => s.vadThreshold);
   const localSpeaking = useVoiceStore((s) => Boolean(s.participants[0]?.isSpeaking));
+  const connectionState = useVoiceStore((s) => s.connectionStats.state);
+  const controlsDisabled = !connected || connecting;
   const meterMax = 0.1;
   const meterPercent = Math.min(100, (micLevel / meterMax) * 100);
   const thresholdPercent = Math.min(100, (vadThreshold / meterMax) * 100);
+  const status = useMemo(() => {
+    if (connecting || connectionState === ConnectionState.Connecting) {
+      return { label: 'Connecting…', className: 'text-riftapp-warning' };
+    }
+    if (
+      connectionState === ConnectionState.Reconnecting ||
+      connectionState === ConnectionState.SignalReconnecting
+    ) {
+      return { label: 'Reconnecting…', className: 'text-riftapp-warning' };
+    }
+    return { label: 'Voice Connected', className: 'text-riftapp-success' };
+  }, [connecting, connectionState]);
 
   if (!connected && !connecting) return null;
 
@@ -67,22 +169,12 @@ export default function VoicePanel({
     <div className="border-t border-riftapp-border/40 bg-riftapp-panel/50 px-3 pt-3 pb-2.5 animate-fade-in">
       {/* Header row */}
       <div className="flex items-center justify-between mb-0.5">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${connecting ? 'bg-riftapp-warning animate-pulse-soft' : 'bg-riftapp-success'}`} />
-          <span className={`text-[13px] font-semibold ${connecting ? 'text-riftapp-warning' : 'text-riftapp-success'}`}>
-            {connecting ? 'Connecting…' : 'Voice Connected'}
+        <div className="flex items-center min-w-0">
+          <span className={`text-[13px] font-semibold ${status.className}`}>
+            {status.label}
           </span>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          {/* Connection quality */}
-          <div className="w-7 h-7 rounded-md flex items-center justify-center text-riftapp-text-dim" title="Connection quality">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-riftapp-success">
-              <rect x="2" y="16" width="3" height="6" rx="1" />
-              <rect x="7" y="12" width="3" height="10" rx="1" />
-              <rect x="12" y="8" width="3" height="14" rx="1" />
-              <rect x="17" y="4" width="3" height="18" rx="1" />
-            </svg>
-          </div>
           {/* Noise suppression (Discord / Krisp-style control) */}
           <div className="relative group">
             <button
@@ -195,88 +287,95 @@ export default function VoicePanel({
       )}
 
       {/* Big control buttons */}
-      {connected && (
-        <div className="flex gap-2 justify-center">
-          {/* Camera */}
-          <button
-            onClick={onToggleCamera}
-            title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
-            className={`w-[68px] h-[42px] rounded-xl flex items-center justify-center transition-all duration-150 active:scale-95 ${
-              isCameraOn
-                ? 'bg-riftapp-text text-riftapp-bg'
-                : 'bg-riftapp-surface hover:bg-riftapp-surface-hover text-riftapp-text-muted hover:text-riftapp-text'
-            }`}
-          >
-            {isCameraOn ? (
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M23 7l-7 5 7 5V7z" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-              </svg>
-            ) : (
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M16 16v1a2 2 0 01-2 2H3a2 2 0 01-2-2V7a2 2 0 012-2h2m5.66 0H14a2 2 0 012 2v3.34l1 1L23 7v10" />
-                <line x1="1" y1="1" x2="23" y2="23" />
-              </svg>
-            )}
-          </button>
-
-          {/* Screen Share */}
-          <button
-            onClick={onToggleScreenShare}
-            title={isScreenSharing ? 'Stop sharing' : 'Share your screen'}
-            disabled={screenShareRequesting}
-            className={`w-[68px] h-[42px] rounded-xl flex items-center justify-center transition-all duration-150 active:scale-95 ${
-              isScreenSharing
-                ? 'bg-riftapp-text text-riftapp-bg'
-                : 'bg-riftapp-surface hover:bg-riftapp-surface-hover text-riftapp-text-muted hover:text-riftapp-text'
-            } disabled:opacity-50`}
-          >
-            {screenShareRequesting ? (
-              <span className="w-5 h-5 border-2 border-current/30 border-t-current rounded-full animate-spin" />
-            ) : (
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                <line x1="8" y1="21" x2="16" y2="21" />
-                <line x1="12" y1="17" x2="12" y2="21" />
-                {isScreenSharing && <path d="M9 10l2 2 4-4" />}
-              </svg>
-            )}
-          </button>
-
-          {/* Activities (placeholder) */}
-          <button
-            title="Activities"
-            className="w-[68px] h-[42px] rounded-xl flex items-center justify-center bg-riftapp-surface hover:bg-riftapp-surface-hover text-riftapp-text-muted hover:text-riftapp-text transition-all duration-150 active:scale-95"
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="7" height="7" rx="1" />
-              <circle cx="17.5" cy="6.5" r="3.5" />
-              <path d="M8 18l4-4 3 3 4-6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-
-          {/* Soundboard */}
-          <div className="relative">
+      {(connected || connecting) && (
+        <div className="flex items-center gap-2">
+          <div className="flex gap-2">
+            {/* Camera */}
             <button
-              onClick={() => setSoundboardOpen((v) => !v)}
-              title="Soundboard"
+              onClick={onToggleCamera}
+              title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
+              disabled={controlsDisabled}
               className={`w-[68px] h-[42px] rounded-xl flex items-center justify-center transition-all duration-150 active:scale-95 ${
-                soundboardOpen
+                isCameraOn
                   ? 'bg-riftapp-text text-riftapp-bg'
                   : 'bg-riftapp-surface hover:bg-riftapp-surface-hover text-riftapp-text-muted hover:text-riftapp-text'
-              }`}
+              } disabled:opacity-50 disabled:hover:bg-riftapp-surface disabled:hover:text-riftapp-text-muted`}
+            >
+              {isCameraOn ? (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M23 7l-7 5 7 5V7z" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                </svg>
+              ) : (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M16 16v1a2 2 0 01-2 2H3a2 2 0 01-2-2V7a2 2 0 012-2h2m5.66 0H14a2 2 0 012 2v3.34l1 1L23 7v10" />
+                  <line x1="1" y1="1" x2="23" y2="23" />
+                </svg>
+              )}
+            </button>
+
+            {/* Screen Share */}
+            <button
+              onClick={onToggleScreenShare}
+              title={isScreenSharing ? 'Stop sharing' : 'Share your screen'}
+              disabled={controlsDisabled || screenShareRequesting}
+              className={`w-[68px] h-[42px] rounded-xl flex items-center justify-center transition-all duration-150 active:scale-95 ${
+                isScreenSharing
+                  ? 'bg-riftapp-text text-riftapp-bg'
+                  : 'bg-riftapp-surface hover:bg-riftapp-surface-hover text-riftapp-text-muted hover:text-riftapp-text'
+              } disabled:opacity-50`}
+            >
+              {screenShareRequesting ? (
+                <span className="w-5 h-5 border-2 border-current/30 border-t-current rounded-full animate-spin" />
+              ) : (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                  <line x1="8" y1="21" x2="16" y2="21" />
+                  <line x1="12" y1="17" x2="12" y2="21" />
+                  {isScreenSharing && <path d="M9 10l2 2 4-4" />}
+                </svg>
+              )}
+            </button>
+
+            {/* Activities (placeholder) */}
+            <button
+              title="Activities"
+              disabled={controlsDisabled}
+              className="w-[68px] h-[42px] rounded-xl flex items-center justify-center bg-riftapp-surface hover:bg-riftapp-surface-hover text-riftapp-text-muted hover:text-riftapp-text transition-all duration-150 active:scale-95 disabled:opacity-50 disabled:hover:bg-riftapp-surface disabled:hover:text-riftapp-text-muted"
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 18V5l12-2v13" />
-                <circle cx="6" cy="18" r="3" />
-                <circle cx="18" cy="16" r="3" />
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <circle cx="17.5" cy="6.5" r="3.5" />
+                <path d="M8 18l4-4 3 3 4-6" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
-            {soundboardOpen && hubId && (
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50">
-                <SoundboardPanel hubId={hubId} onClose={() => setSoundboardOpen(false)} />
-              </div>
-            )}
+
+            {/* Soundboard */}
+            <div className="relative">
+              <button
+                onClick={() => setSoundboardOpen((v) => !v)}
+                title="Soundboard"
+                disabled={controlsDisabled}
+                className={`w-[68px] h-[42px] rounded-xl flex items-center justify-center transition-all duration-150 active:scale-95 ${
+                  soundboardOpen
+                    ? 'bg-riftapp-text text-riftapp-bg'
+                    : 'bg-riftapp-surface hover:bg-riftapp-surface-hover text-riftapp-text-muted hover:text-riftapp-text'
+                } disabled:opacity-50 disabled:hover:bg-riftapp-surface disabled:hover:text-riftapp-text-muted`}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 18V5l12-2v13" />
+                  <circle cx="6" cy="18" r="3" />
+                  <circle cx="18" cy="16" r="3" />
+                </svg>
+              </button>
+              {soundboardOpen && hubId && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50">
+                  <SoundboardPanel hubId={hubId} onClose={() => setSoundboardOpen(false)} />
+                </div>
+              )}
+            </div>
           </div>
+
+          <ConnectionQualityIndicator />
         </div>
       )}
     </div>
