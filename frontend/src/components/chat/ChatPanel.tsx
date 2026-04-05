@@ -8,6 +8,17 @@ import { useWsSend } from '../../hooks/useWebSocket';
 import MessageInput from './MessageInput';
 import MessageItem from './MessageItem';
 import TypingIndicator from './TypingIndicator';
+
+function formatDateSeparator(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  if (date.toDateString() === now.toDateString()) return 'Today';
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+}
+
 export default function ChatPanel() {
   const messages = useMessageStore((s) => s.messages);
   const messagesLoading = useMessageStore((s) => s.messagesLoading);
@@ -390,15 +401,28 @@ export default function ChatPanel() {
           <div className="px-4 py-4">
             {displayMessages.map((msg, i) => {
               const prev = displayMessages[i - 1];
+              const msgDate = new Date(msg.created_at).toDateString();
+              const prevDate = prev ? new Date(prev.created_at).toDateString() : null;
+              const showDateSeparator = !prev || msgDate !== prevDate;
               const showHeader =
                 !prev ||
                 prev.author_id !== msg.author_id ||
-                new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime() > 300000;
+                new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime() > 300000 ||
+                showDateSeparator;
 
               const showUnreadDivider = i === firstUnreadIndex;
 
               return (
                 <div key={msg.id}>
+                  {showDateSeparator && (
+                    <div className="flex items-center gap-4 my-4 first:mt-0 px-2">
+                      <div className="flex-1 h-px bg-riftapp-border/40" />
+                      <span className="text-[11px] font-semibold text-riftapp-text-dim select-none flex-shrink-0">
+                        {formatDateSeparator(msg.created_at)}
+                      </span>
+                      <div className="flex-1 h-px bg-riftapp-border/40" />
+                    </div>
+                  )}
                   {showUnreadDivider && (
                     <div ref={unreadRef} className="flex items-center gap-2 my-2 px-2">
                       <div className="flex-1 h-px bg-riftapp-danger/60" />

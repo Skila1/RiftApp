@@ -65,6 +65,39 @@ function avatarBg(name: string): string {
 
 const INVITE_URL_RE = /https?:\/\/[^\s/]+\/invite\/([A-Za-z0-9]+)/g;
 
+function linkifyText(text: string, keyPrefix: number | string = 0): React.ReactNode[] {
+  const re = /(https?:\/\/[^\s<>]+|www\.[^\s<>]+)/gi;
+  const nodes: React.ReactNode[] = [];
+  let lastIdx = 0;
+  let match;
+  let k = 0;
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > lastIdx) {
+      nodes.push(text.slice(lastIdx, match.index));
+    }
+    let url = match[0].replace(/[.,;:!?]+$/, '');
+    const trailing = match[0].slice(url.length);
+    const href = url.startsWith('www.') ? `https://${url}` : url;
+    nodes.push(
+      <a
+        key={`${keyPrefix}-l${k++}`}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-[#00a8fc] hover:underline hover:text-[#00bfff]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {url}
+      </a>
+    );
+    if (trailing) nodes.push(trailing);
+    lastIdx = match.index + match[0].length;
+  }
+  if (nodes.length === 0) return [text];
+  if (lastIdx < text.length) nodes.push(text.slice(lastIdx));
+  return nodes;
+}
+
 function renderContent(content: string, usernames?: Set<string>, onMentionClick?: (username: string, rect: DOMRect) => void) {
   const parts: React.ReactNode[] = [];
   let remaining = content;
@@ -127,7 +160,7 @@ function renderInline(text: string, usernames?: Set<string>, onMentionClick?: (u
     if (usernames && usernames.size > 0) {
       return renderMentions(part, usernames, i, onMentionClick);
     }
-    return part;
+    return <>{linkifyText(part, i)}</>;
   });
 }
 
@@ -142,7 +175,7 @@ function renderMentions(text: string, usernames: Set<string>, parentKey: number,
     const name = m[1];
     if (!usernames.has(name.toLowerCase())) continue;
     if (m.index > lastIdx) {
-      nodes.push(text.slice(lastIdx, m.index));
+      nodes.push(...linkifyText(text.slice(lastIdx, m.index), `${parentKey}-t${k}`));
     }
     const capturedName = name;
     nodes.push(
@@ -162,8 +195,8 @@ function renderMentions(text: string, usernames: Set<string>, parentKey: number,
     );
     lastIdx = m.index + m[0].length;
   }
-  if (nodes.length === 0) return text;
-  if (lastIdx < text.length) nodes.push(text.slice(lastIdx));
+  if (nodes.length === 0) return <>{linkifyText(text, parentKey)}</>;
+  if (lastIdx < text.length) nodes.push(...linkifyText(text.slice(lastIdx), `${parentKey}-te`));
   return <>{nodes}</>;
 }
 
@@ -392,12 +425,7 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
         showHeader ? 'mt-[17px]' : ''
       }`}
     >
-      {/* Hover timestamp for compact messages */}
-      {!showHeader && (
-        <span className="absolute left-4 top-1 text-[10px] text-riftapp-text-dim opacity-0 group-hover:opacity-100 transition-opacity duration-100 select-none w-10 text-right">
-          {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </span>
-      )}
+
 
       {/* Hover action bar */}
       <div className="absolute -top-3 right-4 opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200 ease-out z-10">
