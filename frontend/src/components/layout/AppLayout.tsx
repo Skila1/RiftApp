@@ -12,6 +12,7 @@ import FullProfileModal from '../shared/FullProfileModal';
 import SelfProfilePopover from '../shared/SelfProfilePopover';
 import UserContextMenu from '../shared/UserContextMenu';
 import ScreenShareModal from '../voice/ScreenShareModal';
+import VoiceBottomBar from '../voice/VoiceBottomBar';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useHubStore } from '../../stores/hubStore';
 import { useStreamStore } from '../../stores/streamStore';
@@ -93,8 +94,14 @@ export default function AppLayout() {
 
   return (
     <div className="app-root h-screen min-h-0 flex overflow-hidden">
-      <HubSidebar />
-      {!activeHubId ? <DMSidebar /> : <StreamSidebar />}
+      {/* Left sidebar group: server list + channel list + bottom voice/user bar */}
+      <div className="flex-shrink-0 flex flex-col h-full">
+        <div className="flex flex-1 min-h-0">
+          <HubSidebar />
+          {!activeHubId ? <DMSidebar /> : <StreamSidebar />}
+        </div>
+        <VoiceBottomBar />
+      </div>
       {!activeHubId && !activeConversationId ? (
         <FriendsPage />
       ) : voiceUiOpen ? (

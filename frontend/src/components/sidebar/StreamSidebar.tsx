@@ -2,8 +2,6 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { useHubStore } from '../../stores/hubStore';
 import { useStreamStore } from '../../stores/streamStore';
 import { usePresenceStore } from '../../stores/presenceStore';
-import { useAuthStore } from '../../stores/auth';
-import { useSelfProfileStore } from '../../stores/selfProfileStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useVoiceChannelUiStore } from '../../stores/voiceChannelUiStore';
 import {
@@ -26,9 +24,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import HubSettingsModal from '../settings/HubSettingsModal';
-import VoicePanel from '../voice/VoicePanel';
-import { HeadphonesIcon, MicIcon, SettingsIcon, VoiceChannelIcon } from '../voice/VoiceIcons';
-import StatusDot, { statusLabel } from '../shared/StatusDot';
+import { VoiceChannelIcon } from '../voice/VoiceIcons';
 import CreateChannelModal from '../modals/CreateChannelModal';
 import CreateCategoryModal from '../modals/CreateCategoryModal';
 import EditChannelModal from '../modals/EditChannelModal';
@@ -38,9 +34,7 @@ import ChannelContextMenu, { type ChannelMenuTarget } from '../context-menus/Cha
 import { MenuOverlay } from '../context-menus/MenuOverlay';
 import type { User, Stream } from '../../types';
 import { api } from '../../api/client';
-import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { canModerateVoice, hasPermission, PermManageStreams } from '../../utils/permissions';
-import { useAppSettingsStore } from '../../stores/appSettingsStore';
 
 export default function StreamSidebar() {
   const streams = useStreamStore((s) => s.streams);
@@ -49,30 +43,17 @@ export default function StreamSidebar() {
   const activeStreamId = useStreamStore((s) => s.activeStreamId);
   const setActiveStream = useStreamStore((s) => s.setActiveStream);
   const hubs = useHubStore((s) => s.hubs);
-  const user = useAuthStore((s) => s.user);
   const hubPermissions = useHubStore((s) => (activeHubId ? s.hubPermissions[activeHubId] : undefined));
   const canManageChannels = hasPermission(hubPermissions, PermManageStreams);
   const canModerateUsers = canModerateVoice(hubPermissions);
-  const logout = useAuthStore((s) => s.logout);
   const streamUnreads = useStreamStore((s) => s.streamUnreads);
   const hubMembers = usePresenceStore((s) => s.hubMembers);
   const [showHubSettings, setShowHubSettings] = useState(false);
   const voiceStreamId = useVoiceStore((s) => s.streamId);
   const voiceConnected = useVoiceStore((s) => s.connected);
   const voiceConnecting = useVoiceStore((s) => s.connecting);
-  const voiceIsCameraOn = useVoiceStore((s) => s.isCameraOn);
-  const voiceIsScreenSharing = useVoiceStore((s) => s.isScreenSharing);
   const voiceJoin = useVoiceStore((s) => s.join);
-  const voiceLeave = useVoiceStore((s) => s.leave);
   const voiceMoveToStream = useVoiceStore((s) => s.moveToStream);
-  const voiceToggleCamera = useVoiceStore((s) => s.toggleCamera);
-  const voiceToggleScreenShare = useVoiceStore((s) => s.toggleScreenShare);
-  const voiceScreenShareRequesting = useVoiceStore((s) => s.screenShareRequesting);
-  const voiceScreenShareSurfaceLabel = useVoiceStore((s) => s.screenShareSurfaceLabel);
-  const voiceScreenShareNotice = useVoiceStore((s) => s.screenShareNotice);
-  const voiceDismissScreenShareNotice = useVoiceStore((s) => s.dismissScreenShareNotice);
-  const voiceNoiseSuppressionEnabled = useVoiceStore((s) => s.noiseSuppressionEnabled);
-  const voiceToggleNoiseSuppression = useVoiceStore((s) => s.toggleNoiseSuppression);
   const voiceMembers = useStreamStore((s) => s.voiceMembers);
   const voiceUiOpen = useVoiceChannelUiStore((s) => s.isOpen);
   const activeVoiceChannelId = useVoiceChannelUiStore((s) => s.activeChannelId);
@@ -175,11 +156,6 @@ export default function StreamSidebar() {
     [activeVoiceChannelId, closeVoiceView, openVoiceView, setActiveVoiceChannel, voiceConnected, voiceConnecting, voiceJoin, voiceMoveToStream, voiceStreamId, voiceUiOpen],
   );
 
-  const handleLeaveVoice = useCallback(() => {
-    closeVoiceView();
-    void voiceLeave();
-  }, [closeVoiceView, voiceLeave]);
-
   const clearVoiceDragState = useCallback(() => {
     setDraggedVoiceUser(null);
     setVoiceDropTargetId(null);
@@ -238,9 +214,6 @@ export default function StreamSidebar() {
             </p>
           </div>
         </div>
-        <div className="flex-shrink-0 border-t border-riftapp-border/40 bg-riftapp-surface/95 p-2">
-          <UserBar user={user} logout={logout} />
-        </div>
       </div>
     );
   }
@@ -258,7 +231,7 @@ export default function StreamSidebar() {
           className="flex-1 flex items-center justify-between px-4 h-full
             hover:bg-riftapp-surface-hover active:bg-riftapp-panel transition-colors duration-150 group min-w-0"
         >
-          <h2 className="font-semibold text-[15px] truncate">{activeHub?.name}</h2>
+          <h2 className="font-semibold text-[14px] truncate">{activeHub?.name}</h2>
           <svg
             width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"
             className="text-riftapp-text-dim group-hover:text-riftapp-text transition-colors flex-shrink-0 ml-1"
@@ -451,28 +424,6 @@ export default function StreamSidebar() {
         }}
         onContextMenu={handleChannelListContext}
       />
-
-      <div className="flex-shrink-0 border-t border-riftapp-border/40 bg-riftapp-surface/95 p-2 space-y-2">
-        <VoicePanel
-          connected={voiceConnected}
-          connecting={voiceConnecting}
-          isCameraOn={voiceIsCameraOn}
-          isScreenSharing={voiceIsScreenSharing}
-          screenShareRequesting={voiceScreenShareRequesting}
-          screenShareSurfaceLabel={voiceScreenShareSurfaceLabel}
-          screenShareNotice={voiceScreenShareNotice}
-          streamName={streams.find((s) => s.id === (voiceStreamId ?? activeVoiceChannelId))?.name || ''}
-          hubName={activeHub?.name || ''}
-          hubId={activeHubId}
-          noiseSuppressionEnabled={voiceNoiseSuppressionEnabled}
-          onLeave={handleLeaveVoice}
-          onToggleCamera={voiceToggleCamera}
-          onToggleScreenShare={voiceToggleScreenShare}
-          onToggleNoiseSuppression={voiceToggleNoiseSuppression}
-          onDismissScreenShareNotice={voiceDismissScreenShareNotice}
-        />
-        <UserBar user={user} logout={logout} />
-      </div>
 
       {showCreateChannel && activeHubId && (
         <CreateChannelModal
@@ -1273,97 +1224,5 @@ function SortableVoiceItem({
         </div>
       )}
     </div>
-  );
-}
-
-/* ───── User Bar ───── */
-
-function UserBar({ user }: { user: User | null; logout: () => void }) {
-  const liveStatus = usePresenceStore((s) => user ? s.presence[user.id] : undefined);
-  const openSelfProfile = useSelfProfileStore((s) => s.open);
-  const openSettings = useAppSettingsStore((s) => s.openSettings);
-  const voiceIsMuted = useVoiceStore((s) => s.isMuted);
-  const voiceIsDeafened = useVoiceStore((s) => s.isDeafened);
-  const voiceToggleMute = useVoiceStore((s) => s.toggleMute);
-  const voiceToggleDeafen = useVoiceStore((s) => s.toggleDeafen);
-
-  const handleAvatarClick = useCallback((e: React.MouseEvent) => {
-    openSelfProfile((e.currentTarget as HTMLElement).getBoundingClientRect());
-  }, [openSelfProfile]);
-
-  if (!user) return null;
-
-  const currentStatus = liveStatus ?? user.status;
-
-  return (
-    <>
-      <div className="h-[52px] flex items-center px-1.5 bg-riftapp-bg/40 flex-shrink-0">
-        {/* Avatar + name */}
-        <button
-          onClick={handleAvatarClick}
-          className="flex items-center gap-2 flex-1 min-w-0 px-1 py-1 rounded-md hover:bg-riftapp-panel/60 transition-all duration-150 group"
-          title="View Profile"
-        >
-          <div className="relative flex-shrink-0">
-            <div className="w-8 h-8 rounded-full bg-riftapp-accent flex items-center justify-center text-xs font-semibold text-white overflow-hidden">
-              {user.avatar_url ? (
-                <img src={publicAssetUrl(user.avatar_url)} alt="" className="w-full h-full object-cover" />
-              ) : (
-                user.display_name.slice(0, 2).toUpperCase()
-              )}
-            </div>
-            <StatusDot
-              userId={user.id}
-              fallbackStatus={user.status}
-              size="lg"
-              className="absolute -bottom-0.5 -right-0.5 border-[2.5px] border-riftapp-bg"
-            />
-          </div>
-          <div className="flex-1 min-w-0 text-left">
-            <p className="text-[13px] font-semibold truncate leading-tight">{user.display_name}</p>
-            <p className="text-[11px] text-riftapp-text-dim truncate leading-tight">{statusLabel(currentStatus)}</p>
-          </div>
-        </button>
-
-        {/* Control buttons */}
-        <div className="flex items-center flex-shrink-0">
-          {/* Mic */}
-          <button
-            onClick={voiceToggleMute}
-            title={voiceIsMuted ? 'Unmute' : 'Mute'}
-            className={`w-8 h-8 rounded-md flex items-center justify-center transition-all duration-150 active:scale-90 ${
-              voiceIsMuted
-                ? 'text-riftapp-danger hover:bg-riftapp-danger/10'
-                : 'text-riftapp-text-dim hover:text-riftapp-text hover:bg-riftapp-panel/60'
-            }`}
-          >
-            <MicIcon muted={voiceIsMuted} size={18} />
-          </button>
-
-          {/* Deafen */}
-          <button
-            onClick={voiceToggleDeafen}
-            title={voiceIsDeafened ? 'Undeafen' : 'Deafen'}
-            className={`w-8 h-8 rounded-md flex items-center justify-center transition-all duration-150 active:scale-90 ${
-              voiceIsDeafened
-                ? 'text-riftapp-danger hover:bg-riftapp-danger/10'
-                : 'text-riftapp-text-dim hover:text-riftapp-text hover:bg-riftapp-panel/60'
-            }`}
-          >
-            <HeadphonesIcon deafened={voiceIsDeafened} size={18} />
-          </button>
-
-          {/* Settings */}
-          <button
-            onClick={() => openSettings('profile')}
-            title="User Settings"
-            className="w-8 h-8 rounded-md flex items-center justify-center text-riftapp-text-dim
-              hover:text-riftapp-text hover:bg-riftapp-panel/60 transition-all duration-150 active:scale-90"
-          >
-            <SettingsIcon size={18} />
-          </button>
-        </div>
-      </div>
-    </>
   );
 }
