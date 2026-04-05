@@ -64,6 +64,11 @@ const DEFAULT_VOICE_SETTINGS: VoiceSettingsSnapshot = {
   noiseSuppressionEnabled: true,
 };
 
+type MicCaptureOptionsOverrides = {
+  includeDeviceId?: boolean;
+  includeVoiceIsolation?: boolean;
+};
+
 function emptyVoiceMediaDevices(): VoiceMediaDevices {
   return {
     audioinput: [],
@@ -256,16 +261,36 @@ interface VoiceStore {
 
 const CONNECT_TIMEOUT_MS = 15_000;
 
-function micAudioCaptureOptions(state: Pick<VoiceStore, 'inputDeviceId' | 'noiseSuppressionEnabled'>, processor?: MicNoiseGateProcessor): AudioCaptureOptions {
+function browserSupportsVoiceIsolation() {
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getSupportedConstraints) {
+    return false;
+  }
+
+  const supportedConstraints = navigator.mediaDevices.getSupportedConstraints() as MediaTrackSupportedConstraints & {
+    voiceIsolation?: boolean;
+  };
+
+  return supportedConstraints.voiceIsolation === true;
+}
+
+function micAudioCaptureOptions(
+  state: Pick<VoiceStore, 'inputDeviceId' | 'noiseSuppressionEnabled'>,
+  processor?: MicNoiseGateProcessor,
+  overrides?: MicCaptureOptionsOverrides,
+): AudioCaptureOptions {
   const base: AudioCaptureOptions = {
     echoCancellation: true,
     autoGainControl: true,
     noiseSuppression: state.noiseSuppressionEnabled,
-    deviceId: state.inputDeviceId ?? undefined,
+    deviceId: overrides?.includeDeviceId === false ? undefined : state.inputDeviceId ?? undefined,
     processor,
   };
 
-  if (!state.noiseSuppressionEnabled) {
+  if (
+    !state.noiseSuppressionEnabled ||
+    overrides?.includeVoiceIsolation === false ||
+    !browserSupportsVoiceIsolation()
+  ) {
     return base;
   }
 
@@ -645,22 +670,84 @@ function stopMicProcessing(options?: { broadcast?: boolean; identity?: string })
   micLastSpeakingBroadcastAt = 0;
 }
 
+function microphoneFailureNotice(err: unknown): ScreenShareNotice {
+  const name = err instanceof DOMException ? err.name : '';
+  const message = err instanceof Error ? err.message.toLowerCase() : '';
+
+  if (name === 'NotAllowedError' || message.includes('permission')) {
+    return { tone: 'error', message: 'Microphone permission denied. Connected muted.' };
+  }
+
+  if (
+    name === 'NotFoundError' ||
+    message.includes('not found') ||
+    message.includes('device')
+  ) {
+    return { tone: 'error', message: 'Microphone unavailable. Connected muted.' };
+  }
+
+  return { tone: 'error', message: 'Unable to start microphone. Connected muted.' };
+}
+
+async function disableMicrophoneAfterFailedAttempt(room: Room) {
+  stopMicProcessing({ broadcast: false, identity: room.localParticipant.identity });
+
+  try {
+    await room.localParticipant.setMicrophoneEnabled(false);
+  } catch {
+    /* ignore cleanup failures */
+  }
+}
+
 async function enableLocalMicrophone(room: Room) {
-  await room.localParticipant.setMicrophoneEnabled(
-    true,
-    micAudioCaptureOptions(useVoiceStore.getState(), createMicGate(room.localParticipant.identity)),
-  );
+  const currentState = useVoiceStore.getState();
+  const identity = room.localParticipant.identity;
+  const attempts: Array<{ label: string; options: AudioCaptureOptions }> = [
+    {
+      label: 'processed-selected-device',
+      options: micAudioCaptureOptions(currentState, createMicGate(identity)),
+    },
+    {
+      label: 'raw-selected-device',
+      options: micAudioCaptureOptions(currentState, undefined, { includeVoiceIsolation: false }),
+    },
+    {
+      label: 'raw-default-device',
+      options: micAudioCaptureOptions(currentState, undefined, {
+        includeDeviceId: false,
+        includeVoiceIsolation: false,
+      }),
+    },
+  ];
+
+  let lastError: unknown = null;
+
+  for (const attempt of attempts) {
+    try {
+      await room.localParticipant.setMicrophoneEnabled(true, attempt.options);
+      setScreenShareNotice(null);
+      return true;
+    } catch (err) {
+      lastError = err;
+      console.warn(`Failed to enable microphone via ${attempt.label}:`, err);
+      await disableMicrophoneAfterFailedAttempt(room);
+    }
+  }
+
+  console.error('Failed to enable microphone after fallbacks:', lastError);
+  setScreenShareNotice(microphoneFailureNotice(lastError));
+  return false;
 }
 
 async function restartLocalMicrophone(room: Room) {
   if (room.state !== ConnectionState.Connected || !room.localParticipant.isMicrophoneEnabled) {
     updateMicGateSettings();
-    return;
+    return room.localParticipant.isMicrophoneEnabled;
   }
 
   await room.localParticipant.setMicrophoneEnabled(false);
   stopMicProcessing({ broadcast: true, identity: room.localParticipant.identity });
-  await enableLocalMicrophone(room);
+  return enableLocalMicrophone(room);
 }
 
 async function applyOutputDevice(room: Room, outputDeviceId: string | null) {
@@ -983,6 +1070,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
       const room = new Room({
         adaptiveStream: true,
         dynacast: true,
+        webAudioMix: true,
         videoCaptureDefaults: cameraCaptureOptions(voiceState.cameraDeviceId),
         audioCaptureDefaults: micAudioCaptureOptions(voiceState),
       });
@@ -1036,8 +1124,9 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
       await applyOutputDevice(room, useVoiceStore.getState().outputDeviceId);
 
       const startMuted = pttModeRef;
+      let microphoneEnabled = !startMuted;
       if (!startMuted) {
-        await enableLocalMicrophone(room);
+        microphoneEnabled = await enableLocalMicrophone(room);
       }
 
       await get().refreshMediaDevices();
@@ -1047,7 +1136,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
         connecting: false,
         roomName: room.name,
         streamId: sid,
-        isMuted: startMuted,
+        isMuted: startMuted || !microphoneEnabled,
         isDeafened: false,
         isCameraOn: false,
         isScreenSharing: false,
@@ -1092,10 +1181,11 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     if (wasEnabled) {
       await room.localParticipant.setMicrophoneEnabled(false);
       stopMicProcessing({ broadcast: true, identity: room.localParticipant.identity });
+      set({ isMuted: true });
     } else {
-      await enableLocalMicrophone(room);
+      const microphoneEnabled = await enableLocalMicrophone(room);
+      set({ isMuted: !microphoneEnabled });
     }
-    set({ isMuted: wasEnabled });
     syncParticipants();
   },
 
@@ -1183,8 +1273,8 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
         set({ isMuted: true });
       }
     } else if (!wasMutedBeforeDeafen) {
-      await enableLocalMicrophone(room);
-      set({ isMuted: false });
+      const microphoneEnabled = await enableLocalMicrophone(room);
+      set({ isMuted: !microphoneEnabled });
     }
     set({ isDeafened: next });
     syncParticipants();
@@ -1200,8 +1290,11 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
         stopMicProcessing({ broadcast: true, identity: room.localParticipant.identity });
         set({ isMuted: true, pttActive: false, pttMode: next });
       } else {
-        void enableLocalMicrophone(room);
-        set({ isMuted: false, pttMode: next });
+        set({ pttMode: next });
+        void enableLocalMicrophone(room).then((microphoneEnabled) => {
+          set({ isMuted: !microphoneEnabled });
+          syncParticipants();
+        });
       }
       syncParticipants();
     } else {
@@ -1281,7 +1374,8 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
 
     const room = roomRef;
     if (room?.state === ConnectionState.Connected && room.localParticipant.isMicrophoneEnabled) {
-      await restartLocalMicrophone(room);
+      const microphoneEnabled = await restartLocalMicrophone(room);
+      set({ isMuted: !microphoneEnabled });
       syncParticipants();
     }
   },
@@ -1357,7 +1451,8 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
 
     const room = roomRef;
     if (room?.state === ConnectionState.Connected && room.localParticipant.isMicrophoneEnabled) {
-      await restartLocalMicrophone(room);
+      const microphoneEnabled = await restartLocalMicrophone(room);
+      set({ isMuted: !microphoneEnabled });
       syncParticipants();
     }
   },
