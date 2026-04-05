@@ -52,6 +52,8 @@ export default function StreamSidebar() {
 
   // Header context menu
   const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number } | null>(null);
+  // Blank-space context menu (right-click on empty area in channel list)
+  const [blankSpaceMenu, setBlankSpaceMenu] = useState<{ x: number; y: number } | null>(null);
   const [createChannelFor, setCreateChannelFor] = useState<string | undefined>(undefined);
   const [showCreateChannel, setShowCreateChannel] = useState(false);
   const [showCreateCategory, setShowCreateCategory] = useState(false);
@@ -155,6 +157,14 @@ export default function StreamSidebar() {
   const handleHeaderContext = (e: React.MouseEvent) => {
     e.preventDefault();
     setHeaderMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleChannelListContext = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Only trigger on empty space — not on channel items, buttons, or labels
+    const target = e.target as HTMLElement;
+    if (target.closest('button, a, [data-channel-item]')) return;
+    e.preventDefault();
+    setBlankSpaceMenu({ x: e.clientX, y: e.clientY });
   };
 
   if (!activeHubId) {
@@ -321,8 +331,62 @@ export default function StreamSidebar() {
         />
       )}
 
+      {/* Blank-space context menu */}
+      {blankSpaceMenu && (
+        <MenuOverlay x={blankSpaceMenu.x} y={blankSpaceMenu.y} onClose={() => setBlankSpaceMenu(null)}>
+          <div className="bg-[#111214] rounded-md border border-black/40 shadow-modal py-1.5 min-w-[200px] text-[13px] text-[#dbdee1] select-none">
+            <button
+              type="button"
+              onClick={() => {
+                setCreateChannelInitialType(undefined);
+                setCreateChannelFor(undefined);
+                setShowCreateChannel(true);
+                setBlankSpaceMenu(null);
+              }}
+              className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#949ba4] shrink-0">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Create Channel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateCategory(true);
+                setBlankSpaceMenu(null);
+              }}
+              className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#949ba4] shrink-0">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+              </svg>
+              Create Category
+            </button>
+            <div className="mx-2 my-1 h-px bg-white/[0.06]" />
+            <button
+              type="button"
+              onClick={() => {
+                setShowInviteModal(true);
+                setBlankSpaceMenu(null);
+              }}
+              className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#949ba4] shrink-0">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="8.5" cy="7" r="4" />
+                <line x1="20" y1="8" x2="20" y2="14" />
+                <line x1="23" y1="11" x2="17" y2="11" />
+              </svg>
+              Invite to Server
+            </button>
+          </div>
+        </MenuOverlay>
+      )}
+
       {/* Channels list */}
-      <div className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
+      <div className="flex-1 overflow-y-auto py-3 px-2 space-y-1" onContextMenu={handleChannelListContext}>
         {/* Uncategorized channels */}
         {uncategorized.length > 0 && (
           <ChannelGroup
@@ -336,6 +400,7 @@ export default function StreamSidebar() {
             hubMembers={hubMembers}
             onChannelContext={(stream, e) => {
               e.preventDefault();
+              e.stopPropagation();
               setChannelMenu({ stream, x: e.clientX, y: e.clientY });
             }}
           />
@@ -381,6 +446,7 @@ export default function StreamSidebar() {
                   hubMembers={hubMembers}
                   onChannelContext={(stream, e) => {
                     e.preventDefault();
+                    e.stopPropagation();
                     setChannelMenu({ stream, x: e.clientX, y: e.clientY });
                   }}
                 />
