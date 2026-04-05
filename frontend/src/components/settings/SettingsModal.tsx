@@ -8,6 +8,7 @@ import { api } from '../../api/client';
 import { statusColor, statusLabel } from '../shared/StatusDot';
 import { useVoiceStore } from '../../stores/voiceStore';
 import type { NoiseSuppressionMode } from '../../stores/voiceStore';
+import { publicAssetUrl } from '../../utils/publicAssetUrl';
 
 type Tab = 'profile' | 'account' | 'voice';
 
@@ -290,7 +291,7 @@ function ProfileTab({
         >
           {(avatarPreview || avatarUrl) && !imgError ? (
             <img
-              src={avatarPreview || avatarUrl}
+              src={avatarPreview || publicAssetUrl(avatarUrl)}
               alt="avatar"
               className="w-16 h-16 rounded-full object-cover"
               onError={() => setImgError(true)}

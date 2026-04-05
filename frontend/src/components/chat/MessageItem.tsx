@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo, memo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import type { Message } from '../../types';
 import { useMessageStore } from '../../stores/messageStore';
 import { useDMStore } from '../../stores/dmStore';
@@ -8,6 +9,7 @@ import { useProfilePopoverStore } from '../../stores/profilePopoverStore';
 import { useUserContextMenuStore } from '../../stores/userContextMenuStore';
 import InviteEmbed from '../shared/InviteEmbed';
 import MessageContextMenu from '../context-menus/MessageContextMenu';
+import { publicAssetUrl } from '../../utils/publicAssetUrl';
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '🔥', '👀', '😮', '🙏'];
 
@@ -452,7 +454,7 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
             className="w-10 h-10 rounded-full flex-shrink-0 mt-0.5 cursor-pointer hover:opacity-80 transition-opacity overflow-hidden"
           >
             {author?.avatar_url ? (
-              <img src={author.avatar_url} alt={authorName} className="w-full h-full object-cover" />
+              <img src={publicAssetUrl(author.avatar_url)} alt={authorName} className="w-full h-full object-cover" />
             ) : (
               <div className={`w-full h-full ${bg} flex items-center justify-center text-xs font-bold text-white`}>
                 {authorName.slice(0, 2).toUpperCase()}
@@ -502,6 +504,42 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
 
 export default MessageItem;
 
+function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Image preview"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/88 p-4 sm:p-6"
+      onClick={onClose}
+    >
+      <img
+        src={src}
+        alt={alt}
+        className="max-w-[min(96vw,calc(100vw-2rem))] max-h-[min(96dvh,96vh)] w-auto h-auto object-contain rounded-lg shadow-2xl select-none"
+        draggable={false}
+      />
+    </div>,
+    document.body,
+  );
+}
+
 function ReactionPills({
   reactions,
   currentUserId,
@@ -535,28 +573,42 @@ function ReactionPills({
 }
 
 function Attachments({ message }: { message: Message }) {
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
+
   if (!message.attachments || message.attachments.length === 0) return null;
 
   return (
-    <div className="mt-1 flex flex-col gap-1.5">
+    <>
+      {lightbox ? <ImageLightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} /> : null}
+      <div className="mt-1 flex flex-col gap-1.5">
       {message.attachments.map((att) => {
         const isImage = att.content_type.startsWith('image/');
         if (isImage) {
+          const displayUrl = publicAssetUrl(att.url);
           return (
-            <a key={att.id} href={att.url} target="_blank" rel="noopener noreferrer" className="block group/img">
-              <img
-                src={att.url}
-                alt={att.filename}
-                className="max-w-[400px] max-h-[300px] rounded-xl border border-riftapp-border/40 object-contain
-                  hover:shadow-elevation-md transition-shadow duration-200 cursor-pointer"
-              />
-            </a>
+            <div key={att.id} className="inline-block max-w-full w-fit">
+              <button
+                type="button"
+                onClick={() => setLightbox({ src: displayUrl, alt: att.filename })}
+                className="block rounded-xl border border-riftapp-border/40 overflow-hidden bg-riftapp-bg/40
+                  hover:shadow-elevation-md transition-shadow duration-200 cursor-zoom-in text-left"
+              >
+                <img
+                  src={displayUrl}
+                  alt={att.filename}
+                  loading="lazy"
+                  decoding="async"
+                  className="block max-w-[min(100%,520px)] max-h-[min(85vh,520px)] w-auto h-auto object-contain"
+                />
+              </button>
+            </div>
           );
         }
+        const fileUrl = publicAssetUrl(att.url);
         return (
           <a
             key={att.id}
-            href={att.url}
+            href={fileUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-3 bg-riftapp-surface border border-riftapp-border/50 rounded-xl px-4 py-3
@@ -581,6 +633,7 @@ function Attachments({ message }: { message: Message }) {
           </a>
         );
       })}
-    </div>
+      </div>
+    </>
   );
 }

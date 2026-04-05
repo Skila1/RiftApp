@@ -4,6 +4,7 @@ import { useAuthStore } from '../../stores/auth';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useWsSend } from '../../hooks/useWebSocket';
 import StatusDot, { statusLabel } from './StatusDot';
+import { publicAssetUrl } from '../../utils/publicAssetUrl';
 
 const CARD_WIDTH = 300;
 const CARD_GAP = 8;
@@ -140,7 +141,7 @@ export default function SelfProfilePopover() {
               style={{ backgroundColor: accent }}
             >
               {user.avatar_url ? (
-                <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
+                <img src={publicAssetUrl(user.avatar_url)} alt="" className="w-full h-full object-cover" />
               ) : (
                 <span className="text-xl font-bold text-white">
                   {(user.display_name || user.username).slice(0, 2).toUpperCase()}

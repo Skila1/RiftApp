@@ -105,6 +105,7 @@ export default function ChatPanel() {
   }, [saveScrollPos]);
 
   const hasScrolledToUnread = useRef(false);
+  const prevHubIdForScrollRef = useRef<string | null>(null);
 
   // Channel/server switch — useLayoutEffect so refs update BEFORE paint
   useLayoutEffect(() => {
@@ -112,6 +113,10 @@ export default function ChatPanel() {
     // runs React has already committed the new content, so el.scrollTop may be
     // reset to 0.  The handleScroll callback continuously writes to the cache,
     // so the departing channel's position is already saved there.
+
+    const prevHub = prevHubIdForScrollRef.current;
+    const hubChanged = !isDMMode && prevHub !== null && prevHub !== activeHubId;
+    prevHubIdForScrollRef.current = activeHubId;
 
     const newKey = isDMMode ? `dm-${activeConversationId}` : `${activeHubId}-${activeStreamId}`;
     channelKeyRef.current = newKey;
@@ -121,6 +126,14 @@ export default function ChatPanel() {
     hasScrolledToUnread.current = false;
     prevMessageCountRef.current = 0;
     setShowNewMsgBanner(false);
+
+    if (hubChanged && activeStreamId) {
+      delete scrollCacheRef.current[newKey];
+      pendingRestoreRef.current = null;
+      needsScrollToBottomRef.current = true;
+      wasNearBottomRef.current = true;
+      return;
+    }
 
     if (saved) {
       pendingRestoreRef.current = saved;
@@ -133,36 +146,69 @@ export default function ChatPanel() {
     }
   }, [activeStreamId, activeConversationId, activeHubId, isDMMode]);
 
-  // After tab sleep, reconcile the open channel with the server (cache avoids routine refetch).
-  // Browsers often reset scrollTop while hidden; our scroll layout effect does not re-run when only
-  // `isLoading` toggles and message count is unchanged, so we explicitly pin to the bottom after refetch.
+  // After tab sleep, refresh messages but restore scroll (hub switch uses layout effect to jump to bottom).
   useEffect(() => {
     const onVis = () => {
-      if (document.visibilityState !== 'visible' || isDMMode || !activeStreamId) return;
-      const streamId = activeStreamId;
-      const hubId = activeHubId;
-      void useMessageStore
-        .getState()
-        .loadMessages(streamId, { force: true })
-        .finally(() => {
-          queueMicrotask(() => {
-            requestAnimationFrame(() => {
-              if (useStreamStore.getState().activeStreamId !== streamId) return;
-              const el = scrollContainerRef.current;
-              const bottomEl = bottomRef.current;
-              if (!el || !bottomEl) return;
-              bottomEl.scrollIntoView({ behavior: 'auto' });
-              setShowNewMsgBanner(false);
-              wasNearBottomRef.current = true;
-              const key = `${hubId}-${streamId}`;
-              scrollCacheRef.current[key] = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight };
-            });
+      const el = scrollContainerRef.current;
+      const snapKey = channelKeyRef.current;
+      if (document.visibilityState === 'hidden') {
+        if (el && snapKey) {
+          scrollCacheRef.current[snapKey] = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight };
+        }
+        return;
+      }
+      if (document.visibilityState !== 'visible') return;
+
+      const savedSnap =
+        snapKey && scrollCacheRef.current[snapKey]
+          ? { ...scrollCacheRef.current[snapKey] }
+          : null;
+
+      const restore = () => {
+        queueMicrotask(() => {
+          requestAnimationFrame(() => {
+            const container = scrollContainerRef.current;
+            if (!container) return;
+            if (savedSnap) {
+              const delta = container.scrollHeight - savedSnap.scrollHeight;
+              container.scrollTop = Math.max(0, savedSnap.scrollTop + delta);
+              const dist = container.scrollHeight - container.scrollTop - container.clientHeight;
+              wasNearBottomRef.current = dist < NEAR_BOTTOM_THRESHOLD;
+            }
+            const k = channelKeyRef.current;
+            if (k) {
+              scrollCacheRef.current[k] = {
+                scrollTop: container.scrollTop,
+                scrollHeight: container.scrollHeight,
+              };
+            }
           });
         });
+      };
+
+      if (isDMMode && activeConversationId) {
+        const convId = activeConversationId;
+        void useDMStore.getState().loadDMMessages(convId).finally(() => {
+          if (useDMStore.getState().activeConversationId !== convId) return;
+          restore();
+        });
+        return;
+      }
+
+      if (!isDMMode && activeStreamId) {
+        const streamId = activeStreamId;
+        void useMessageStore
+          .getState()
+          .loadMessages(streamId, { force: true })
+          .finally(() => {
+            if (useStreamStore.getState().activeStreamId !== streamId) return;
+            restore();
+          });
+      }
     };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
-  }, [activeStreamId, activeHubId, isDMMode]);
+  }, [activeStreamId, activeHubId, isDMMode, activeConversationId]);
 
   // Main scroll positioning — fires after channel-switch layoutEffect (declaration order)
   useLayoutEffect(() => {

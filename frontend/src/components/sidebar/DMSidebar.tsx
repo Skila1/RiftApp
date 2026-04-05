@@ -4,6 +4,7 @@ import { usePresenceStore } from '../../stores/presenceStore';
 import { useFriendStore } from '../../stores/friendStore';
 import { api } from '../../api/client';
 import type { User } from '../../types';
+import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import StatusDot from '../shared/StatusDot';
 
 export default function DMSidebar() {
@@ -218,7 +219,7 @@ export default function DMSidebar() {
                     <div className="w-8 h-8 rounded-full bg-riftapp-accent/20 flex items-center justify-center text-xs font-semibold text-riftapp-accent">
                       {conv.recipient.avatar_url ? (
                         <img
-                          src={conv.recipient.avatar_url}
+                          src={publicAssetUrl(conv.recipient.avatar_url)}
                           alt=""
                           className="w-8 h-8 rounded-full object-cover"
                         />

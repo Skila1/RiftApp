@@ -68,6 +68,8 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 	if s3Target, err := url.Parse(deps.Config.S3Endpoint); err == nil {
 		s3Proxy := httputil.NewSingleHostReverseProxy(s3Target)
 		r.Handle("/s3/*", http.StripPrefix("/s3", s3Proxy))
+		// Same proxy under /api/s3 so the SPA can load media via the API path (same-origin as /api).
+		r.Handle("/api/s3/*", http.StripPrefix("/api/s3", s3Proxy))
 	}
 
 	r.Get("/api/health", func(w http.ResponseWriter, r *http.Request) {
@@ -100,6 +102,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 		r.Get("/api/hubs", hubH.List)
 		r.Get("/api/hubs/{hubID}", hubH.Get)
 		r.Patch("/api/hubs/{hubID}", hubH.Update)
+		r.Delete("/api/hubs/{hubID}", hubH.Delete)
 		r.Post("/api/hubs/{hubID}/join", hubH.Join)
 		r.Post("/api/hubs/{hubID}/leave", hubH.Leave)
 		r.Get("/api/hubs/{hubID}/members", hubH.Members)

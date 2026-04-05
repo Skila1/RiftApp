@@ -7,6 +7,7 @@ import { useDMStore } from '../../stores/dmStore';
 import { api } from '../../api/client';
 import StatusDot, { statusLabel } from './StatusDot';
 import type { RelationshipType } from '../../types';
+import { publicAssetUrl } from '../../utils/publicAssetUrl';
 
 const CARD_WIDTH = 300;
 const CARD_GAP = 8;
@@ -149,7 +150,7 @@ export default function UserProfilePopover() {
               style={{ backgroundColor: accent }}
             >
               {user.avatar_url ? (
-                <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
+                <img src={publicAssetUrl(user.avatar_url)} alt="" className="w-full h-full object-cover" />
               ) : (
                 <span className="text-xl font-bold text-white">
                   {(user.display_name || user.username).slice(0, 2).toUpperCase()}

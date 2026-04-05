@@ -58,6 +58,16 @@ func (h *HubHandler) List(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, hubs)
 }
 
+func (h *HubHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	hubID := chi.URLParam(r, "hubID")
+	userID := middleware.GetUserID(r.Context())
+	if err := h.svc.Delete(r.Context(), hubID, userID); err != nil {
+		writeAppError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *HubHandler) Update(w http.ResponseWriter, r *http.Request) {
 	hubID := chi.URLParam(r, "hubID")
 	userID := middleware.GetUserID(r.Context())

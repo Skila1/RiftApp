@@ -18,6 +18,7 @@ import ChannelContextMenu, { type ChannelMenuTarget } from '../context-menus/Cha
 import { MenuOverlay } from '../context-menus/MenuOverlay';
 import { api } from '../../api/client';
 import type { User, Stream } from '../../types';
+import { publicAssetUrl } from '../../utils/publicAssetUrl';
 
 export default function StreamSidebar() {
   const streams = useStreamStore((s) => s.streams);
@@ -599,7 +600,7 @@ function ChannelGroup({
                     <div key={p.identity} className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-riftapp-surface-hover/50 transition-colors group">
                       <div className={`w-6 h-6 rounded-full flex-shrink-0 overflow-hidden ${p.isSpeaking ? 'ring-2 ring-riftapp-success ring-offset-1 ring-offset-riftapp-surface' : ''}`}>
                         {avatarUrl ? (
-                          <img src={avatarUrl} alt={name} className="w-full h-full object-cover" />
+                          <img src={publicAssetUrl(avatarUrl)} alt={name} className="w-full h-full object-cover" />
                         ) : (
                           <div className={`w-full h-full flex items-center justify-center text-[9px] font-semibold ${
                             p.isSpeaking ? 'bg-riftapp-success text-white' : 'bg-riftapp-panel text-riftapp-text-muted'
@@ -637,7 +638,7 @@ function ChannelGroup({
                     <div key={uid} className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-riftapp-surface-hover/50 transition-colors">
                       <div className="w-6 h-6 rounded-full flex-shrink-0 overflow-hidden">
                         {avatarUrl ? (
-                          <img src={avatarUrl} alt={name} className="w-full h-full object-cover" />
+                          <img src={publicAssetUrl(avatarUrl)} alt={name} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-[9px] font-semibold bg-riftapp-panel text-riftapp-text-muted">
                             {name.slice(0, 2).toUpperCase()}
@@ -695,7 +696,7 @@ function UserBar({ user }: { user: User | null; logout: () => void }) {
           <div className="relative flex-shrink-0">
             <div className="w-8 h-8 rounded-full bg-riftapp-accent flex items-center justify-center text-xs font-semibold text-white overflow-hidden">
               {user.avatar_url ? (
-                <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
+                <img src={publicAssetUrl(user.avatar_url)} alt="" className="w-full h-full object-cover" />
               ) : (
                 user.display_name.slice(0, 2).toUpperCase()
               )}

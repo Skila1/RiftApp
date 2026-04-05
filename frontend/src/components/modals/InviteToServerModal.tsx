@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useFriendStore } from '../../stores/friendStore';
 import { api } from '../../api/client';
 import type { Hub, Friendship } from '../../types';
+import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import StatusDot from '../shared/StatusDot';
 
 interface Props {
@@ -145,7 +146,7 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
                 <div className="relative flex-shrink-0">
                   <div className="w-9 h-9 rounded-full bg-riftapp-panel flex items-center justify-center overflow-hidden">
                     {u.avatar_url ? (
-                      <img src={u.avatar_url} alt="" className="w-full h-full object-cover" />
+                      <img src={publicAssetUrl(u.avatar_url)} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <span className="text-xs font-semibold text-riftapp-text-muted">
                         {u.display_name.slice(0, 2).toUpperCase()}

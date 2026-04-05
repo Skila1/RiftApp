@@ -112,6 +112,7 @@ class ApiClient {
   getHubMembers(hubId: string) { return this.request<User[]>(`/hubs/${hubId}/members`); }
   joinHub(hubId: string) { return this.request(`/hubs/${hubId}/join`, { method: 'POST' }); }
   updateHub(hubId: string, data: { name?: string; icon_url?: string }) { return this.request<Hub>(`/hubs/${hubId}`, { method: 'PATCH', body: JSON.stringify(data) }); }
+  deleteHub(hubId: string) { return this.request<void>(`/hubs/${hubId}`, { method: 'DELETE' }); }
   createInvite(hubId: string, options?: { max_uses?: number; expires_in?: number }) { return this.request<HubInvite>(`/hubs/${hubId}/invite`, { method: 'POST', body: JSON.stringify(options ?? {}) }); }
   joinInvite(code: string) { return this.request<{ status: string; hub: Hub }>(`/invites/${code}`, { method: 'POST' }); }
   getInviteInfo(code: string) { return this.request<{ code: string; hub_id: string; hub_name: string; hub_icon_url?: string; member_count: number; expires_at?: string }>(`/invites/${code}`); }

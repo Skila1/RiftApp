@@ -154,6 +154,18 @@ func (r *HubRepo) RemoveMember(ctx context.Context, hubID, userID string) error 
 	return err
 }
 
+// Delete removes the hub row; FK ON DELETE CASCADE cleans members, streams, messages, invites, etc.
+func (r *HubRepo) Delete(ctx context.Context, hubID string) error {
+	tag, err := r.db.Exec(ctx, `DELETE FROM hubs WHERE id = $1`, hubID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
 func (r *HubRepo) GetOwnerID(ctx context.Context, hubID string) (string, error) {
 	var ownerID string
 	err := r.db.QueryRow(ctx, `SELECT owner_id FROM hubs WHERE id = $1`, hubID).Scan(&ownerID)

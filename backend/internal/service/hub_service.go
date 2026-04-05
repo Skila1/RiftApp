@@ -2,10 +2,12 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/riftapp-cloud/riftapp/internal/apperror"
 	"github.com/riftapp-cloud/riftapp/internal/models"
@@ -129,6 +131,23 @@ func (s *HubService) Leave(ctx context.Context, hubID, userID string) error {
 	}
 	if err := s.hubRepo.RemoveMember(ctx, hubID, userID); err != nil {
 		return apperror.Internal("failed to leave", err)
+	}
+	return nil
+}
+
+func (s *HubService) Delete(ctx context.Context, hubID, userID string) error {
+	ownerID, err := s.hubRepo.GetOwnerID(ctx, hubID)
+	if err != nil {
+		return apperror.NotFound("hub not found")
+	}
+	if ownerID != userID {
+		return apperror.Forbidden("only the hub owner can delete this server")
+	}
+	if err := s.hubRepo.Delete(ctx, hubID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return apperror.NotFound("hub not found")
+		}
+		return apperror.Internal("failed to delete hub", err)
 	}
 	return nil
 }

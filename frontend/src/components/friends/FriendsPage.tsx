@@ -5,6 +5,7 @@ import { useDMStore } from '../../stores/dmStore';
 import { api } from '../../api/client';
 import StatusDot, { statusLabel } from '../shared/StatusDot';
 import type { User, Friendship, Block } from '../../types';
+import { publicAssetUrl } from '../../utils/publicAssetUrl';
 
 type Tab = 'online' | 'all' | 'pending' | 'blocked' | 'add';
 
@@ -189,7 +190,7 @@ function BlockedList({ blocked }: { blocked: Block[] }) {
             <div key={user.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-riftapp-surface/60 transition-colors group">
               <div className="w-9 h-9 rounded-full bg-riftapp-panel flex items-center justify-center text-sm font-semibold text-riftapp-text-dim flex-shrink-0 overflow-hidden">
                 {user.avatar_url ? (
-                  <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
+                  <img src={publicAssetUrl(user.avatar_url)} alt="" className="w-full h-full object-cover" />
                 ) : (
                   user.display_name.slice(0, 2).toUpperCase()
                 )}
@@ -292,7 +293,7 @@ function AddFriend() {
           <div className="relative flex-shrink-0">
             <div className="w-10 h-10 rounded-full bg-riftapp-accent/20 flex items-center justify-center text-sm font-semibold text-riftapp-accent overflow-hidden">
               {foundUser.avatar_url ? (
-                <img src={foundUser.avatar_url} alt="" className="w-full h-full object-cover" />
+                <img src={publicAssetUrl(foundUser.avatar_url)} alt="" className="w-full h-full object-cover" />
               ) : (
                 foundUser.display_name.slice(0, 2).toUpperCase()
               )}
@@ -322,7 +323,7 @@ function FriendRow({ user, subtitle, children }: { user: User; subtitle?: string
       <div className="relative flex-shrink-0">
         <div className="w-9 h-9 rounded-full bg-riftapp-accent/20 flex items-center justify-center text-sm font-semibold text-riftapp-accent overflow-hidden">
           {user.avatar_url ? (
-            <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
+            <img src={publicAssetUrl(user.avatar_url)} alt="" className="w-full h-full object-cover" />
           ) : (
             user.display_name.slice(0, 2).toUpperCase()
           )}

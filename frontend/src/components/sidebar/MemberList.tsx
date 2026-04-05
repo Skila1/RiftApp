@@ -4,6 +4,7 @@ import { useProfilePopoverStore } from '../../stores/profilePopoverStore';
 import { useUserContextMenuStore } from '../../stores/userContextMenuStore';
 import StatusDot, { statusLabel } from '../shared/StatusDot';
 import type { User } from '../../types';
+import { publicAssetUrl } from '../../utils/publicAssetUrl';
 
 function UserRow({ user }: { user: User }) {
   const status = usePresenceStore((s) => s.presence[user.id]) ?? user.status;
@@ -24,7 +25,7 @@ function UserRow({ user }: { user: User }) {
     <div onClick={handleClick} onContextMenu={handleContextMenu} className={`flex items-center gap-2.5 px-2 py-1.5 rounded-md hover:bg-riftapp-surface/60 transition-colors group cursor-pointer ${isOffline ? 'opacity-40' : ''}`}>
       <div className="relative flex-shrink-0">
         {user.avatar_url ? (
-          <img src={user.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover" />
+          <img src={publicAssetUrl(user.avatar_url)} alt="" className="w-8 h-8 rounded-full object-cover" />
         ) : (
           <div className="w-8 h-8 rounded-full bg-riftapp-accent/20 flex items-center justify-center">
             <span className="text-xs font-semibold text-riftapp-accent uppercase">

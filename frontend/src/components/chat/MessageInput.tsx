@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { useMessageStore } from '../../stores/messageStore';
 import { useReplyDraftStore } from '../../stores/replyDraftStore';
 import { usePresenceStore } from '../../stores/presenceStore';
@@ -374,7 +375,7 @@ export default function MessageInput({
                 }`}
               >
                 {user.avatar_url ? (
-                  <img src={user.avatar_url} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
+                  <img src={publicAssetUrl(user.avatar_url)} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
                 ) : (
                   <div className="w-6 h-6 rounded-full bg-riftapp-surface flex items-center justify-center text-[10px] font-bold text-riftapp-text-dim flex-shrink-0">
                     {(user.display_name || user.username).slice(0, 2).toUpperCase()}

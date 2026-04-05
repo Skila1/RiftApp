@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, memo } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useHubStore } from '../../stores/hubStore';
 import { useDMStore } from '../../stores/dmStore';
@@ -7,6 +8,7 @@ import { useAuthStore } from '../../stores/auth';
 import { api } from '../../api/client';
 import StatusDot from '../shared/StatusDot';
 import type { Hub, User } from '../../types';
+import { publicAssetUrl } from '../../utils/publicAssetUrl';
 
 type Tab = 'overview' | 'members';
 
@@ -90,7 +92,7 @@ function HubSettingsModal({ hub, onClose }: { hub: Hub; onClose: () => void }) {
 
           <div className="flex-1 overflow-y-auto p-6 overscroll-contain [contain:content]">
             {activeTab === 'overview' ? (
-              <OverviewTab hub={hub} isOwner={isOwner} />
+              <OverviewTab hub={hub} isOwner={isOwner} onCloseSettings={onClose} />
             ) : (
               <MembersTab hub={hub} />
             )}
@@ -104,13 +106,35 @@ function HubSettingsModal({ hub, onClose }: { hub: Hub; onClose: () => void }) {
 
 /* ───────── Overview Tab ───────── */
 
-function OverviewTab({ hub, isOwner }: { hub: Hub; isOwner: boolean }) {
+function OverviewTab({ hub, isOwner, onCloseSettings }: { hub: Hub; isOwner: boolean; onCloseSettings: () => void }) {
+  const navigate = useNavigate();
   const updateHub = useHubStore((s) => s.updateHub);
+  const deleteHub = useHubStore((s) => s.deleteHub);
   const [name, setName] = useState(hub.name);
   const [iconUrl, setIconUrl] = useState(hub.icon_url ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirmName, setDeleteConfirmName] = useState('');
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const deleteNameMatches = deleteConfirmName.trim() === hub.name.trim() && hub.name.trim().length > 0;
+
+  useEffect(() => {
+    if (!deleteOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setDeleteOpen(false);
+        setDeleteConfirmName('');
+        setDeleteError(null);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [deleteOpen]);
 
   // Track if the hub prop changed (e.g. after save)
   useEffect(() => {
@@ -140,8 +164,28 @@ function OverviewTab({ hub, isOwner }: { hub: Hub; isOwner: boolean }) {
     }
   };
 
+  const handleDeleteServer = async () => {
+    if (!deleteNameMatches) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      await deleteHub(hub.id);
+      onCloseSettings();
+      const nextHubId = useHubStore.getState().activeHubId;
+      if (nextHubId) {
+        navigate(`/hubs/${nextHubId}`, { replace: true });
+      } else {
+        navigate('/', { replace: true });
+      }
+    } catch (err: unknown) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete server');
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
       {/* Hub icon preview */}
       <div className="flex items-center gap-4">
         <div className="relative">
@@ -236,6 +280,94 @@ function OverviewTab({ hub, isOwner }: { hub: Hub; isOwner: boolean }) {
 
       {/* Invite Section */}
       <InviteSection hubId={hub.id} isOwner={isOwner} />
+
+      {isOwner && (
+        <div className="rounded-xl border border-riftapp-danger/30 bg-riftapp-danger/5 p-4">
+          <h3 className="text-sm font-semibold text-riftapp-danger mb-1">Danger zone</h3>
+          <p className="text-xs text-riftapp-text-dim mb-3">
+            Deleting this server removes all channels, messages, and invites permanently. This cannot be undone.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setDeleteOpen(true);
+              setDeleteConfirmName('');
+              setDeleteError(null);
+            }}
+            className="btn-danger"
+          >
+            Delete Server
+          </button>
+        </div>
+      )}
+
+      {deleteOpen &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4"
+            role="presentation"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setDeleteOpen(false);
+                setDeleteConfirmName('');
+                setDeleteError(null);
+              }
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-server-title"
+              className="w-full max-w-md rounded-xl border border-riftapp-border/60 bg-riftapp-surface shadow-modal p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 id="delete-server-title" className="text-lg font-bold text-riftapp-text mb-2">
+                Delete &apos;{hub.name}&apos;?
+              </h3>
+              <p className="text-sm text-riftapp-text-muted mb-4 leading-relaxed">
+                This will permanently delete the server for everyone. Type the server name below to confirm.
+              </p>
+              <label className="block mb-4">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-riftapp-text-dim">
+                  Server name
+                </span>
+                <input
+                  value={deleteConfirmName}
+                  onChange={(e) => setDeleteConfirmName(e.target.value)}
+                  autoComplete="off"
+                  placeholder={hub.name}
+                  className="settings-input mt-1 w-full"
+                />
+              </label>
+              {deleteError && (
+                <p className="text-sm text-riftapp-danger bg-riftapp-danger/10 rounded-md px-3 py-2 mb-4">{deleteError}</p>
+              )}
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  disabled={deleteBusy}
+                  onClick={() => {
+                    setDeleteOpen(false);
+                    setDeleteConfirmName('');
+                    setDeleteError(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn-danger"
+                  disabled={!deleteNameMatches || deleteBusy}
+                  onClick={() => void handleDeleteServer()}
+                >
+                  {deleteBusy ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
@@ -382,7 +514,7 @@ function MembersTab({ hub }: { hub: Hub }) {
           {/* Avatar */}
           {member.avatar_url ? (
             <img
-              src={member.avatar_url}
+              src={publicAssetUrl(member.avatar_url)}
               alt=""
               className="w-9 h-9 rounded-full object-cover flex-shrink-0"
             />

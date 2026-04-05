@@ -6,6 +6,7 @@ import { useVoiceStore, type VoiceParticipant } from '../../stores/voiceStore';
 import type { User } from '../../types';
 import VoiceParticipantContextMenu from './VoiceParticipantContextMenu';
 import VoiceStreamContextMenu from './VoiceStreamContextMenu';
+import { publicAssetUrl } from '../../utils/publicAssetUrl';
 
 type LayoutSlotKind = 'screen' | 'camera';
 
@@ -27,6 +28,15 @@ function buildLayoutSlots(
     out.push({ id: `${p.identity}__camera`, kind: 'camera', participant: p });
   }
   return out;
+}
+
+/** Discord-style grid: equal tiles in ~square cells (e.g. 2×2 for 4), not one ultra-tall row. */
+function voiceGridDimensions(slotCount: number): { cols: number; rows: number } {
+  if (slotCount <= 1) return { cols: 1, rows: 1 };
+  if (slotCount === 2) return { cols: 2, rows: 1 };
+  const cols = Math.ceil(Math.sqrt(slotCount));
+  const rows = Math.ceil(slotCount / cols);
+  return { cols, rows };
 }
 
 type TileMenuState = {
@@ -162,16 +172,11 @@ export default function VoiceView() {
   );
 
   const gridStyle = useMemo((): CSSProperties => {
-    if (layoutSlots.length <= 1) {
-      return {
-        gridTemplateColumns: '1fr',
-        gridTemplateRows: '1fr',
-        gridAutoRows: '1fr',
-      };
-    }
+    const n = layoutSlots.length;
+    const { cols, rows } = voiceGridDimensions(n);
     return {
-      gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))',
-      gridAutoRows: '1fr',
+      gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+      gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
     };
   }, [layoutSlots.length]);
 
@@ -579,7 +584,7 @@ function StageSlotContent({ slot, hubMembers }: { slot: LayoutSlot; hubMembers: 
     <div className="relative w-full h-full flex items-center justify-center" style={{ backgroundColor: getAvatarColor(p.identity) }}>
       <div className="rounded-full overflow-hidden w-28 h-28 ring-4 ring-black/30">
         {avatarUrl ? (
-          <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+          <img src={publicAssetUrl(avatarUrl)} alt={displayName} className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full bg-black/30 flex items-center justify-center text-3xl font-bold text-white">{displayName.slice(0, 2).toUpperCase()}</div>
         )}
@@ -726,12 +731,16 @@ function SlotTile({
         <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
       ) : !isScreen ? (
         <div className="w-full h-full flex items-center justify-center min-h-[inherit]">
-          <div className={`rounded-full overflow-hidden ${filmstrip ? 'w-14 h-14' : 'w-20 h-20'}`}>
+          <div
+            className={`rounded-full overflow-hidden ring-4 ring-black/25 ${
+              filmstrip ? 'w-14 h-14 ring-0' : fill ? 'w-[min(28vmin,160px)] h-[min(28vmin,160px)]' : 'w-20 h-20'
+            }`}
+          >
             {avatarUrl ? (
-              <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+              <img src={publicAssetUrl(avatarUrl)} alt={displayName} className="w-full h-full object-cover" />
             ) : (
               <div className="w-full h-full bg-black/35 flex items-center justify-center">
-                <span className={`font-bold text-white ${filmstrip ? 'text-lg' : 'text-2xl'}`}>{displayName.slice(0, 2).toUpperCase()}</span>
+                <span className={`font-bold text-white ${filmstrip ? 'text-lg' : fill ? 'text-3xl' : 'text-2xl'}`}>{displayName.slice(0, 2).toUpperCase()}</span>
               </div>
             )}
           </div>
