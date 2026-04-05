@@ -360,7 +360,7 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
                 <button
                   key={emoji}
                   onClick={() => handleToggle(emoji)}
-                  className="w-9 h-9 flex items-center justify-center text-lg rounded-lg hover:bg-riftapp-surface-hover hover:scale-110 active:scale-95 transition-all duration-150"
+                  className="w-10 h-10 flex items-center justify-center text-2xl leading-none rounded-lg hover:bg-riftapp-surface-hover active:bg-riftapp-panel transition-colors duration-150"
                 >
                   {emoji}
                 </button>
