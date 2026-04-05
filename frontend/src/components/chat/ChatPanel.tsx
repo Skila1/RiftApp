@@ -325,7 +325,7 @@ export default function ChatPanel() {
               <ol className="text-left space-y-3 text-sm">
                 <li className="flex items-start gap-3">
                   <span className="w-6 h-6 rounded-full bg-riftapp-accent/20 text-riftapp-accent text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
-                  <span className="text-riftapp-text-muted"><span className="text-riftapp-text font-medium">Create a Hub</span> — click <span className="font-bold text-riftapp-success">+</span> in the left rail to start a new community.</span>
+                  <span className="text-riftapp-text-muted"><span className="text-riftapp-text font-medium">Create a Hub</span> — click <span className="font-bold text-riftapp-success">+</span> in the left rail, then choose <span className="text-riftapp-text font-medium">Create a Server</span>.</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="w-6 h-6 rounded-full bg-riftapp-accent/20 text-riftapp-accent text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
@@ -333,7 +333,7 @@ export default function ChatPanel() {
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="w-6 h-6 rounded-full bg-riftapp-accent/20 text-riftapp-accent text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
-                  <span className="text-riftapp-text-muted"><span className="text-riftapp-text font-medium">Join an existing hub</span> — click the arrow icon in the left rail and enter an invite code.</span>
+                  <span className="text-riftapp-text-muted"><span className="text-riftapp-text font-medium">Join an existing hub</span> — click <span className="font-bold text-riftapp-success">+</span> in the left rail, then choose <span className="text-riftapp-text font-medium">Join a Server</span> and paste your invite.</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="w-6 h-6 rounded-full bg-riftapp-accent/20 text-riftapp-accent text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">4</span>

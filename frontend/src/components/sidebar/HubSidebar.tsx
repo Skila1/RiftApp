@@ -7,6 +7,7 @@ import { useMessageStore } from '../../stores/messageStore';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { api } from '../../api/client';
 import type { Hub, HubNotificationSettings, Notification } from '../../types';
+import AddServerModal from '../modals/AddServerModal';
 import InviteToServerModal from '../modals/InviteToServerModal';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 
@@ -65,25 +66,12 @@ function formatMentionBadge(n: number) {
   return n > 9 ? '9+' : String(n);
 }
 
-function extractInviteCode(input: string): string {
-  const trimmed = input.trim();
-  const urlMatch = trimmed.match(/\/invite\/([A-Za-z0-9]+)\/?$/);
-  if (urlMatch) return urlMatch[1];
-  return trimmed;
-}
-
 export default function HubSidebar() {
   const hubs = useHubStore((s) => s.hubs);
   const activeHubId = useHubStore((s) => s.activeHubId);
   const setActiveHub = useHubStore((s) => s.setActiveHub);
-  const createHub = useHubStore((s) => s.createHub);
   const loadConversations = useDMStore((s) => s.loadConversations);
-  const [showCreate, setShowCreate] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [showJoin, setShowJoin] = useState(false);
-  const [joinCode, setJoinCode] = useState('');
-  const [joinError, setJoinError] = useState<string | null>(null);
-  const [joining, setJoining] = useState(false);
+  const [showAddServer, setShowAddServer] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [dmHovered, setDmHovered] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; hub: Hub } | null>(null);
@@ -136,33 +124,6 @@ export default function HubSidebar() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [contextMenu]);
-
-  const handleCreate = async () => {
-    if (!newName.trim()) return;
-    const hub = await createHub(newName.trim());
-    setNewName('');
-    setShowCreate(false);
-    await setActiveHub(hub.id);
-  };
-
-  const handleJoin = async () => {
-    const raw = joinCode.trim();
-    if (!raw) return;
-    const code = extractInviteCode(raw);
-    setJoinError(null);
-    setJoining(true);
-    try {
-      const result = await api.joinInvite(code);
-      setJoinCode('');
-      setShowJoin(false);
-      await useHubStore.getState().loadHubs();
-      await setActiveHub(result.hub.id);
-    } catch (err: unknown) {
-      setJoinError(err instanceof Error ? err.message : 'Invalid invite link');
-    } finally {
-      setJoining(false);
-    }
-  };
 
   const handleDMClick = () => {
     // Enter DM mode: clear hub selection, load conversations
@@ -288,12 +249,12 @@ export default function HubSidebar() {
       {/* Separator */}
       <div className="w-8 h-0.5 rounded-full bg-riftapp-border my-0.5" />
 
-      {/* Create hub button */}
+      {/* Add server button */}
       <div className="relative flex items-center justify-center w-full">
         <button
-          onClick={() => { setShowCreate(!showCreate); setShowJoin(false); }}
+          onClick={() => setShowAddServer(true)}
           className="hub-icon rounded-3xl bg-riftapp-surface text-riftapp-success hover:rounded-2xl hover:bg-riftapp-success hover:text-white transition-all duration-300"
-          title="Create Hub"
+          title="Add a server"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
             <line x1="12" y1="5" x2="12" y2="19" />
@@ -301,106 +262,6 @@ export default function HubSidebar() {
           </svg>
         </button>
       </div>
-
-      {/* Join hub button */}
-      <div className="relative flex items-center justify-center w-full">
-        <button
-          onClick={() => { setShowJoin(!showJoin); setShowCreate(false); }}
-          className="hub-icon rounded-3xl bg-riftapp-surface text-riftapp-accent hover:rounded-2xl hover:bg-riftapp-accent hover:text-white transition-all duration-300"
-          title="Join a hub with an invite code"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-            <polyline points="10 17 15 12 10 7" />
-            <line x1="15" y1="12" x2="3" y2="12" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Create Hub Modal (portal) */}
-      {showCreate && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => { setShowCreate(false); setNewName(''); }}>
-          <div
-            className="bg-riftapp-surface border border-riftapp-border/60 rounded-xl p-6 w-[420px] shadow-modal animate-scale-in"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-xl font-bold mb-1">Create a Hub</h2>
-            <p className="text-sm text-riftapp-text-dim mb-5">Give your new hub a name to get started.</p>
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-riftapp-text-dim mb-1.5 block">Hub Name</label>
-            <input
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleCreate();
-                if (e.key === 'Escape') { setShowCreate(false); setNewName(''); }
-              }}
-              placeholder="My Awesome Hub"
-              className="settings-input text-base"
-              autoFocus
-              maxLength={100}
-            />
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => { setShowCreate(false); setNewName(''); }}
-                className="btn-ghost px-5 py-2.5"
-              >
-                Cancel
-              </button>
-              <button onClick={handleCreate} disabled={!newName.trim()} className="btn-primary px-5 py-2.5">
-                Create Hub
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* Join Hub Modal (portal) */}
-      {showJoin && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => { setShowJoin(false); setJoinCode(''); setJoinError(null); }}>
-          <div
-            className="bg-riftapp-surface border border-riftapp-border/60 rounded-xl p-6 w-[420px] shadow-modal animate-scale-in"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-xl font-bold mb-1">Join a Hub</h2>
-            <p className="text-sm text-riftapp-text-dim mb-5">Enter an invite link or code to join an existing hub.</p>
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-riftapp-text-dim mb-1.5 block">Invite Link</label>
-            <input
-              type="text"
-              value={joinCode}
-              onChange={(e) => { setJoinCode(e.target.value); setJoinError(null); }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleJoin();
-                if (e.key === 'Escape') { setShowJoin(false); setJoinCode(''); setJoinError(null); }
-              }}
-              placeholder="https://riftapp.io/invite/abc123"
-              className="settings-input text-base"
-              autoFocus
-              maxLength={256}
-            />
-            {joinError && (
-              <p className="text-sm text-riftapp-danger mt-2">{joinError}</p>
-            )}
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => { setShowJoin(false); setJoinCode(''); setJoinError(null); }}
-                className="btn-ghost px-5 py-2.5"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleJoin}
-                disabled={!joinCode.trim() || joining}
-                className="btn-primary px-5 py-2.5"
-              >
-                {joining ? 'Joining...' : 'Join Hub'}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
 
       {/* Hub right-click context menu (Discord-style) */}
       {contextMenu && createPortal(
@@ -685,6 +546,8 @@ export default function HubSidebar() {
         </div>,
         document.body
       )}
+
+      {showAddServer && <AddServerModal onClose={() => setShowAddServer(false)} />}
 
       {/* Invite to Server modal */}
       {inviteHub && <InviteToServerModal hub={inviteHub} onClose={() => setInviteHub(null)} />}
