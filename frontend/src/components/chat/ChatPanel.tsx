@@ -72,30 +72,71 @@ export default function ChatPanel() {
   const NEAR_BOTTOM_THRESHOLD = 50;
   const [showNewMsgBanner, setShowNewMsgBanner] = useState(false);
 
+  // --- Per-channel scroll position cache ---
+  const scrollCacheRef = useRef<Record<string, { scrollTop: number; scrollHeight: number }>>({}); 
+  const pendingRestoreRef = useRef<{ scrollTop: number; scrollHeight: number } | null>(null);
+
+  const channelKey = isDMMode
+    ? `dm-${activeConversationId}`
+    : `${activeHubId}-${activeStreamId}`;
+  const channelKeyRef = useRef(channelKey);
+
+  const saveScrollPos = useCallback(() => {
+    const el = scrollContainerRef.current;
+    const key = channelKeyRef.current;
+    if (!el || !key) return;
+    scrollCacheRef.current[key] = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight };
+  }, []);
+
   const handleScroll = useCallback(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
     const distBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     wasNearBottomRef.current = distBottom < NEAR_BOTTOM_THRESHOLD;
     if (wasNearBottomRef.current) setShowNewMsgBanner(false);
-  }, []);
+    saveScrollPos();
+  }, [saveScrollPos]);
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'auto' });
     setShowNewMsgBanner(false);
     wasNearBottomRef.current = true;
-  }, []);
+    saveScrollPos();
+  }, [saveScrollPos]);
 
   const hasScrolledToUnread = useRef(false);
   const justSwitchedRef = useRef(false);
 
   useEffect(() => {
+    // Save departing channel scroll position
+    const prevKey = channelKeyRef.current;
+    const el = scrollContainerRef.current;
+    if (prevKey && el) {
+      scrollCacheRef.current[prevKey] = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight };
+    }
+
+    // Prepare for the new channel
+    const newKey = isDMMode ? `dm-${activeConversationId}` : `${activeHubId}-${activeStreamId}`;
+    channelKeyRef.current = newKey;
+
+    const saved = scrollCacheRef.current[newKey];
+
     hasScrolledToUnread.current = false;
     prevMessageCountRef.current = 0;
-    wasNearBottomRef.current = true;
-    justSwitchedRef.current = true;
     setShowNewMsgBanner(false);
-  }, [activeStreamId, activeConversationId]);
+
+    if (saved) {
+      // We have a saved position — schedule restore after render
+      pendingRestoreRef.current = saved;
+      wasNearBottomRef.current = false; // prevent auto-scroll from overriding
+      justSwitchedRef.current = false;
+    } else {
+      // Never visited — will scroll to bottom
+      pendingRestoreRef.current = null;
+      wasNearBottomRef.current = true;
+      justSwitchedRef.current = true;
+    }
+  }, [activeStreamId, activeConversationId, activeHubId, isDMMode]);
 
   // After tab sleep, reconcile the open channel with the server (cache avoids routine refetch).
   useEffect(() => {
@@ -113,7 +154,21 @@ export default function ChatPanel() {
     const el = scrollContainerRef.current;
     const bottomEl = bottomRef.current;
 
-    // Scroll to unread divider on first load of a channel
+    // 1) Restore saved scroll position after messages render
+    if (pendingRestoreRef.current && el) {
+      const saved = pendingRestoreRef.current;
+      pendingRestoreRef.current = null;
+      // Adjust for height difference (messages may differ from when we saved)
+      const delta = el.scrollHeight - saved.scrollHeight;
+      el.scrollTop = saved.scrollTop + delta;
+      const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+      wasNearBottomRef.current = dist < NEAR_BOTTOM_THRESHOLD;
+      prevMessageCountRef.current = displayMessages.length;
+      hasScrolledToUnread.current = true; // skip unread scroll — position restored
+      return;
+    }
+
+    // 2) Scroll to unread divider on first load of a channel (no saved pos)
     if (!hasScrolledToUnread.current && unreadRef.current) {
       unreadRef.current.scrollIntoView({ behavior: 'auto', block: 'center' });
       hasScrolledToUnread.current = true;
@@ -138,13 +193,15 @@ export default function ChatPanel() {
       return;
     }
 
-    // Messages grew — auto-scroll only if switching channel or already at bottom
+    // 3) New messages arrived
     if (justSwitchedRef.current || wasNearBottomRef.current) {
+      // First visit (no saved pos) or user was at bottom — jump to bottom
       justSwitchedRef.current = false;
       bottomEl.scrollIntoView({ behavior: 'auto' });
       wasNearBottomRef.current = true;
       setShowNewMsgBanner(false);
     } else {
+      // User scrolled up — don't move, show banner
       justSwitchedRef.current = false;
       setShowNewMsgBanner(true);
     }
