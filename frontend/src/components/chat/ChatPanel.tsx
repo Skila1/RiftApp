@@ -250,6 +250,7 @@ export default function ChatPanel() {
                     message={msg}
                     showHeader={showHeader}
                     isOwn={msg.author_id === user?.id}
+                    isDM={isDMMode}
                   />
                 </div>
               );

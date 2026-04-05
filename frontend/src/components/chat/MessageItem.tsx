@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useMemo, memo, useCallback } from 'react';
 import type { Message } from '../../types';
 import { useMessageStore } from '../../stores/messageStore';
+import { useDMStore } from '../../stores/dmStore';
 import { useAuthStore } from '../../stores/auth';
+import { usePresenceStore } from '../../stores/presenceStore';
 import { useProfilePopoverStore } from '../../stores/profilePopoverStore';
 import { useUserContextMenuStore } from '../../stores/userContextMenuStore';
 import InviteEmbed from '../shared/InviteEmbed';
@@ -125,14 +127,28 @@ interface MessageItemProps {
   message: Message;
   showHeader: boolean;
   isOwn: boolean;
+  /** Direct messages: only the author may delete. Hub streams: author or hub owner/admin. */
+  isDM?: boolean;
 }
 
-const MessageItem = memo(function MessageItem({ message, showHeader, isOwn }: MessageItemProps) {
+function roleCanModerateMessages(role: string | undefined): boolean {
+  return role === 'owner' || role === 'admin';
+}
+
+const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM = false }: MessageItemProps) {
   const author = message.author;
   const authorName = author?.display_name || 'Unknown';
   const toggleReaction = useMessageStore((s) => s.toggleReaction);
+  const deleteStreamMessage = useMessageStore((s) => s.deleteMessage);
+  const deleteDMMessage = useDMStore((s) => s.deleteDMMessage);
   const currentUserId = useAuthStore((s) => s.user?.id);
+  const myHubRole = usePresenceStore((s) => (currentUserId ? s.hubMembers[currentUserId]?.role : undefined));
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const canDelete =
+    isOwn ||
+    (!isDM && !!message.stream_id && roleCanModerateMessages(myHubRole));
 
   const color = useMemo(() => nameColor(authorName), [authorName]);
   const bg = useMemo(() => avatarBg(authorName), [authorName]);
@@ -173,6 +189,23 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn }: Me
     setPickerOpen(false);
   };
 
+  const handleDelete = useCallback(async () => {
+    if (!canDelete || deleting) return;
+    if (!window.confirm('Delete this message? This cannot be undone.')) return;
+    setDeleting(true);
+    try {
+      if (isDM) {
+        await deleteDMMessage(message.id);
+      } else {
+        await deleteStreamMessage(message.id);
+      }
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'Could not delete message');
+    } finally {
+      setDeleting(false);
+    }
+  }, [canDelete, deleting, isDM, message.id, deleteDMMessage, deleteStreamMessage]);
+
   const reactions = message.reactions || [];
 
   return (
@@ -203,6 +236,22 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn }: Me
               <line x1="15" y1="9" x2="15.01" y2="9" />
             </svg>
           </button>
+          {canDelete && (
+            <button
+              type="button"
+              onClick={() => void handleDelete()}
+              disabled={deleting}
+              className="px-2 py-1 text-riftapp-text-dim hover:text-riftapp-danger hover:bg-riftapp-danger/10 rounded-lg transition-colors duration-100 disabled:opacity-50 border-l border-riftapp-border/40"
+              title={isOwn ? 'Delete message' : 'Delete message (moderator)'}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                <line x1="10" y1="11" x2="10" y2="17" />
+                <line x1="14" y1="11" x2="14" y2="17" />
+              </svg>
+            </button>
+          )}
         </div>
         {/* Emoji picker */}
         {pickerOpen && (

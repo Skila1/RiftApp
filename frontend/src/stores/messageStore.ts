@@ -12,6 +12,7 @@ interface MessageState {
   addMessage: (message: Message) => void;
   updateMessage: (message: Message) => void;
   removeMessage: (messageId: string) => void;
+  deleteMessage: (messageId: string) => Promise<void>;
   clearMessages: () => void;
 
   toggleReaction: (messageId: string, emoji: string) => Promise<void>;
@@ -66,6 +67,11 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     set((s) => ({
       messages: s.messages.filter((m) => m.id !== messageId),
     }));
+  },
+
+  deleteMessage: async (messageId) => {
+    await api.deleteMessage(messageId);
+    get().removeMessage(messageId);
   },
 
   clearMessages: () => set({ messages: [], messagesLoading: false }),

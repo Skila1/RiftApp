@@ -95,8 +95,12 @@ export function useWebSocket() {
             useMessageStore.getState().updateMessage(evt.d as Message);
             break;
           case 'message_delete': {
-            const { id } = evt.d as { id: string };
-            useMessageStore.getState().removeMessage(id);
+            const d = evt.d as { id: string; stream_id?: string; conversation_id?: string };
+            if (d.stream_id) {
+              useMessageStore.getState().removeMessage(d.id);
+            } else {
+              useDMStore.getState().removeDMMessage(d.id);
+            }
             break;
           }
           case 'typing_start': {

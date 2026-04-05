@@ -9,6 +9,8 @@ export interface User {
   last_seen?: string;
   created_at: string;
   updated_at: string;
+  /** Set when user is loaded from `GET /hubs/:id/members` (owner | admin | member). */
+  role?: string;
 }
 
 export interface Hub {

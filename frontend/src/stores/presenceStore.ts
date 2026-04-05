@@ -45,7 +45,7 @@ export const usePresenceStore = create<PresenceState>((set) => ({
       }
       set((s) => ({
         presence: { ...s.presence, ...entries },
-        hubMembers: { ...s.hubMembers, ...memberMap },
+        hubMembers: memberMap,
       }));
     } catch {}
   },
