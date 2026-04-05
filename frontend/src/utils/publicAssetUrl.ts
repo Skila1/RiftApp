@@ -1,20 +1,22 @@
-// Rewrites S3/MinIO storage URLs to load through the API proxy.
-// Only rewrites paths starting with /s3/ and URLs from known internal hosts
-// (minio, localhost). External URLs (Discord CDN, etc.) pass through unchanged.
+// Rewrites S3/MinIO storage URLs so they load through the /api proxy.
+// Relative /s3/{bucket}/… paths are ALWAYS rewritten to /api/s3/… because the
+// browser never has direct access to MinIO — requests must go through the
+// Cloudflare Pages function (or Vite/nginx proxy in dev).
+// External URLs (Discord CDN, etc.) pass through unchanged.
 export function publicAssetUrl(raw: string | undefined | null): string {
   if (raw == null || raw === '') return '';
   const trimmed = raw.trim();
   if (!trimmed) return '';
 
-  const apiBase = import.meta.env.VITE_API_URL || '/api';
-  const proxyMode = apiBase.startsWith('/');
-
   try {
     // ── Relative paths ──────────────────────────────────────────────
     if (trimmed.startsWith('/')) {
+      // Already namespaced under the API proxy
       if (trimmed.startsWith('/api/s3/')) return trimmed;
+
+      // Relative S3 path → always route through API proxy
       if (trimmed.startsWith('/s3/') && looksLikeS3Path(trimmed)) {
-        return proxyMode ? `/api${trimmed}` : trimmed;
+        return `/api${trimmed}`;
       }
       return trimmed;
     }
@@ -23,16 +25,23 @@ export function publicAssetUrl(raw: string | undefined | null): string {
     const u = new URL(trimmed);
     const pathAndQuery = `${u.pathname}${u.search}${u.hash}`;
 
+    // Absolute URL whose path is an S3 object → strip host, proxy via /api
     if (pathAndQuery.startsWith('/s3/') && looksLikeS3Path(pathAndQuery)) {
-      return proxyMode ? `/api${pathAndQuery}` : trimmed;
+      return `/api${pathAndQuery}`;
     }
 
-    // Only rewrite URLs from known internal / S3 hosts.
-    // External CDNs (Discord, Gravatar, imgur, etc.) pass through unchanged.
-    if (proxyMode && isInternalStorageHost(u)) {
+    // Absolute URL already under /api/s3 (e.g. old full-qualified URL) → use path only
+    if (pathAndQuery.startsWith('/api/s3/')) {
+      return pathAndQuery;
+    }
+
+    // Internal storage host (MinIO, localhost, staging-backend, etc.)
+    // Rewrite to go through the API proxy as well.
+    if (isInternalStorageHost(u)) {
       return `/api/s3${pathAndQuery}`;
     }
 
+    // External URL (Discord CDN, imgur, Gravatar, …) → pass through unchanged
     return trimmed;
   } catch {
     return trimmed;
@@ -52,6 +61,8 @@ function isInternalStorageHost(u: URL): boolean {
   const h = u.hostname;
   if (h === 'minio' || h === 'localhost' || h === '127.0.0.1') return true;
   if (u.port === '9000') return true;
+  // Recognise the staging backend so old absolute URLs still get rewritten.
+  if (h === 'staging-backend.riftapp.io') return true;
 
   const extra = (import.meta.env.VITE_ASSET_URL_HOSTS as string | undefined)
     ?.split(',')

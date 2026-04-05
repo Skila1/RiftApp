@@ -142,3 +142,10 @@
       hover:text-riftapp-text-muted cursor-default select-none flex items-center gap-1 mb-1;
   }
 }
+
+/* ─── Image attachment responsive overrides ─────────────────────────── */
+@media (max-width: 480px) {
+  .grid[style*="grid-template-columns: repeat(2"] {
+    max-width: 100% !important;
+  }
+}

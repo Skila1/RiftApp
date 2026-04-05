@@ -504,7 +504,83 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
 
 export default MessageItem;
 
+/* ─── Image thumbnail with lazy-load fade-in ─────────────────────────── */
+function ImageThumb({
+  src,
+  alt,
+  onClick,
+}: {
+  src: string;
+  alt: string;
+  onClick: () => void;
+}) {
+  const [loaded, setLoaded] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        const menu = document.getElementById('img-ctx');
+        if (menu) menu.remove();
+        const el = document.createElement('div');
+        el.id = 'img-ctx';
+        el.className =
+          'fixed z-[300] py-1.5 min-w-[180px] rounded-lg bg-riftapp-panel border border-riftapp-border/60 shadow-elevation-high animate-scale-in';
+        el.style.left = `${e.clientX}px`;
+        el.style.top = `${e.clientY}px`;
+        const items = [
+          { label: 'Open in New Tab', action: () => window.open(src, '_blank', 'noopener') },
+          { label: 'Copy Image URL', action: () => navigator.clipboard.writeText(src) },
+        ];
+        items.forEach(({ label, action }) => {
+          const btn = document.createElement('button');
+          btn.textContent = label;
+          btn.className =
+            'w-full text-left px-3 py-1.5 text-sm text-riftapp-text hover:bg-riftapp-surface-hover transition-colors duration-100 cursor-pointer';
+          btn.onclick = () => {
+            action();
+            el.remove();
+          };
+          el.appendChild(btn);
+        });
+        document.body.appendChild(el);
+        const dismiss = () => {
+          el.remove();
+          document.removeEventListener('click', dismiss);
+          document.removeEventListener('contextmenu', dismiss);
+        };
+        requestAnimationFrame(() => {
+          document.addEventListener('click', dismiss);
+          document.addEventListener('contextmenu', dismiss);
+        });
+      }}
+      className="relative block rounded-xl border border-riftapp-border/40 overflow-hidden bg-riftapp-bg/40
+        hover:brightness-110 hover:shadow-elevation-md transition-all duration-200 cursor-zoom-in text-left group/thumb"
+    >
+      {/* Skeleton placeholder */}
+      {!loaded && (
+        <div className="absolute inset-0 bg-riftapp-surface animate-pulse-soft rounded-xl" />
+      )}
+      <img
+        src={src}
+        alt={alt}
+        loading="lazy"
+        decoding="async"
+        onLoad={() => setLoaded(true)}
+        className={`block max-w-full w-auto h-auto object-contain rounded-xl
+          transition-opacity duration-200 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+        style={{ maxHeight: '288px' }}
+      />
+    </button>
+  );
+}
+
+/* ─── Full-size lightbox modal ──────────────────────────────────────── */
 function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+  const [zoom, setZoom] = useState(false);
+
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -526,13 +602,69 @@ function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClos
       role="dialog"
       aria-modal="true"
       aria-label="Image preview"
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/88 p-4 sm:p-6"
+      className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black/88 animate-fade-in"
       onClick={onClose}
     >
+      {/* Top bar */}
+      <div
+        className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 z-10"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <span className="text-sm text-white/70 truncate max-w-[50vw]">{alt}</span>
+        <div className="flex items-center gap-2">
+          <a
+            href={src}
+            download={alt}
+            className="p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors duration-150"
+            title="Download"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+          </a>
+          <a
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors duration-150"
+            title="Open in new tab"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+              <polyline points="15 3 21 3 21 9" />
+              <line x1="10" y1="14" x2="21" y2="3" />
+            </svg>
+          </a>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors duration-150"
+            title="Close"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Image */}
       <img
         src={src}
         alt={alt}
-        className="max-w-[min(96vw,calc(100vw-2rem))] max-h-[min(96dvh,96vh)] w-auto h-auto object-contain rounded-lg shadow-2xl select-none"
+        onClick={(e) => {
+          e.stopPropagation();
+          setZoom((z) => !z);
+        }}
+        className={`select-none rounded-lg shadow-2xl transition-transform duration-200
+          ${zoom
+            ? 'max-w-none max-h-none cursor-zoom-out scale-150'
+            : 'max-w-[min(96vw,calc(100vw-2rem))] max-h-[min(88dvh,88vh)] w-auto h-auto object-contain cursor-zoom-in'
+          }`}
         draggable={false}
       />
     </div>,
@@ -572,67 +704,140 @@ function ReactionPills({
   );
 }
 
+/* ─── Image grid for multi-image messages ───────────────────────────── */
+const MAX_GRID_VISIBLE = 4;
+
+function ImageGrid({
+  images,
+  onOpen,
+}: {
+  images: { id: string; src: string; alt: string }[];
+  onOpen: (idx: number) => void;
+}) {
+  const count = images.length;
+  const visible = images.slice(0, MAX_GRID_VISIBLE);
+  const overflow = count - MAX_GRID_VISIBLE;
+
+  // 1 image → single full-width thumb
+  if (count === 1) {
+    return (
+      <div className="max-w-[420px]">
+        <ImageThumb src={visible[0].src} alt={visible[0].alt} onClick={() => onOpen(0)} />
+      </div>
+    );
+  }
+
+  // 2–4+ images → adaptive grid  (2 cols, max 2 rows)
+  return (
+    <div
+      className="grid gap-1 max-w-[420px]"
+      style={{
+        gridTemplateColumns: 'repeat(2, 1fr)',
+        maxHeight: '320px',
+      }}
+    >
+      {visible.map((img, idx) => {
+        const isLastVisible = idx === MAX_GRID_VISIBLE - 1 && overflow > 0;
+        return (
+          <button
+            key={img.id}
+            type="button"
+            onClick={() => onOpen(idx)}
+            className="relative rounded-xl overflow-hidden border border-riftapp-border/40 bg-riftapp-bg/40
+              hover:brightness-110 hover:shadow-elevation-md transition-all duration-200 cursor-zoom-in"
+            style={{ aspectRatio: '4/3' }}
+          >
+            <img
+              src={img.src}
+              alt={img.alt}
+              loading="lazy"
+              decoding="async"
+              className="w-full h-full object-cover"
+            />
+            {isLastVisible && (
+              <div className="absolute inset-0 bg-black/55 flex items-center justify-center">
+                <span className="text-white text-xl font-semibold">+{overflow}</span>
+              </div>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── Attachments (images + files) ──────────────────────────────────── */
 function Attachments({ message }: { message: Message }) {
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
 
   if (!message.attachments || message.attachments.length === 0) return null;
 
+  const imageAtts = message.attachments.filter((a) => a.content_type.startsWith('image/'));
+  const fileAtts = message.attachments.filter((a) => !a.content_type.startsWith('image/'));
+
+  const imageItems = imageAtts.map((att) => ({
+    id: att.id,
+    src: publicAssetUrl(att.url),
+    alt: att.filename,
+  }));
+
   return (
     <>
-      {lightbox ? <ImageLightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} /> : null}
+      {lightbox && <ImageLightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} />}
       <div className="mt-1 flex flex-col gap-1.5">
-      {message.attachments.map((att) => {
-        const isImage = att.content_type.startsWith('image/');
-        if (isImage) {
-          const displayUrl = publicAssetUrl(att.url);
+        {/* Images */}
+        {imageItems.length > 0 && (
+          imageItems.length === 1 ? (
+            <div className="max-w-[420px]">
+              <ImageThumb
+                src={imageItems[0].src}
+                alt={imageItems[0].alt}
+                onClick={() => setLightbox({ src: imageItems[0].src, alt: imageItems[0].alt })}
+              />
+            </div>
+          ) : (
+            <ImageGrid
+              images={imageItems}
+              onOpen={(idx) => {
+                // If user clicks "+N more" overlay (last visible), still show that image
+                const img = imageItems[idx];
+                setLightbox({ src: img.src, alt: img.alt });
+              }}
+            />
+          )
+        )}
+
+        {/* Non-image files */}
+        {fileAtts.map((att) => {
+          const fileUrl = publicAssetUrl(att.url);
           return (
-            <div key={att.id} className="inline-block max-w-full w-fit">
-              <button
-                type="button"
-                onClick={() => setLightbox({ src: displayUrl, alt: att.filename })}
-                className="block rounded-xl border border-riftapp-border/40 overflow-hidden bg-riftapp-bg/40
-                  hover:shadow-elevation-md transition-shadow duration-200 cursor-zoom-in text-left"
-              >
-                <img
-                  src={displayUrl}
-                  alt={att.filename}
-                  loading="lazy"
-                  decoding="async"
-                  className="block max-w-[min(100%,520px)] max-h-[min(85vh,520px)] w-auto h-auto object-contain"
-                />
-              </button>
-            </div>
-          );
-        }
-        const fileUrl = publicAssetUrl(att.url);
-        return (
-          <a
-            key={att.id}
-            href={fileUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-3 bg-riftapp-surface border border-riftapp-border/50 rounded-xl px-4 py-3
-              hover:bg-riftapp-surface-hover hover:border-riftapp-border transition-all duration-150 max-w-[380px] group/file"
-          >
-            <div className="w-10 h-10 rounded-lg bg-riftapp-accent/10 flex items-center justify-center flex-shrink-0">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-riftapp-accent">
-                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
-                <polyline points="13 2 13 9 20 9" />
+            <a
+              key={att.id}
+              href={fileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-3 bg-riftapp-surface border border-riftapp-border/50 rounded-xl px-4 py-3
+                hover:bg-riftapp-surface-hover hover:border-riftapp-border transition-all duration-150 max-w-[380px] group/file"
+            >
+              <div className="w-10 h-10 rounded-lg bg-riftapp-accent/10 flex items-center justify-center flex-shrink-0">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-riftapp-accent">
+                  <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+                  <polyline points="13 2 13 9 20 9" />
+                </svg>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-riftapp-accent group-hover/file:underline truncate font-medium">{att.filename}</p>
+                <p className="text-[11px] text-riftapp-text-dim">{formatBytes(att.size_bytes)}</p>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                className="text-riftapp-text-dim opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm text-riftapp-accent group-hover/file:underline truncate font-medium">{att.filename}</p>
-              <p className="text-[11px] text-riftapp-text-dim">{formatBytes(att.size_bytes)}</p>
-            </div>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-              className="text-riftapp-text-dim opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-          </a>
-        );
-      })}
+            </a>
+          );
+        })}
       </div>
     </>
   );
