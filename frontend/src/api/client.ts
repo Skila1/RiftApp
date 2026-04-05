@@ -1,4 +1,4 @@
-import type { AuthResponse, Hub, HubInvite, HubNotificationSettings, Stream, Category, Message, User, Attachment, Notification, Conversation, Friendship, Block, RelationshipType, HubEmoji, HubSticker, HubSound } from '../types';
+import type { AuthResponse, Hub, HubInvite, HubNotificationSettings, Stream, Category, Message, User, Attachment, Notification, Conversation, Friendship, Block, RelationshipType, HubEmoji, HubSticker, HubSound, HubRole, HubPermissions } from '../types';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -116,6 +116,24 @@ class ApiClient {
   createInvite(hubId: string, options?: { max_uses?: number; expires_in?: number }) { return this.request<HubInvite>(`/hubs/${hubId}/invite`, { method: 'POST', body: JSON.stringify(options ?? {}) }); }
   joinInvite(code: string) { return this.request<{ status: string; hub: Hub }>(`/invites/${code}`, { method: 'POST' }); }
   getInviteInfo(code: string) { return this.request<{ code: string; hub_id: string; hub_name: string; hub_icon_url?: string; member_count: number; expires_at?: string }>(`/invites/${code}`); }
+  getHubPermissions(hubId: string) { return this.request<HubPermissions>(`/hubs/${hubId}/permissions`); }
+
+  getRoles(hubId: string) { return this.request<HubRole[]>(`/hubs/${hubId}/roles`); }
+  createRole(hubId: string, body: { name: string; color: string; permissions: number }) {
+    return this.request<HubRole>(`/hubs/${hubId}/roles`, { method: 'POST', body: JSON.stringify(body) });
+  }
+  updateRole(hubId: string, roleId: string, body: { name?: string; color?: string; permissions?: number; position?: number }) {
+    return this.request<HubRole>(`/hubs/${hubId}/roles/${roleId}`, { method: 'PATCH', body: JSON.stringify(body) });
+  }
+  deleteRole(hubId: string, roleId: string) {
+    return this.request<void>(`/hubs/${hubId}/roles/${roleId}`, { method: 'DELETE' });
+  }
+  assignRole(hubId: string, userId: string, roleId: string) {
+    return this.request<{ status: string }>(`/hubs/${hubId}/members/${userId}/roles/${roleId}`, { method: 'POST' });
+  }
+  removeRole(hubId: string, userId: string) {
+    return this.request<{ status: string }>(`/hubs/${hubId}/members/${userId}/roles`, { method: 'DELETE' });
+  }
 
   getHubNotificationSettings(hubId: string) {
     return this.request<HubNotificationSettings>(`/hubs/${hubId}/notification-settings`);

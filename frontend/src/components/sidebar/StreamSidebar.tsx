@@ -37,6 +37,7 @@ import ChannelContextMenu, { type ChannelMenuTarget } from '../context-menus/Cha
 import { MenuOverlay } from '../context-menus/MenuOverlay';
 import type { User, Stream } from '../../types';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
+import { hasPermission, PermManageStreams } from '../../utils/permissions';
 
 export default function StreamSidebar() {
   const streams = useStreamStore((s) => s.streams);
@@ -48,8 +49,8 @@ export default function StreamSidebar() {
   const setViewingVoice = useStreamStore((s) => s.setViewingVoice);
   const hubs = useHubStore((s) => s.hubs);
   const user = useAuthStore((s) => s.user);
-  const myHubRole = usePresenceStore((s) => (user?.id ? s.hubMembers[user.id]?.role : undefined));
-  const canManageChannels = myHubRole === 'owner' || myHubRole === 'admin';
+  const hubPermissions = useHubStore((s) => (activeHubId ? s.hubPermissions[activeHubId] : undefined));
+  const canManageChannels = hasPermission(hubPermissions, PermManageStreams);
   const logout = useAuthStore((s) => s.logout);
   const streamUnreads = useStreamStore((s) => s.streamUnreads);
   const hubMembers = usePresenceStore((s) => s.hubMembers);

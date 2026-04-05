@@ -44,9 +44,11 @@ func TestRoleHasPermission(t *testing.T) {
 		{RoleAdmin, PermManageHub, true},
 		{RoleAdmin, PermSendMessages, true},
 		{RoleAdmin, PermConnectVoice, false},
+		{RoleAdmin, PermUseSoundboard, true},
 		{RoleMember, PermSendMessages, true},
 		{RoleMember, PermManageHub, false},
 		{RoleMember, PermConnectVoice, true},
+		{RoleMember, PermUseSoundboard, true},
 		{"unknown", PermSendMessages, false},
 	}
 	for _, tt := range tests {

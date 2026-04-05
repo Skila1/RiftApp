@@ -22,11 +22,12 @@ type FileDeleter interface {
 type HubCustomizationService struct {
 	repo        *repository.HubCustomizationRepo
 	hubRepo     *repository.HubRepo
+	rankRepo    *repository.RankRepo
 	fileDeleter FileDeleter // nil = skip cleanup
 }
 
-func NewHubCustomizationService(repo *repository.HubCustomizationRepo, hubRepo *repository.HubRepo) *HubCustomizationService {
-	return &HubCustomizationService{repo: repo, hubRepo: hubRepo}
+func NewHubCustomizationService(repo *repository.HubCustomizationRepo, hubRepo *repository.HubRepo, rankRepo *repository.RankRepo) *HubCustomizationService {
+	return &HubCustomizationService{repo: repo, hubRepo: hubRepo, rankRepo: rankRepo}
 }
 
 func (s *HubCustomizationService) SetFileDeleter(fd FileDeleter) {
@@ -56,7 +57,14 @@ func validateName(name string) error {
 
 func (s *HubCustomizationService) canManage(ctx context.Context, hubID, userID string) bool {
 	role := s.hubRepo.GetMemberRole(ctx, hubID, userID)
-	return role == models.RoleOwner || role == models.RoleAdmin
+	if role == "" {
+		return false
+	}
+	perms := models.RolePermissions[role]
+	if s.rankRepo != nil {
+		perms |= s.rankRepo.GetMemberRankPermissions(ctx, hubID, userID)
+	}
+	return models.HasPermission(perms, models.PermManageHub)
 }
 
 func (s *HubCustomizationService) deleteFile(ctx context.Context, fileURL string) {

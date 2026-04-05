@@ -2,7 +2,7 @@ package models
 
 // Permission bitfield constants for Ranks
 const (
-	PermViewStreams     int64 = 1 << 0
+	PermViewStreams    int64 = 1 << 0
 	PermSendMessages   int64 = 1 << 1
 	PermManageMessages int64 = 1 << 2
 	PermManageStreams  int64 = 1 << 3
@@ -12,6 +12,7 @@ const (
 	PermBanMembers     int64 = 1 << 7
 	PermConnectVoice   int64 = 1 << 8
 	PermSpeakVoice     int64 = 1 << 9
+	PermUseSoundboard  int64 = 1 << 10
 	PermAdministrator  int64 = 1 << 31
 
 	// Default permissions for @everyone
@@ -28,8 +29,8 @@ const (
 // RolePermissions maps each role to its effective permission bitfield.
 var RolePermissions = map[string]int64{
 	RoleOwner:  PermAdministrator,
-	RoleAdmin:  PermManageHub | PermManageStreams | PermManageMessages | PermSendMessages | PermViewStreams | PermKickMembers,
-	RoleMember: PermSendMessages | PermViewStreams | PermConnectVoice | PermSpeakVoice,
+	RoleAdmin:  PermManageHub | PermManageStreams | PermManageMessages | PermSendMessages | PermViewStreams | PermKickMembers | PermUseSoundboard,
+	RoleMember: PermSendMessages | PermViewStreams | PermConnectVoice | PermSpeakVoice | PermUseSoundboard,
 }
 
 func HasPermission(perms, flag int64) bool {

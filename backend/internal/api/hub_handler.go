@@ -189,3 +189,14 @@ func (h *HubHandler) PatchNotificationSettings(w http.ResponseWriter, r *http.Re
 	}
 	writeData(w, http.StatusOK, st)
 }
+
+func (h *HubHandler) MyPermissions(w http.ResponseWriter, r *http.Request) {
+	hubID := chi.URLParam(r, "hubID")
+	userID := middleware.GetUserID(r.Context())
+	perms, err := h.svc.GetEffectivePermissions(r.Context(), hubID, userID)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, map[string]int64{"permissions": perms})
+}

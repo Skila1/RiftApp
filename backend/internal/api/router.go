@@ -28,6 +28,7 @@ type RouterDeps struct {
 	DMService               *service.DMService
 	NotifService            *service.NotificationService
 	FriendService           *service.FriendService
+	RankService             *service.RankService
 	HubCustomizationService *service.HubCustomizationService
 	HubCustomizationRepo    *repository.HubCustomizationRepo
 	WSHub                   *ws.Hub
@@ -54,6 +55,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 	userH := NewUserHandler(deps.UserService)
 	hubH := NewHubHandler(deps.HubService, deps.NotifService, deps.NotifRepo)
 	customH := NewHubCustomizationHandler(deps.HubCustomizationService)
+	rankH := NewRankHandler(deps.RankService)
 	streamH := NewStreamHandler(deps.StreamService)
 	catH := NewCategoryHandler(deps.CategoryService)
 	msgH := NewMessageHandler(deps.MsgService)
@@ -115,6 +117,14 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 		r.Post("/api/hubs/{hubID}/leave", hubH.Leave)
 		r.Get("/api/hubs/{hubID}/members", hubH.Members)
 		r.Post("/api/hubs/{hubID}/invite", hubH.CreateInvite)
+		r.Get("/api/hubs/{hubID}/permissions", hubH.MyPermissions)
+
+		r.Get("/api/hubs/{hubID}/roles", rankH.List)
+		r.Post("/api/hubs/{hubID}/roles", rankH.Create)
+		r.Patch("/api/hubs/{hubID}/roles/{rankID}", rankH.Update)
+		r.Delete("/api/hubs/{hubID}/roles/{rankID}", rankH.Delete)
+		r.Post("/api/hubs/{hubID}/members/{userID}/roles/{rankID}", rankH.AssignRank)
+		r.Delete("/api/hubs/{hubID}/members/{userID}/roles", rankH.RemoveRank)
 
 		r.Get("/api/hubs/{hubID}/emojis", customH.ListEmojis)
 		r.Get("/api/hubs/{hubID}/stickers", customH.ListStickers)

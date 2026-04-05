@@ -20,6 +20,7 @@ type HubService struct {
 	inviteRepo   *repository.InviteRepo
 	notifRepo    *repository.NotificationRepo
 	hubNotifRepo *repository.HubNotificationSettingsRepo
+	rankRepo     *repository.RankRepo
 }
 
 func NewHubService(
@@ -28,6 +29,7 @@ func NewHubService(
 	inviteRepo *repository.InviteRepo,
 	notifRepo *repository.NotificationRepo,
 	hubNotifRepo *repository.HubNotificationSettingsRepo,
+	rankRepo *repository.RankRepo,
 ) *HubService {
 	return &HubService{
 		hubRepo:      hubRepo,
@@ -35,6 +37,7 @@ func NewHubService(
 		inviteRepo:   inviteRepo,
 		notifRepo:    notifRepo,
 		hubNotifRepo: hubNotifRepo,
+		rankRepo:     rankRepo,
 	}
 }
 
@@ -268,11 +271,7 @@ func (s *HubService) JoinViaInvite(ctx context.Context, code, userID string) (*m
 }
 
 func (s *HubService) canManage(ctx context.Context, hubID, userID string) bool {
-	role := s.hubRepo.GetMemberRole(ctx, hubID, userID)
-	if role == "" {
-		return false
-	}
-	return models.RoleHasPermission(role, models.PermManageHub)
+	return s.HasPermission(ctx, hubID, userID, models.PermManageHub)
 }
 
 func (s *HubService) HasPermission(ctx context.Context, hubID, userID string, perm int64) bool {
@@ -280,7 +279,26 @@ func (s *HubService) HasPermission(ctx context.Context, hubID, userID string, pe
 	if role == "" {
 		return false
 	}
-	return models.RoleHasPermission(role, perm)
+	perms := models.RolePermissions[role]
+	if s.rankRepo != nil {
+		perms |= s.rankRepo.GetMemberRankPermissions(ctx, hubID, userID)
+	}
+	return models.HasPermission(perms, perm)
+}
+
+func (s *HubService) GetEffectivePermissions(ctx context.Context, hubID, userID string) (int64, error) {
+	if !s.hubRepo.IsMember(ctx, hubID, userID) {
+		return 0, apperror.Forbidden("not a member")
+	}
+	role := s.hubRepo.GetMemberRole(ctx, hubID, userID)
+	if role == "" {
+		return 0, apperror.Forbidden("not a member")
+	}
+	perms := models.RolePermissions[role]
+	if s.rankRepo != nil {
+		perms |= s.rankRepo.GetMemberRankPermissions(ctx, hubID, userID)
+	}
+	return perms, nil
 }
 
 func (s *HubService) GetStreamHubID(ctx context.Context, streamID, userID string) (string, error) {

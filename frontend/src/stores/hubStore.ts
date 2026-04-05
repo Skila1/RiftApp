@@ -11,9 +11,11 @@ let loadHubsRequestId = 0;
 interface HubState {
   hubs: Hub[];
   activeHubId: string | null;
+  hubPermissions: Record<string, number>;
 
   loadHubs: () => Promise<void>;
   setActiveHub: (hubId: string) => Promise<void>;
+  loadHubPermissions: (hubId: string) => Promise<void>;
   createHub: (name: string) => Promise<Hub>;
   updateHub: (hubId: string, data: { name?: string; icon_url?: string; banner_url?: string }) => Promise<Hub>;
   deleteHub: (hubId: string) => Promise<void>;
@@ -23,6 +25,7 @@ interface HubState {
 export const useHubStore = create<HubState>((set, get) => ({
   hubs: [],
   activeHubId: null,
+  hubPermissions: {},
 
   loadHubs: async () => {
     const myId = ++loadHubsRequestId;
@@ -72,9 +75,24 @@ export const useHubStore = create<HubState>((set, get) => ({
         usePresenceStore.getState().loadPresenceForHub(hubId),
         useStreamStore.getState().loadReadStates(hubId),
         useEmojiStore.getState().loadHubEmojis(hubId),
+        get().loadHubPermissions(hubId),
       ]);
     } catch {
       // Streams may still be visible from cache; avoid throwing to click handlers.
+    }
+  },
+
+  loadHubPermissions: async (hubId) => {
+    try {
+      const data = await api.getHubPermissions(hubId);
+      set((s) => ({
+        hubPermissions: {
+          ...s.hubPermissions,
+          [hubId]: data.permissions,
+        },
+      }));
+    } catch {
+      // Ignore permission fetch failures to avoid blocking hub open.
     }
   },
 

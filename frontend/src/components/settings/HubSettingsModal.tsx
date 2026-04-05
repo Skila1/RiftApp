@@ -6,8 +6,23 @@ import { useDMStore } from '../../stores/dmStore';
 import { useAuthStore } from '../../stores/auth';
 import { api } from '../../api/client';
 import StatusDot from '../shared/StatusDot';
-import type { Hub, User, HubEmoji, HubSticker, HubSound } from '../../types';
+import type { Hub, User, HubEmoji, HubSticker, HubSound, HubRole } from '../../types';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
+import {
+  hasPermission,
+  PermViewStreams,
+  PermSendMessages,
+  PermManageMessages,
+  PermManageStreams,
+  PermManageHub,
+  PermManageRanks,
+  PermKickMembers,
+  PermBanMembers,
+  PermConnectVoice,
+  PermSpeakVoice,
+  PermUseSoundboard,
+  PermAdministrator,
+} from '../../utils/permissions';
 
 type Tab = 'overview' | 'members' | 'roles' | 'emojis' | 'stickers' | 'soundboard';
 
@@ -87,7 +102,7 @@ function HubSettingsModal({ hub, onClose }: { hub: Hub; onClose: () => void }) {
       case 'soundboard':
         return <CustomizationTab hub={hub} isOwner={isOwner} kind="sounds" />;
       case 'roles':
-        return <ComingSoonTab tab="roles" />;
+        return <RolesTab hub={hub} />;
       default:
         return null;
     }
@@ -624,21 +639,26 @@ function OverviewTab({ hub, isOwner, onCloseSettings }: { hub: Hub; isOwner: boo
 
 function MembersTab({ hub }: { hub: Hub }) {
   const [members, setMembers] = useState<User[]>([]);
+  const [roles, setRoles] = useState<HubRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [assigningUserId, setAssigningUserId] = useState<string | null>(null);
   const setActiveConversation = useDMStore((s) => s.setActiveConversation);
   const loadConversations = useDMStore((s) => s.loadConversations);
   const currentUser = useAuthStore((s) => s.user);
+  const hubPermissions = useHubStore((s) => s.hubPermissions[hub.id]);
+  const canManageRanks = hasPermission(hubPermissions, PermManageRanks);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
 
-    api.getHubMembers(hub.id)
-      .then((data) => {
-        if (!cancelled) setMembers(data);
+    Promise.all([api.getHubMembers(hub.id), api.getRoles(hub.id)])
+      .then(([memberData, roleData]) => {
+        if (!cancelled) setMembers(memberData);
+        if (!cancelled) setRoles(roleData);
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load members');
@@ -649,6 +669,21 @@ function MembersTab({ hub }: { hub: Hub }) {
 
     return () => { cancelled = true; };
   }, [hub.id]);
+
+  const handleRoleAssign = useCallback(async (member: User, nextRoleId: string) => {
+    if (!canManageRanks || member.id === hub.owner_id) return;
+    setAssigningUserId(member.id);
+    try {
+      if (nextRoleId) await api.assignRole(hub.id, member.id, nextRoleId);
+      else await api.removeRole(hub.id, member.id);
+      const data = await api.getHubMembers(hub.id);
+      setMembers(data);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to update role');
+    } finally {
+      setAssigningUserId(null);
+    }
+  }, [canManageRanks, hub.id, hub.owner_id]);
 
   const handleMessage = useCallback(async (member: User) => {
     try {
@@ -753,9 +788,28 @@ function MembersTab({ hub }: { hub: Hub }) {
                     Admin
                   </span>
                 )}
+                {member.rank_id && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#f0b232]/15 text-[#f0b232] font-semibold flex-shrink-0">
+                    {roles.find((r) => r.id === member.rank_id)?.name ?? 'Role'}
+                  </span>
+                )}
               </div>
               <p className="text-[12px] text-[#949ba4] truncate">@{member.username}</p>
             </div>
+
+            {canManageRanks && member.id !== hub.owner_id && (
+              <select
+                value={member.rank_id ?? ''}
+                onChange={(e) => void handleRoleAssign(member, e.target.value)}
+                disabled={assigningUserId === member.id}
+                className="bg-[#1e1f22] text-[#dbdee1] text-[12px] rounded px-2 py-1 border border-[#404249] focus:outline-none"
+              >
+                <option value="">No role</option>
+                {roles.map((role) => (
+                  <option key={role.id} value={role.id}>{role.name}</option>
+                ))}
+              </select>
+            )}
 
             {/* Message button — fixed width to prevent layout shift */}
             <div className="w-8 flex-shrink-0">
@@ -1260,22 +1314,160 @@ function CustomizationTab({ hub, isOwner, kind }: { hub: Hub; isOwner: boolean; 
 }
 
 /* ═══════════════════════════════════════════════════
-   Coming Soon Tab (Roles only)
+   Roles Tab
    ═══════════════════════════════════════════════════ */
 
-function ComingSoonTab({ tab: _tab }: { tab: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center">
-      <div className="w-16 h-16 rounded-2xl bg-[#2b2d31] border border-[#1e1f22] flex items-center justify-center mb-4 text-[#949ba4]">
-        <div className="scale-150"><IconRoles /></div>
+const ROLE_PERMISSION_OPTIONS = [
+  { key: PermViewStreams, label: 'View channels' },
+  { key: PermSendMessages, label: 'Send messages' },
+  { key: PermManageMessages, label: 'Manage messages' },
+  { key: PermManageStreams, label: 'Manage channels' },
+  { key: PermManageHub, label: 'Manage server' },
+  { key: PermManageRanks, label: 'Manage roles' },
+  { key: PermKickMembers, label: 'Kick members' },
+  { key: PermBanMembers, label: 'Ban members' },
+  { key: PermConnectVoice, label: 'Connect to voice' },
+  { key: PermSpeakVoice, label: 'Speak in voice' },
+  { key: PermUseSoundboard, label: 'Use soundboard' },
+  { key: PermAdministrator, label: 'Administrator' },
+] as const;
+
+function RolesTab({ hub }: { hub: Hub }) {
+  const [roles, setRoles] = useState<HubRole[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [newName, setNewName] = useState('');
+  const [newColor, setNewColor] = useState('#99aab5');
+  const [newPerms, setNewPerms] = useState<number>(PermViewStreams | PermSendMessages | PermConnectVoice | PermSpeakVoice | PermUseSoundboard);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const hubPermissions = useHubStore((s) => s.hubPermissions[hub.id]);
+  const canManage = hasPermission(hubPermissions, PermManageRanks);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await api.getRoles(hub.id);
+      setRoles(data);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load roles');
+    } finally {
+      setLoading(false);
+    }
+  }, [hub.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const toggleBit = useCallback((value: number, bit: number): number => {
+    return (value & bit) !== 0 ? (value & ~bit) : (value | bit);
+  }, []);
+
+  const createRole = useCallback(async () => {
+    const name = newName.trim();
+    if (!name || !canManage) return;
+    setBusyId('new');
+    setError(null);
+    try {
+      await api.createRole(hub.id, { name, color: newColor, permissions: newPerms });
+      setNewName('');
+      await load();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to create role');
+    } finally {
+      setBusyId(null);
+    }
+  }, [canManage, hub.id, load, newColor, newName, newPerms]);
+
+  const deleteRole = useCallback(async (roleID: string) => {
+    if (!canManage) return;
+    setBusyId(roleID);
+    setError(null);
+    try {
+      await api.deleteRole(hub.id, roleID);
+      await load();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to delete role');
+    } finally {
+      setBusyId(null);
+    }
+  }, [canManage, hub.id, load]);
+
+  if (!canManage) {
+    return (
+      <div className="bg-[#2b2d31] rounded-lg p-4 border border-[#1e1f22]">
+        <p className="text-[13px] text-[#949ba4]">You do not have permission to manage roles.</p>
       </div>
-      <h3 className="text-[18px] font-bold text-white mb-2">Roles</h3>
-      <p className="text-[14px] text-[#949ba4] max-w-sm leading-relaxed mb-4">
-        Create and manage roles to organize your members and control permissions.
-      </p>
-      <span className="text-[12px] text-[#5865f2] font-medium px-3 py-1.5 rounded-full bg-[#5865f2]/10">
-        Coming Soon
-      </span>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {error && <div className="text-[13px] text-[#f23f42] bg-[#f23f42]/10 rounded-lg px-4 py-3">{error}</div>}
+
+      <div className="bg-[#2b2d31] rounded-lg border border-[#1e1f22] p-4 space-y-3">
+        <h3 className="text-[14px] font-semibold text-white">Create Role</h3>
+        <div className="flex gap-3 items-center">
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Role name"
+            maxLength={32}
+            className="flex-1 px-3 py-2 rounded-[4px] bg-[#1e1f22] text-[13px] text-white focus:outline-none focus:ring-1 focus:ring-[#5865f2]"
+          />
+          <input
+            type="color"
+            value={newColor}
+            onChange={(e) => setNewColor(e.target.value)}
+            className="w-10 h-10 rounded bg-transparent"
+          />
+          <button
+            onClick={() => void createRole()}
+            disabled={!newName.trim() || busyId === 'new'}
+            className="px-4 py-2 rounded-[4px] bg-[#5865f2] text-white text-[13px] font-medium hover:bg-[#4752c4] disabled:opacity-40"
+          >
+            {busyId === 'new' ? 'Creating…' : 'Create'}
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {ROLE_PERMISSION_OPTIONS.map((opt) => (
+            <label key={opt.key} className="flex items-center gap-2 text-[12px] text-[#dbdee1]">
+              <input
+                type="checkbox"
+                checked={(newPerms & opt.key) !== 0}
+                onChange={() => setNewPerms((p) => toggleBit(p, opt.key))}
+              />
+              {opt.label}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <h3 className="text-[14px] font-semibold text-white">Existing Roles</h3>
+        {loading ? (
+          <p className="text-[13px] text-[#949ba4]">Loading roles…</p>
+        ) : roles.length === 0 ? (
+          <p className="text-[13px] text-[#949ba4]">No custom roles yet.</p>
+        ) : (
+          roles.map((role) => (
+            <div key={role.id} className="flex items-center justify-between bg-[#2b2d31] border border-[#1e1f22] rounded-lg px-3 py-2.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: role.color || '#99aab5' }} />
+                <span className="text-[13px] text-white truncate">{role.name}</span>
+              </div>
+              <button
+                onClick={() => void deleteRole(role.id)}
+                disabled={busyId === role.id}
+                className="text-[12px] px-2.5 py-1 rounded bg-[#f23f42]/10 text-[#f23f42] hover:bg-[#f23f42]/20 disabled:opacity-40"
+              >
+                {busyId === role.id ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

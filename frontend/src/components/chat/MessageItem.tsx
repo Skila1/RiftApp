@@ -14,6 +14,7 @@ import EmojiPicker, { type EmojiSelection } from '../shared/EmojiPicker';
 import MessageContextMenu from '../context-menus/MessageContextMenu';
 import DeleteMessageModal from '../modals/DeleteMessageModal';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
+import { hasPermission, PermManageMessages } from '../../utils/permissions';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return bytes + ' B';
@@ -253,10 +254,6 @@ interface MessageItemProps {
   hubId?: string | null;
 }
 
-function roleCanModerateMessages(role: string | undefined): boolean {
-  return role === 'owner' || role === 'admin';
-}
-
 const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM = false, hubId = null }: MessageItemProps) {
   const author = message.author;
   const authorName = author?.display_name || 'Unknown';
@@ -268,8 +265,8 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
   const currentUserId = useAuthStore((s) => s.user?.id);
   const currentUsername = useAuthStore((s) => s.user?.username);
   const hubMembers = usePresenceStore((s) => s.hubMembers);
-  const myHubRole = hubMembers[currentUserId ?? '']?.role;
   const activeHubId = useHubStore((s) => s.activeHubId);
+  const hubPermissions = useHubStore((s) => (activeHubId ? s.hubPermissions[activeHubId] : undefined));
   const [pickerOpen, setPickerOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -280,7 +277,7 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
 
   const canDelete =
     isOwn ||
-    (!isDM && !!message.stream_id && roleCanModerateMessages(myHubRole));
+    (!isDM && !!message.stream_id && hasPermission(hubPermissions, PermManageMessages));
 
   const canEdit = isOwn && Boolean((message.content || '').trim());
 

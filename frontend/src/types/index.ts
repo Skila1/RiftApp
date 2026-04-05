@@ -11,6 +11,22 @@ export interface User {
   updated_at: string;
   /** Set when user is loaded from `GET /hubs/:id/members` (owner | admin | member). */
   role?: string;
+  /** Set when user is loaded from `GET /hubs/:id/members` and has a custom role assigned. */
+  rank_id?: string;
+}
+
+export interface HubRole {
+  id: string;
+  hub_id: string;
+  name: string;
+  color: string;
+  permissions: number;
+  position: number;
+  created_at: string;
+}
+
+export interface HubPermissions {
+  permissions: number;
 }
 
 export interface Hub {

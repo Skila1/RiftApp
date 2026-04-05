@@ -10,6 +10,7 @@ import (
 
 	"github.com/riftapp-cloud/riftapp/internal/config"
 	"github.com/riftapp-cloud/riftapp/internal/middleware"
+	"github.com/riftapp-cloud/riftapp/internal/models"
 	"github.com/riftapp-cloud/riftapp/internal/repository"
 	"github.com/riftapp-cloud/riftapp/internal/service"
 	"github.com/riftapp-cloud/riftapp/internal/ws"
@@ -56,7 +57,10 @@ func (h *VoiceHandler) Token(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "stream not found or access denied")
 		return
 	}
-	_ = hubID
+	if !h.hubSvc.HasPermission(r.Context(), hubID, userID, models.PermConnectVoice) {
+		writeError(w, http.StatusForbidden, "you do not have permission to connect to voice")
+		return
+	}
 
 	roomName := "stream:" + streamID
 
@@ -109,6 +113,11 @@ func (h *VoiceHandler) PlaySound(w http.ResponseWriter, r *http.Request) {
 
 	if hubID == "" || soundID == "" {
 		writeError(w, http.StatusBadRequest, "hubID and soundID are required")
+		return
+	}
+
+	if !h.hubSvc.HasPermission(r.Context(), hubID, userID, models.PermUseSoundboard) {
+		writeError(w, http.StatusForbidden, "you do not have permission to use soundboard")
 		return
 	}
 

@@ -29,8 +29,9 @@ func setupHubTest(t *testing.T) (*service.HubService, string) {
 	inviteRepo := repository.NewInviteRepo(testPool)
 	notifRepo := repository.NewNotificationRepo(testPool)
 	hubNotifRepo := repository.NewHubNotificationSettingsRepo(testPool)
+	rankRepo := repository.NewRankRepo(testPool)
 
-	hubSvc := service.NewHubService(hubRepo, streamRepo, inviteRepo, notifRepo, hubNotifRepo)
+	hubSvc := service.NewHubService(hubRepo, streamRepo, inviteRepo, notifRepo, hubNotifRepo, rankRepo)
 	return hubSvc, resp.User.ID
 }
 
