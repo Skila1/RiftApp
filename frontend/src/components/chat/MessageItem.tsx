@@ -63,7 +63,7 @@ function avatarBg(name: string): string {
 
 const INVITE_URL_RE = /https?:\/\/[^\s/]+\/invite\/([A-Za-z0-9]+)/g;
 
-function renderContent(content: string) {
+function renderContent(content: string, usernames?: Set<string>) {
   const parts: React.ReactNode[] = [];
   let remaining = content;
   let key = 0;
@@ -75,7 +75,7 @@ function renderContent(content: string) {
   while ((match = codeBlockRegex.exec(remaining)) !== null) {
     if (match.index > lastIndex) {
       parts.push(
-        <span key={key++}>{renderInline(remaining.slice(lastIndex, match.index))}</span>
+        <span key={key++}>{renderInline(remaining.slice(lastIndex, match.index), usernames)}</span>
       );
     }
     parts.push(
@@ -88,7 +88,7 @@ function renderContent(content: string) {
 
   if (lastIndex < remaining.length) {
     parts.push(
-      <span key={key++}>{renderInline(remaining.slice(lastIndex))}</span>
+      <span key={key++}>{renderInline(remaining.slice(lastIndex), usernames)}</span>
     );
   }
 
@@ -100,7 +100,7 @@ function renderContent(content: string) {
     inviteCodes.push(inviteMatch[1]);
   }
 
-  const result = parts.length > 0 ? parts : [<span key={0}>{renderInline(content)}</span>];
+  const result = parts.length > 0 ? parts : [<span key={0}>{renderInline(content, usernames)}</span>];
 
   if (inviteCodes.length > 0) {
     result.push(
@@ -111,7 +111,8 @@ function renderContent(content: string) {
   return result;
 }
 
-function renderInline(text: string): React.ReactNode {
+function renderInline(text: string, usernames?: Set<string>): React.ReactNode {
+  // Split on inline code first
   return text.split(/(`[^`]+`)/).map((part, i) => {
     if (part.startsWith('`') && part.endsWith('`')) {
       return (
@@ -120,8 +121,40 @@ function renderInline(text: string): React.ReactNode {
         </code>
       );
     }
+    // Parse @mentions in non-code text
+    if (usernames && usernames.size > 0) {
+      return renderMentions(part, usernames, i);
+    }
     return part;
   });
+}
+
+function renderMentions(text: string, usernames: Set<string>, parentKey: number): React.ReactNode {
+  // Match @word patterns (username chars: letters, digits, underscores, dots, hyphens)
+  const mentionRe = /@([\w.\-]+)/g;
+  const nodes: React.ReactNode[] = [];
+  let lastIdx = 0;
+  let m;
+  let k = 0;
+  while ((m = mentionRe.exec(text)) !== null) {
+    const name = m[1];
+    if (!usernames.has(name.toLowerCase())) continue;
+    if (m.index > lastIdx) {
+      nodes.push(text.slice(lastIdx, m.index));
+    }
+    nodes.push(
+      <span
+        key={`${parentKey}-m${k++}`}
+        className="rounded px-1 py-px bg-riftapp-accent/20 text-riftapp-accent-hover font-medium cursor-pointer hover:bg-riftapp-accent/30 hover:underline"
+      >
+        @{name}
+      </span>
+    );
+    lastIdx = m.index + m[0].length;
+  }
+  if (nodes.length === 0) return text;
+  if (lastIdx < text.length) nodes.push(text.slice(lastIdx));
+  return <>{nodes}</>;
 }
 
 interface MessageItemProps {
@@ -147,7 +180,9 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
   const editStreamMessage = useMessageStore((s) => s.editMessageContent);
   const editDMMessage = useDMStore((s) => s.editDMMessage);
   const currentUserId = useAuthStore((s) => s.user?.id);
-  const myHubRole = usePresenceStore((s) => (currentUserId ? s.hubMembers[currentUserId]?.role : undefined));
+  const currentUsername = useAuthStore((s) => s.user?.username);
+  const hubMembers = usePresenceStore((s) => s.hubMembers);
+  const myHubRole = hubMembers[currentUserId ?? '']?.role;
   const [pickerOpen, setPickerOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [messageMenu, setMessageMenu] = useState<{ x: number; y: number } | null>(null);
@@ -163,10 +198,28 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
 
   const color = useMemo(() => nameColor(authorName), [authorName]);
   const bg = useMemo(() => avatarBg(authorName), [authorName]);
+
+  // Build a lowercase set of known usernames for mention detection
+  const knownUsernames = useMemo(() => {
+    const set = new Set<string>();
+    for (const uid in hubMembers) {
+      const u = hubMembers[uid];
+      if (u.username) set.add(u.username.toLowerCase());
+    }
+    return set;
+  }, [hubMembers]);
+
   const renderedContent = useMemo(
-    () => message.content ? renderContent(message.content) : null,
-    [message.content],
+    () => message.content ? renderContent(message.content, knownUsernames) : null,
+    [message.content, knownUsernames],
   );
+
+  // Detect whether the current user is mentioned in this message
+  const mentionsSelf = useMemo(() => {
+    if (!currentUsername || !message.content) return false;
+    const re = new RegExp(`@${currentUsername.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w.\\-])`, 'i');
+    return re.test(message.content);
+  }, [message.content, currentUsername]);
   const pickerRef = useRef<HTMLDivElement>(null);
   const openProfile = useProfilePopoverStore((s) => s.open);
   const openContextMenu = useUserContextMenuStore((s) => s.open);
@@ -309,7 +362,11 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
   return (
     <div
       onContextMenu={handleMessageContextMenu}
-      className={`group relative py-0.5 -mx-4 px-4 hover:bg-riftapp-surface/20 transition-colors duration-100 ${
+      className={`group relative py-0.5 -mx-4 px-4 transition-colors duration-100 ${
+        mentionsSelf
+          ? 'bg-riftapp-accent/[0.06] border-l-2 border-riftapp-accent/60 hover:bg-riftapp-accent/[0.10]'
+          : 'hover:bg-riftapp-surface/20'
+      } ${
         showHeader ? 'mt-[17px]' : ''
       }`}
     >
