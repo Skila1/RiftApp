@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Stream, Category } from '../types';
 import { api } from '../api/client';
+import { useVoiceChannelUiStore } from './voiceChannelUiStore';
 
 /** Monotonic id so an older in-flight `loadStreams` cannot apply after a newer hub switch. */
 let loadStreamsRequestId = 0;
@@ -146,6 +147,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
     const { useMessageStore } = await import('./messageStore');
     const { useNotificationStore } = await import('./notificationStore');
 
+    useVoiceChannelUiStore.getState().closeVoiceView();
     set({ activeStreamId: streamId });
     await useMessageStore.getState().loadMessages(streamId);
     await get().ackStream(streamId);

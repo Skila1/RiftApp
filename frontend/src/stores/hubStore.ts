@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Hub } from '../types';
 import { api } from '../api/client';
 import { normalizeHub, normalizeHubs } from '../utils/entityAssets';
+import { useVoiceChannelUiStore } from './voiceChannelUiStore';
 
 /** Session-scoped hub list for instant paint after refresh (revalidated against API). */
 export const HUBS_SESSION_STORAGE_KEY = 'riftapp.session.hubs.v1';
@@ -194,6 +195,7 @@ export const useHubStore = create<HubState>((set, get) => ({
   },
 
   clearActive: () => {
+    useVoiceChannelUiStore.getState().closeVoiceView();
     set({ activeHubId: null });
   },
 }));

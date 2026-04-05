@@ -165,9 +165,14 @@ export default function StreamSidebar() {
         return;
       }
 
+      if (voiceUiOpen && activeVoiceChannelId === streamId) {
+        closeVoiceView();
+        return;
+      }
+
       openVoiceView(streamId);
     },
-    [openVoiceView, setActiveVoiceChannel, voiceConnected, voiceConnecting, voiceJoin, voiceMoveToStream, voiceStreamId],
+    [activeVoiceChannelId, closeVoiceView, openVoiceView, setActiveVoiceChannel, voiceConnected, voiceConnecting, voiceJoin, voiceMoveToStream, voiceStreamId, voiceUiOpen],
   );
 
   const handleLeaveVoice = useCallback(() => {

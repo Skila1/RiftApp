@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Message, Conversation, User } from '../types';
 import { api } from '../api/client';
 import { normalizeConversation, normalizeMessage, normalizeMessages, normalizeUser } from '../utils/entityAssets';
+import { useVoiceChannelUiStore } from './voiceChannelUiStore';
 
 const sumDmUnreads = (conversations: Conversation[]) =>
   conversations.reduce((acc, c) => acc + (c.unread_count ?? 0), 0);
@@ -80,6 +81,7 @@ export const useDMStore = create<DMState>((set, get) => ({
   },
 
   clearActive: () => {
+    useVoiceChannelUiStore.getState().closeVoiceView();
     set({ activeConversationId: null, dmMessages: [] });
   },
 
