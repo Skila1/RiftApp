@@ -2,6 +2,9 @@ import { create } from 'zustand';
 import type { Hub } from '../types';
 import { api } from '../api/client';
 
+/** Ignore stale `loadHubs` responses when multiple loads overlap (e.g. Strict Mode, refocus). */
+let loadHubsRequestId = 0;
+
 interface HubState {
   hubs: Hub[];
   activeHubId: string | null;
@@ -18,8 +21,16 @@ export const useHubStore = create<HubState>((set) => ({
   activeHubId: null,
 
   loadHubs: async () => {
-    const hubs = await api.getHubs();
-    set({ hubs });
+    const myId = ++loadHubsRequestId;
+    try {
+      const hubs = await api.getHubs();
+      if (myId !== loadHubsRequestId) return;
+      if (!Array.isArray(hubs)) return;
+      set({ hubs });
+    } catch {
+      if (myId !== loadHubsRequestId) return;
+      // Never wipe the server list on transient errors / rate limits.
+    }
   },
 
   setActiveHub: async (hubId) => {
@@ -28,17 +39,22 @@ export const useHubStore = create<HubState>((set) => ({
     const { useDMStore } = await import('./dmStore');
     const { usePresenceStore } = await import('./presenceStore');
 
-    // Drop previous hub's channels immediately so we never show hub A's list while hub B is selected.
-    useStreamStore.getState().clearStreams();
     useMessageStore.getState().clearMessages();
     set({ activeHubId: hubId });
     useDMStore.getState().clearActive();
 
-    await Promise.all([
-      useStreamStore.getState().loadStreams(hubId),
-      usePresenceStore.getState().loadPresenceForHub(hubId),
-      useStreamStore.getState().loadReadStates(hubId),
-    ]);
+    // Show cached channels for this hub immediately (or clear if unknown) — avoids empty UI and cuts API spam.
+    useStreamStore.getState().applyHubLayoutOrClear(hubId);
+
+    try {
+      await Promise.all([
+        useStreamStore.getState().loadStreams(hubId),
+        usePresenceStore.getState().loadPresenceForHub(hubId),
+        useStreamStore.getState().loadReadStates(hubId),
+      ]);
+    } catch {
+      // Streams may still be visible from cache; avoid throwing to click handlers.
+    }
   },
 
   createHub: async (name) => {

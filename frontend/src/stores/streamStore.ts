@@ -5,6 +5,16 @@ import { api } from '../api/client';
 /** Monotonic id so an older in-flight `loadStreams` cannot apply after a newer hub switch. */
 let loadStreamsRequestId = 0;
 
+/** Skip repeated full layout fetch when bouncing between hubs (stale-while-revalidate). */
+const HUB_LAYOUT_FRESH_MS = 8000;
+
+type HubLayoutCacheEntry = {
+  at: number;
+  streams: Stream[];
+  categories: Category[];
+  voiceMembers: Record<string, string[]>;
+};
+
 interface StreamState {
   streams: Stream[];
   categories: Category[];
@@ -15,6 +25,11 @@ interface StreamState {
   /** stream_id → hub_id for cross-hub unread indicators */
   streamHubMap: Record<string, string>;
   voiceMembers: Record<string, string[]>; // streamId -> userIds currently in voice
+  /** Last known channel layout per hub (instant restore when switching). */
+  hubLayoutCache: Record<string, HubLayoutCacheEntry>;
+
+  applyHubLayoutOrClear: (hubId: string) => void;
+  invalidateHubLayoutCache: (hubId: string) => void;
 
   loadStreams: (hubId: string) => Promise<void>;
   loadCategories: (hubId: string) => Promise<void>;
@@ -42,22 +57,79 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   lastReadMessageIds: {},
   streamHubMap: {},
   voiceMembers: {},
+  hubLayoutCache: {},
+
+  applyHubLayoutOrClear: (hubId) => {
+    const cached = get().hubLayoutCache[hubId];
+    if (cached) {
+      set((s) => {
+        const streamHubMap = { ...s.streamHubMap };
+        for (const st of cached.streams) {
+          streamHubMap[st.id] = hubId;
+        }
+        return {
+          streams: cached.streams,
+          categories: cached.categories,
+          voiceMembers: cached.voiceMembers,
+          activeStreamId: null,
+          viewingVoiceStreamId: null,
+          streamHubMap,
+        };
+      });
+    } else {
+      get().clearStreams();
+    }
+  },
+
+  invalidateHubLayoutCache: (hubId) => {
+    set((s) => {
+      const hubLayoutCache = { ...s.hubLayoutCache };
+      delete hubLayoutCache[hubId];
+      return { hubLayoutCache };
+    });
+  },
 
   loadStreams: async (hubId) => {
     const myId = ++loadStreamsRequestId;
+    const { useHubStore } = await import('./hubStore');
+
+    const cached = get().hubLayoutCache[hubId];
+    const cacheAge = cached ? Date.now() - cached.at : Infinity;
+    const useFreshCacheOnly =
+      cached != null &&
+      cacheAge < HUB_LAYOUT_FRESH_MS &&
+      useHubStore.getState().activeHubId === hubId;
+
+    if (useFreshCacheOnly) {
+      if (myId !== loadStreamsRequestId || useHubStore.getState().activeHubId !== hubId) return;
+      const textStream = cached.streams.find((s) => s.type === 0);
+      if (textStream) {
+        await get().setActiveStream(textStream.id);
+      }
+      return;
+    }
+
     const [streams, categories, voiceStates] = await Promise.all([
       api.getStreams(hubId),
       api.getCategories(hubId),
       api.getVoiceStates(hubId).catch(() => ({} as Record<string, string[]>)),
     ]);
-    const { useHubStore } = await import('./hubStore');
     if (myId !== loadStreamsRequestId || useHubStore.getState().activeHubId !== hubId) return;
     set((s) => {
       const streamHubMap = { ...s.streamHubMap };
       for (const st of streams) {
         streamHubMap[st.id] = hubId;
       }
-      return { streams, categories, voiceMembers: voiceStates, streamHubMap };
+      const hubLayoutCache = {
+        ...s.hubLayoutCache,
+        [hubId]: {
+          at: Date.now(),
+          streams,
+          categories,
+          voiceMembers: voiceStates,
+        },
+      };
+      return { streams, categories, voiceMembers: voiceStates, streamHubMap, hubLayoutCache };
     });
 
     const textStream = streams.find((s) => s.type === 0);
@@ -88,22 +160,55 @@ export const useStreamStore = create<StreamState>((set, get) => ({
 
   createStream: async (hubId, name, type = 0, categoryId?) => {
     const stream = await api.createStream(hubId, name, type, categoryId);
-    set((s) => ({ streams: [...s.streams, stream] }));
+    set((s) => {
+      const streams = [...s.streams, stream];
+      const hubLayoutCache = { ...s.hubLayoutCache };
+      const prev = hubLayoutCache[hubId];
+      if (prev) {
+        hubLayoutCache[hubId] = {
+          ...prev,
+          at: Date.now(),
+          streams: [...prev.streams, stream],
+        };
+      }
+      return { streams, hubLayoutCache };
+    });
     return stream;
   },
 
   createCategory: async (hubId, name) => {
     const cat = await api.createCategory(hubId, name);
-    set((s) => ({ categories: [...s.categories, cat] }));
+    set((s) => {
+      const categories = [...s.categories, cat];
+      const hubLayoutCache = { ...s.hubLayoutCache };
+      const prev = hubLayoutCache[hubId];
+      if (prev) {
+        hubLayoutCache[hubId] = { ...prev, at: Date.now(), categories };
+      }
+      return { categories, hubLayoutCache };
+    });
     return cat;
   },
 
   deleteCategory: async (hubId, categoryId) => {
     await api.deleteCategory(hubId, categoryId);
-    set((s) => ({
-      categories: s.categories.filter((c) => c.id !== categoryId),
-      streams: s.streams.map((st) => st.category_id === categoryId ? { ...st, category_id: null } : st),
-    }));
+    set((s) => {
+      const categories = s.categories.filter((c) => c.id !== categoryId);
+      const streams = s.streams.map((st) =>
+        st.category_id === categoryId ? { ...st, category_id: null } : st,
+      );
+      const hubLayoutCache = { ...s.hubLayoutCache };
+      const prev = hubLayoutCache[hubId];
+      if (prev) {
+        hubLayoutCache[hubId] = {
+          ...prev,
+          at: Date.now(),
+          categories,
+          streams,
+        };
+      }
+      return { categories, streams, hubLayoutCache };
+    });
   },
 
   loadReadStates: async (hubId) => {

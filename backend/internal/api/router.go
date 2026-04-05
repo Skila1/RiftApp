@@ -85,7 +85,8 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 		r.With(middleware.Auth(deps.AuthService)).Post("/logout", authH.Logout)
 	})
 
-	authRL := middleware.NewRateLimiter(rate.Every(time.Second), 60)
+	// Generous burst so rapid hub switching (many parallel hub-scoped requests) does not 429.
+	authRL := middleware.NewRateLimiter(rate.Every(time.Second), 120)
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth(deps.AuthService))
 		r.Use(middleware.RateLimit(authRL))
