@@ -54,3 +54,26 @@ func (r *CategoryRepo) Delete(ctx context.Context, categoryID string) error {
 	_, err := r.db.Exec(ctx, `DELETE FROM categories WHERE id = $1`, categoryID)
 	return err
 }
+
+// BulkUpdatePositions updates position for multiple categories in a single transaction.
+func (r *CategoryRepo) BulkUpdatePositions(ctx context.Context, hubID string, items []struct {
+	ID       string
+	Position int
+}) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	for _, item := range items {
+		_, err := tx.Exec(ctx,
+			`UPDATE categories SET position = $1 WHERE id = $2 AND hub_id = $3`,
+			item.Position, item.ID, hubID,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}

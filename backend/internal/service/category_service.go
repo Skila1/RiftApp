@@ -51,3 +51,28 @@ func (s *CategoryService) Delete(ctx context.Context, hubID, userID, categoryID 
 	}
 	return nil
 }
+
+// ReorderCategories bulk-updates category positions.
+func (s *CategoryService) ReorderCategories(ctx context.Context, hubID, userID string, items []struct {
+	ID       string `json:"id"`
+	Position int    `json:"position"`
+}) error {
+	if !s.hubService.HasPermission(ctx, hubID, userID, models.PermManageStreams) {
+		return apperror.Forbidden("you do not have permission to manage channels")
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	bulkItems := make([]struct {
+		ID       string
+		Position int
+	}, len(items))
+	for i, it := range items {
+		bulkItems[i].ID = it.ID
+		bulkItems[i].Position = it.Position
+	}
+	if err := s.catRepo.BulkUpdatePositions(ctx, hubID, bulkItems); err != nil {
+		return apperror.Internal("failed to reorder categories", err)
+	}
+	return nil
+}

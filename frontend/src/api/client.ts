@@ -142,6 +142,12 @@ class ApiClient {
   getCategories(hubId: string) { return this.request<Category[]>(`/hubs/${hubId}/categories`); }
   createCategory(hubId: string, name: string) { return this.request<Category>(`/hubs/${hubId}/categories`, { method: 'POST', body: JSON.stringify({ name }) }); }
   deleteCategory(hubId: string, categoryId: string) { return this.request(`/hubs/${hubId}/categories/${categoryId}`, { method: 'DELETE' }); }
+  reorderStreams(hubId: string, streams: { id: string; position: number; category_id: string | null }[]) {
+    return this.request<void>(`/hubs/${hubId}/streams/reorder`, { method: 'PUT', body: JSON.stringify({ streams }) });
+  }
+  reorderCategories(hubId: string, categories: { id: string; position: number }[]) {
+    return this.request<void>(`/hubs/${hubId}/categories/reorder`, { method: 'PUT', body: JSON.stringify({ categories }) });
+  }
 
   getMessages(streamId: string, before?: string, limit = 50) {
     const params = new URLSearchParams({ limit: String(limit) });

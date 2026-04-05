@@ -55,3 +55,23 @@ func (h *CategoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (h *CategoryHandler) Reorder(w http.ResponseWriter, r *http.Request) {
+	hubID := chi.URLParam(r, "hubID")
+	userID := middleware.GetUserID(r.Context())
+	var body struct {
+		Categories []struct {
+			ID       string `json:"id"`
+			Position int    `json:"position"`
+		} `json:"categories"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := h.svc.ReorderCategories(r.Context(), hubID, userID, body.Categories); err != nil {
+		writeAppError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

@@ -126,9 +126,11 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 		r.Post("/api/hubs/{hubID}/categories", catH.Create)
 		r.Get("/api/hubs/{hubID}/categories", catH.List)
 		r.Delete("/api/hubs/{hubID}/categories/{categoryID}", catH.Delete)
+		r.Put("/api/hubs/{hubID}/categories/reorder", catH.Reorder)
 		r.Get("/api/streams/{streamID}", streamH.Get)
 		r.Patch("/api/streams/{streamID}", streamH.Patch)
 		r.Delete("/api/streams/{streamID}", streamH.Delete)
+		r.Put("/api/hubs/{hubID}/streams/reorder", streamH.Reorder)
 		r.Put("/api/streams/{streamID}/ack", streamH.Ack)
 
 		r.Get("/api/streams/{streamID}/messages", msgH.List)

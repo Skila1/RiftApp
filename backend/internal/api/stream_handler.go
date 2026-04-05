@@ -119,6 +119,27 @@ func (h *StreamHandler) ReadStates(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, states)
 }
 
+func (h *StreamHandler) Reorder(w http.ResponseWriter, r *http.Request) {
+	hubID := chi.URLParam(r, "hubID")
+	userID := middleware.GetUserID(r.Context())
+	var body struct {
+		Streams []struct {
+			ID         string  `json:"id"`
+			Position   int     `json:"position"`
+			CategoryID *string `json:"category_id"`
+		} `json:"streams"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := h.svc.ReorderStreams(r.Context(), hubID, userID, body.Streams); err != nil {
+		writeAppError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *StreamHandler) MarkHubRead(w http.ResponseWriter, r *http.Request) {
 	hubID := chi.URLParam(r, "hubID")
 	userID := middleware.GetUserID(r.Context())

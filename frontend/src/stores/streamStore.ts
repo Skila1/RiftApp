@@ -39,6 +39,8 @@ interface StreamState {
   markStreamRead: (streamId: string) => Promise<void>;
   createCategory: (hubId: string, name: string) => Promise<Category>;
   deleteCategory: (hubId: string, categoryId: string) => Promise<void>;
+  reorderStreams: (hubId: string, streams: Stream[]) => Promise<void>;
+  reorderCategories: (hubId: string, categories: Category[]) => Promise<void>;
   loadReadStates: (hubId: string) => Promise<void>;
   /** Merge read-state counts for a hub (e.g. after Mark as Read); does not require the hub to be active. */
   mergeReadStatesForHub: (hubId: string) => Promise<void>;
@@ -308,6 +310,68 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       }
       return { categories, streams, hubLayoutCache };
     });
+  },
+
+  reorderStreams: async (hubId, newStreams) => {
+    // Optimistic update
+    set((s) => {
+      const hubLayoutCache = { ...s.hubLayoutCache };
+      const prev = hubLayoutCache[hubId];
+      if (prev) {
+        hubLayoutCache[hubId] = { ...prev, at: Date.now(), streams: newStreams };
+      }
+      return { streams: newStreams, hubLayoutCache };
+    });
+    try {
+      await api.reorderStreams(
+        hubId,
+        newStreams
+          .filter((st) => st.hub_id === hubId)
+          .map((st) => ({ id: st.id, position: st.position, category_id: st.category_id ?? null })),
+      );
+    } catch {
+      // Rollback: reload from server
+      const streams = await api.getStreams(hubId);
+      set((s) => {
+        const hubLayoutCache = { ...s.hubLayoutCache };
+        const prev = hubLayoutCache[hubId];
+        if (prev) {
+          hubLayoutCache[hubId] = { ...prev, at: Date.now(), streams };
+        }
+        return { streams, hubLayoutCache };
+      });
+    }
+  },
+
+  reorderCategories: async (hubId, newCategories) => {
+    // Optimistic update
+    set((s) => {
+      const hubLayoutCache = { ...s.hubLayoutCache };
+      const prev = hubLayoutCache[hubId];
+      if (prev) {
+        hubLayoutCache[hubId] = { ...prev, at: Date.now(), categories: newCategories };
+      }
+      return { categories: newCategories, hubLayoutCache };
+    });
+    try {
+      await api.reorderCategories(
+        hubId,
+        newCategories
+          .filter((c) => c.hub_id === hubId)
+          .map((c) => ({ id: c.id, position: c.position })),
+      );
+    } catch {
+      // Rollback: reload from server
+      const categories = await api.getCategories(hubId);
+      set((s) => {
+        const hubLayoutCache = { ...s.hubLayoutCache };
+        const prev = hubLayoutCache[hubId];
+        if (prev) {
+          hubLayoutCache[hubId] = { ...prev, at: Date.now(), categories };
+        }
+        return { categories, hubLayoutCache };
+      });
+    }
   },
 
   loadReadStates: async (hubId) => {

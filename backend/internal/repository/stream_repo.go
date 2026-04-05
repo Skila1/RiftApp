@@ -139,6 +139,31 @@ func (r *StreamRepo) GetReadStates(ctx context.Context, hubID, userID string) ([
 	return states, rows.Err()
 }
 
+// BulkUpdatePositions updates position and optionally category_id for multiple streams in a single transaction.
+func (r *StreamRepo) BulkUpdatePositions(ctx context.Context, hubID string, items []struct {
+	ID         string
+	Position   int
+	CategoryID *string
+}) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	for _, item := range items {
+		_, err := tx.Exec(ctx,
+			`UPDATE streams SET position = $1, category_id = $2
+			 WHERE id = $3 AND hub_id = $4`,
+			item.Position, item.CategoryID, item.ID, hubID,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
 // SetLastActivity records when activity occurred for ordering (convenience for future use)
 func (r *StreamRepo) Touch(ctx context.Context, streamID string) {
 	r.db.Exec(ctx, `UPDATE streams SET created_at = $1 WHERE id = $2`, time.Now(), streamID)

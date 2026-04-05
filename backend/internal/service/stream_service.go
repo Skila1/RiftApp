@@ -169,3 +169,31 @@ func (s *StreamService) MarkAllReadInHub(ctx context.Context, hubID, userID stri
 	}
 	return nil
 }
+
+// ReorderStreams bulk-updates stream positions and category assignments.
+func (s *StreamService) ReorderStreams(ctx context.Context, hubID, userID string, items []struct {
+	ID         string  `json:"id"`
+	Position   int     `json:"position"`
+	CategoryID *string `json:"category_id"`
+}) error {
+	if !s.hubService.HasPermission(ctx, hubID, userID, models.PermManageStreams) {
+		return apperror.Forbidden("you do not have permission to manage channels")
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	bulkItems := make([]struct {
+		ID         string
+		Position   int
+		CategoryID *string
+	}, len(items))
+	for i, it := range items {
+		bulkItems[i].ID = it.ID
+		bulkItems[i].Position = it.Position
+		bulkItems[i].CategoryID = it.CategoryID
+	}
+	if err := s.streamRepo.BulkUpdatePositions(ctx, hubID, bulkItems); err != nil {
+		return apperror.Internal("failed to reorder streams", err)
+	}
+	return nil
+}
