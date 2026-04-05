@@ -330,6 +330,10 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
 
   const reactions = message.reactions || [];
 
+  // Extract embeddable content from message text
+  const ytIds = useMemo(() => extractYouTubeIds(message.content || ''), [message.content]);
+  const linkUrls = useMemo(() => extractUrls(message.content || ''), [message.content]);
+
   const contentBlock =
     editing ? (
       <div className="mt-1 space-y-2">
@@ -371,6 +375,8 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
       <>
         <div className="text-[15px] leading-[1.375rem] text-riftapp-text/[0.90]">{renderedContent}</div>
         <Attachments message={message} />
+        {ytIds.map((id) => <YouTubeEmbed key={id} videoId={id} />)}
+        {linkUrls.map((u) => <LinkPreview key={u} url={u} />)}
         {reactions.length > 0 && (
           <ReactionPills reactions={reactions} currentUserId={currentUserId} onToggle={handleToggle} />
         )}
@@ -503,6 +509,136 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
 });
 
 export default MessageItem;
+
+/* ─── YouTube embed helpers ───────────────────────────────────────── */
+const YT_RE = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([\w-]{11})(?:[&?][^\s]*)?/g;
+
+function extractYouTubeIds(text: string): string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  let m: RegExpExecArray | null;
+  const re = new RegExp(YT_RE.source, 'g');
+  while ((m = re.exec(text)) !== null) {
+    if (!seen.has(m[1])) {
+      seen.add(m[1]);
+      ids.push(m[1]);
+    }
+  }
+  return ids;
+}
+
+function YouTubeEmbed({ videoId }: { videoId: string }) {
+  return (
+    <div className="mt-1.5 max-w-[420px] rounded-xl overflow-hidden border border-riftapp-border/40 bg-riftapp-bg/40">
+      <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+        <iframe
+          src={`https://www.youtube.com/embed/${videoId}`}
+          title="YouTube video"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          loading="lazy"
+          className="absolute inset-0 w-full h-full"
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ─── Generic link unfurl ────────────────────────────────────────────── */
+const PLAIN_URL_RE = /https?:\/\/[^\s<>]+/g;
+
+function extractUrls(text: string): string[] {
+  const matches = text.match(PLAIN_URL_RE);
+  if (!matches) return [];
+  // Deduplicate and exclude YouTube (handled separately) and invite links
+  const seen = new Set<string>();
+  const ytRe = new RegExp(YT_RE.source);
+  const invRe = new RegExp(INVITE_URL_RE.source);
+  return matches.filter((u) => {
+    if (seen.has(u)) return false;
+    seen.add(u);
+    if (ytRe.test(u)) return false;
+    if (invRe.test(u)) return false;
+    return true;
+  });
+}
+
+function LinkPreview({ url }: { url: string }) {
+  const [meta, setMeta] = useState<{ title?: string; description?: string; image?: string; domain: string } | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const domain = (() => { try { return new URL(url).hostname; } catch { return ''; } })();
+    // Use a lightweight open-graph proxy to get metadata
+    // Fallback: just show domain card with no metadata fetch
+    setMeta({ domain });
+
+    // Attempt fetching og metadata via a same-origin proxy to avoid CORS
+    (async () => {
+      try {
+        const res = await fetch(`/api/unfurl?url=${encodeURIComponent(url)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) {
+          setMeta({ title: data.title, description: data.description, image: data.image, domain });
+        }
+      } catch {
+        // Metadata fetch failed — the simple domain card remains
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [url]);
+
+  if (failed || !meta) return null;
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mt-1.5 flex gap-3 max-w-[420px] rounded-xl border border-riftapp-border/40 bg-riftapp-surface p-3
+        hover:bg-riftapp-surface-hover hover:border-riftapp-border transition-all duration-150 group/link"
+    >
+      {meta.image && (
+        <img
+          src={meta.image}
+          alt=""
+          className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
+          onError={() => setFailed(false)}
+        />
+      )}
+      <div className="min-w-0 flex-1">
+        {meta.title && (
+          <p className="text-sm font-medium text-riftapp-accent group-hover/link:underline truncate">{meta.title}</p>
+        )}
+        {meta.description && (
+          <p className="text-xs text-riftapp-text-muted line-clamp-2 mt-0.5">{meta.description}</p>
+        )}
+        <p className="text-[11px] text-riftapp-text-dim mt-1">{meta.domain}</p>
+      </div>
+    </a>
+  );
+}
+
+/* ─── Inline video player ────────────────────────────────────────────── */
+function VideoPlayer({ src }: { src: string }) {
+  return (
+    <div className="mt-1 max-w-[420px] rounded-xl overflow-hidden border border-riftapp-border/40 bg-black">
+      <video
+        src={src}
+        controls
+        preload="metadata"
+        playsInline
+        className="w-full max-h-[300px] object-contain rounded-xl"
+      >
+        <track kind="captions" />
+        Your browser does not support the video tag.
+      </video>
+    </div>
+  );
+}
 
 /* ─── Image thumbnail with lazy-load fade-in ─────────────────────────── */
 function ImageThumb({
@@ -766,14 +902,15 @@ function ImageGrid({
   );
 }
 
-/* ─── Attachments (images + files) ──────────────────────────────────── */
+/* ─── Attachments (images, videos & files) ──────────────────────────── */
 function Attachments({ message }: { message: Message }) {
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
 
   if (!message.attachments || message.attachments.length === 0) return null;
 
   const imageAtts = message.attachments.filter((a) => a.content_type.startsWith('image/'));
-  const fileAtts = message.attachments.filter((a) => !a.content_type.startsWith('image/'));
+  const videoAtts = message.attachments.filter((a) => a.content_type.startsWith('video/'));
+  const fileAtts = message.attachments.filter((a) => !a.content_type.startsWith('image/') && !a.content_type.startsWith('video/'));
 
   const imageItems = imageAtts.map((att) => ({
     id: att.id,
@@ -799,7 +936,6 @@ function Attachments({ message }: { message: Message }) {
             <ImageGrid
               images={imageItems}
               onOpen={(idx) => {
-                // If user clicks "+N more" overlay (last visible), still show that image
                 const img = imageItems[idx];
                 setLightbox({ src: img.src, alt: img.alt });
               }}
@@ -807,7 +943,12 @@ function Attachments({ message }: { message: Message }) {
           )
         )}
 
-        {/* Non-image files */}
+        {/* Videos */}
+        {videoAtts.map((att) => (
+          <VideoPlayer key={att.id} src={publicAssetUrl(att.url)} />
+        ))}
+
+        {/* Non-image/video files */}
         {fileAtts.map((att) => {
           const fileUrl = publicAssetUrl(att.url);
           return (
