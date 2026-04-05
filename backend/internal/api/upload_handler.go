@@ -90,14 +90,25 @@ func NewUploadHandler(cfg *config.Config, db *pgxpool.Pool) (*UploadHandler, err
 		}
 	}
 
-	// Determine public URL base (falls back to S3Endpoint for local dev)
-	publicBase := cfg.S3PublicURL
-	if publicBase == "" {
-		publicBase = cfg.S3Endpoint
-	}
-	publicBase = strings.TrimRight(publicBase, "/")
+	publicBase := publicAssetURLBase(cfg)
 
 	return &UploadHandler{client: client, bucket: cfg.S3Bucket, cfg: cfg, db: db, publicURL: publicBase}, nil
+}
+
+// publicAssetURLBase is the prefix for URLs stored in the DB (avatars, attachments).
+// When S3_PUBLIC_URL is set, it must resolve through the API reverse proxy paths /s3/* and /api/s3/*
+// (see router.go). We append "/s3" if missing so stored paths are always …/s3/{bucket}/{object}.
+// When S3_PUBLIC_URL is empty, we fall back to S3_ENDPOINT (e.g. http://localhost:9000) for MinIO path-style URLs.
+func publicAssetURLBase(cfg *config.Config) string {
+	base := strings.TrimSpace(cfg.S3PublicURL)
+	if base == "" {
+		return strings.TrimRight(cfg.S3Endpoint, "/")
+	}
+	base = strings.TrimRight(base, "/")
+	if !strings.HasSuffix(base, "/s3") {
+		base += "/s3"
+	}
+	return base
 }
 
 func (h *UploadHandler) Upload(w http.ResponseWriter, r *http.Request) {

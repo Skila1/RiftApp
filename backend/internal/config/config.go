@@ -12,6 +12,9 @@ type Config struct {
 	JWTSecret      string
 	AllowedOrigins []string
 	S3Endpoint     string
+	// S3PublicURL is the browser-facing base for attachment/avatar URLs. If set, it should be your API
+	// origin (no trailing slash); the server stores URLs as {S3PublicURL}/s3/{bucket}/{object}. Leave empty
+	// to use S3Endpoint (e.g. local MinIO path-style URLs).
 	S3PublicURL    string
 	S3AccessKey    string
 	S3SecretKey    string

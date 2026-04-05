@@ -9,6 +9,10 @@
  *
  * Optional: `VITE_MEDIA_S3_USE_LEGACY_PATH=1` uses `origin + /s3/…` instead of `origin + /api/s3/…` when
  * building from a relative `/s3/…` path (older APIs).
+ *
+ * Legacy URLs shaped like `https://api-host/{bucket}/file` (no `/s3/` segment): set `VITE_S3_BUCKET` to
+ * match `S3_BUCKET`, and with relative `VITE_API_URL=/api` also set `VITE_ASSET_URL_HOSTS` to your API
+ * hostname (comma-separated) so those URLs rewrite to `/api/s3/{bucket}/file`.
  */
 export function publicAssetUrl(raw: string | undefined | null): string {
   if (raw == null || raw === '') return '';
@@ -33,6 +37,30 @@ export function publicAssetUrl(raw: string | undefined | null): string {
 
     const u = new URL(trimmed);
     const rest = `${u.pathname}${u.search}${u.hash}`;
+
+    const mediaBucket = (import.meta.env.VITE_S3_BUCKET as string | undefined)?.trim();
+    if (mediaBucket && rest.startsWith(`/${mediaBucket}/`) && !rest.startsWith('/s3/')) {
+      const trustBucketPathHost = (): boolean => {
+        if (apiBase.startsWith('http')) {
+          return new URL(apiBase).host === u.host;
+        }
+        const extra = (import.meta.env.VITE_ASSET_URL_HOSTS as string | undefined)
+          ?.split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (extra?.length) return extra.includes(u.host);
+        return u.hostname === 'localhost' || u.hostname === '127.0.0.1';
+      };
+      if (trustBucketPathHost()) {
+        if (apiBase.startsWith('/')) {
+          return `/api/s3${rest}`;
+        }
+        if (apiBase.startsWith('http')) {
+          return `${new URL(apiBase).origin}/api/s3${rest}`;
+        }
+      }
+    }
+
     if (!rest.startsWith('/s3/')) return trimmed;
 
     // Relative VITE_API_URL (e.g. /api): always use same-origin /api/s3/… for tunnel or API-stored URLs.
