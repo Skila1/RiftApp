@@ -1,4 +1,4 @@
-import { useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
+import { useRef, useEffect, useLayoutEffect, useMemo, useCallback, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStreamStore } from '../../stores/streamStore';
 import { useHubStore } from '../../stores/hubStore';
@@ -69,6 +69,23 @@ export default function ChatPanel() {
     }
   }, [activeStreamId, send]);
 
+  const NEAR_BOTTOM_THRESHOLD = 50;
+  const [showNewMsgBanner, setShowNewMsgBanner] = useState(false);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const distBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    wasNearBottomRef.current = distBottom < NEAR_BOTTOM_THRESHOLD;
+    if (wasNearBottomRef.current) setShowNewMsgBanner(false);
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'auto' });
+    setShowNewMsgBanner(false);
+    wasNearBottomRef.current = true;
+  }, []);
+
   const hasScrolledToUnread = useRef(false);
   const justSwitchedRef = useRef(false);
 
@@ -77,6 +94,7 @@ export default function ChatPanel() {
     prevMessageCountRef.current = 0;
     wasNearBottomRef.current = true;
     justSwitchedRef.current = true;
+    setShowNewMsgBanner(false);
   }, [activeStreamId, activeConversationId]);
 
   // After tab sleep, reconcile the open channel with the server (cache avoids routine refetch).
@@ -90,17 +108,20 @@ export default function ChatPanel() {
   }, [activeStreamId, isDMMode]);
 
   useLayoutEffect(() => {
-    if (isLoading) {
-      return;
-    }
+    if (isLoading) return;
+
     const el = scrollContainerRef.current;
     const bottomEl = bottomRef.current;
 
+    // Scroll to unread divider on first load of a channel
     if (!hasScrolledToUnread.current && unreadRef.current) {
       unreadRef.current.scrollIntoView({ behavior: 'auto', block: 'center' });
       hasScrolledToUnread.current = true;
       prevMessageCountRef.current = displayMessages.length;
-      wasNearBottomRef.current = true;
+      if (el) {
+        const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+        wasNearBottomRef.current = dist < NEAR_BOTTOM_THRESHOLD;
+      }
       return;
     }
 
@@ -109,19 +130,23 @@ export default function ChatPanel() {
       return;
     }
 
-    const { scrollTop, scrollHeight, clientHeight } = el;
-    const distBottom = scrollHeight - scrollTop - clientHeight;
     const grew = displayMessages.length > prevMessageCountRef.current;
     prevMessageCountRef.current = displayMessages.length;
 
-    if (grew && (wasNearBottomRef.current || distBottom < 80)) {
-      const instant = justSwitchedRef.current;
+    if (!grew) {
       justSwitchedRef.current = false;
-      bottomEl.scrollIntoView({ behavior: instant ? 'auto' : 'smooth' });
+      return;
+    }
+
+    // Messages grew — auto-scroll only if switching channel or already at bottom
+    if (justSwitchedRef.current || wasNearBottomRef.current) {
+      justSwitchedRef.current = false;
+      bottomEl.scrollIntoView({ behavior: 'auto' });
       wasNearBottomRef.current = true;
+      setShowNewMsgBanner(false);
     } else {
       justSwitchedRef.current = false;
-      wasNearBottomRef.current = distBottom < 80;
+      setShowNewMsgBanner(true);
     }
   }, [displayMessages.length, isLoading, firstUnreadIndex]);
 
@@ -187,7 +212,17 @@ export default function ChatPanel() {
       </div>
 
       {/* Messages */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-hidden relative">
+        {showNewMsgBanner && (
+          <button
+            onClick={scrollToBottom}
+            className="absolute top-0 inset-x-0 z-20 flex items-center justify-center gap-1.5 py-1 bg-riftapp-accent text-white text-xs font-semibold cursor-pointer hover:brightness-110 transition shadow-md"
+          >
+            New messages
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+          </button>
+        )}
+        <div ref={scrollContainerRef} onScroll={handleScroll} className="h-full overflow-y-auto">
         <AnimatePresence mode="wait">
         <motion.div
           key={activeStreamId || activeConversationId || 'empty'}
@@ -278,6 +313,7 @@ export default function ChatPanel() {
         )}
         </motion.div>
         </AnimatePresence>
+        </div>
       </div>
 
       {/* Typing indicator + Input */}
