@@ -81,12 +81,11 @@ export default function ChatPanel() {
     : `${activeHubId}-${activeStreamId}`;
   const channelKeyRef = useRef(channelKey);
 
-  const saveScrollPos = useCallback((source: string) => {
+  const saveScrollPos = useCallback(() => {
     const el = scrollContainerRef.current;
     const key = channelKeyRef.current;
     if (!el || !key) return;
     scrollCacheRef.current[key] = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight };
-    console.log(`[SCROLL] SAVE (${source}) key=${key} scrollTop=${el.scrollTop} scrollHeight=${el.scrollHeight} el=`, el);
   }, []);
 
   const handleScroll = useCallback(() => {
@@ -95,39 +94,29 @@ export default function ChatPanel() {
     const distBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     wasNearBottomRef.current = distBottom < NEAR_BOTTOM_THRESHOLD;
     if (wasNearBottomRef.current) setShowNewMsgBanner(false);
-    saveScrollPos('onScroll');
+    saveScrollPos();
   }, [saveScrollPos]);
 
   const scrollToBottom = useCallback(() => {
-    console.log('[SCROLL] scrollToBottom() called, bottomRef=', bottomRef.current);
-    console.trace('[SCROLL] scrollToBottom trace');
     bottomRef.current?.scrollIntoView({ behavior: 'auto' });
     setShowNewMsgBanner(false);
     wasNearBottomRef.current = true;
-    saveScrollPos('scrollToBottom');
+    saveScrollPos();
   }, [saveScrollPos]);
 
   const hasScrolledToUnread = useRef(false);
 
   // Channel/server switch — useLayoutEffect so refs update BEFORE paint
   useLayoutEffect(() => {
-    const prevKey = channelKeyRef.current;
-    const el = scrollContainerRef.current;
-    console.log(`[SCROLL] === SWITCH layoutEffect === hub=${activeHubId} stream=${activeStreamId} conv=${activeConversationId}`);
-    console.log(`[SCROLL] prevKey=${prevKey} el=`, el, `scrollTop=${el?.scrollTop} scrollHeight=${el?.scrollHeight}`);
-
-    // Save departing channel scroll position
-    if (prevKey && el) {
-      scrollCacheRef.current[prevKey] = { scrollTop: el.scrollTop, scrollHeight: el.scrollHeight };
-      console.log(`[SCROLL] SAVE (switch-depart) key=${prevKey} scrollTop=${el.scrollTop} scrollHeight=${el.scrollHeight}`);
-    }
+    // Don't read scroll position from DOM here — by the time this layoutEffect
+    // runs React has already committed the new content, so el.scrollTop may be
+    // reset to 0.  The handleScroll callback continuously writes to the cache,
+    // so the departing channel's position is already saved there.
 
     const newKey = isDMMode ? `dm-${activeConversationId}` : `${activeHubId}-${activeStreamId}`;
     channelKeyRef.current = newKey;
 
     const saved = scrollCacheRef.current[newKey];
-    console.log(`[SCROLL] newKey=${newKey} hasSaved=${!!saved}`, saved);
-    console.log(`[SCROLL] Full cache keys:`, Object.keys(scrollCacheRef.current));
 
     hasScrolledToUnread.current = false;
     prevMessageCountRef.current = 0;
@@ -137,12 +126,10 @@ export default function ChatPanel() {
       pendingRestoreRef.current = saved;
       needsScrollToBottomRef.current = false;
       wasNearBottomRef.current = false;
-      console.log(`[SCROLL] -> pendingRestore SET, needsBottom=false`);
     } else {
       pendingRestoreRef.current = null;
       needsScrollToBottomRef.current = true;
       wasNearBottomRef.current = true;
-      console.log(`[SCROLL] -> pendingRestore NULL, needsBottom=true`);
     }
   }, [activeStreamId, activeConversationId, activeHubId, isDMMode]);
 
@@ -158,26 +145,18 @@ export default function ChatPanel() {
 
   // Main scroll positioning — fires after channel-switch layoutEffect (declaration order)
   useLayoutEffect(() => {
-    console.log(`[SCROLL] === POSITION layoutEffect === isLoading=${isLoading} msgCount=${displayMessages.length} pendingRestore=${!!pendingRestoreRef.current} needsBottom=${needsScrollToBottomRef.current} stream=${activeStreamId} conv=${activeConversationId}`);
-    if (isLoading) {
-      console.log('[SCROLL] -> skipped (isLoading)');
-      return;
-    }
+    // Skip when loading or during transient hub-switch state (no active channel)
+    if (isLoading || (!activeStreamId && !activeConversationId)) return;
 
     const el = scrollContainerRef.current;
     const bottomEl = bottomRef.current;
-    console.log(`[SCROLL] el=`, el, `scrollTop=${el?.scrollTop} scrollHeight=${el?.scrollHeight} clientHeight=${el?.clientHeight}`);
-    console.log(`[SCROLL] bottomEl=`, bottomEl, `unreadEl=`, unreadRef.current);
 
     // 1) Restore saved scroll position
     if (pendingRestoreRef.current && el) {
       const saved = pendingRestoreRef.current;
       pendingRestoreRef.current = null;
       const delta = el.scrollHeight - saved.scrollHeight;
-      const newScrollTop = saved.scrollTop + delta;
-      console.log(`[SCROLL] RESTORE key=${channelKeyRef.current} savedTop=${saved.scrollTop} savedHeight=${saved.scrollHeight} curHeight=${el.scrollHeight} delta=${delta} -> newScrollTop=${newScrollTop}`);
-      el.scrollTop = newScrollTop;
-      console.log(`[SCROLL] RESTORE applied: actual scrollTop=${el.scrollTop}`);
+      el.scrollTop = saved.scrollTop + delta;
       const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
       wasNearBottomRef.current = dist < NEAR_BOTTOM_THRESHOLD;
       prevMessageCountRef.current = displayMessages.length;
@@ -188,7 +167,6 @@ export default function ChatPanel() {
     // 2) First-time channel visit — scroll to bottom
     if (needsScrollToBottomRef.current && bottomEl && displayMessages.length > 0) {
       needsScrollToBottomRef.current = false;
-      console.log('[SCROLL] -> scrollIntoView(bottom) [first visit]');
       bottomEl.scrollIntoView({ behavior: 'auto' });
       wasNearBottomRef.current = true;
       prevMessageCountRef.current = displayMessages.length;
@@ -198,7 +176,6 @@ export default function ChatPanel() {
 
     // 3) Scroll to unread divider on first load (no saved pos)
     if (!hasScrolledToUnread.current && unreadRef.current) {
-      console.log('[SCROLL] -> scrollIntoView(unread)');
       unreadRef.current.scrollIntoView({ behavior: 'auto', block: 'center' });
       hasScrolledToUnread.current = true;
       prevMessageCountRef.current = displayMessages.length;
@@ -210,24 +187,18 @@ export default function ChatPanel() {
     }
 
     if (!el || !bottomEl) {
-      console.log('[SCROLL] -> skipped (no el or bottomEl)');
       prevMessageCountRef.current = displayMessages.length;
       return;
     }
 
     // 4) New messages while viewing a channel
     const grew = displayMessages.length > prevMessageCountRef.current;
-    console.log(`[SCROLL] grew=${grew} prevCount=${prevMessageCountRef.current} wasNearBottom=${wasNearBottomRef.current}`);
     prevMessageCountRef.current = displayMessages.length;
 
     if (grew && wasNearBottomRef.current) {
-      console.log('[SCROLL] -> scrollIntoView(bottom) [new msg, near bottom]');
       bottomEl.scrollIntoView({ behavior: 'auto' });
     } else if (grew) {
-      console.log('[SCROLL] -> showing new msg banner');
       setShowNewMsgBanner(true);
-    } else {
-      console.log('[SCROLL] -> no action');
     }
   }, [activeStreamId, activeConversationId, displayMessages.length, isLoading, firstUnreadIndex]);
 
