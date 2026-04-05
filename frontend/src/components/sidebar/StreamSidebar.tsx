@@ -25,7 +25,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import SettingsModal from '../settings/SettingsModal';
+import SettingsModal, { type SettingsModalTab } from '../settings/SettingsModal';
 import HubSettingsModal from '../settings/HubSettingsModal';
 import VoicePanel from '../voice/VoicePanel';
 import StatusDot, { statusLabel } from '../shared/StatusDot';
@@ -71,7 +71,7 @@ export default function StreamSidebar() {
   const voiceScreenShareSurfaceLabel = useVoiceStore((s) => s.screenShareSurfaceLabel);
   const voiceScreenShareNotice = useVoiceStore((s) => s.screenShareNotice);
   const voiceDismissScreenShareNotice = useVoiceStore((s) => s.dismissScreenShareNotice);
-  const voiceNoiseSuppressionEnabled = useVoiceStore((s) => s.noiseSuppressionMode !== 'off');
+  const voiceNoiseSuppressionEnabled = useVoiceStore((s) => s.noiseSuppressionEnabled);
   const voiceToggleNoiseSuppression = useVoiceStore((s) => s.toggleNoiseSuppression);
   const voiceMembers = useStreamStore((s) => s.voiceMembers);
 
@@ -1247,6 +1247,7 @@ function SortableVoiceItem({
 
 function UserBar({ user }: { user: User | null; logout: () => void }) {
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsModalTab>('profile');
   const liveStatus = usePresenceStore((s) => user ? s.presence[user.id] : undefined);
   const openSelfProfile = useSelfProfileStore((s) => s.open);
   const voiceIsMuted = useVoiceStore((s) => s.isMuted);
@@ -1260,7 +1261,11 @@ function UserBar({ user }: { user: User | null; logout: () => void }) {
   }, [openSelfProfile]);
 
   useEffect(() => {
-    const handler = () => setShowSettings(true);
+    const handler = (event: Event) => {
+      const detail = event instanceof CustomEvent ? event.detail as { tab?: SettingsModalTab } | undefined : undefined;
+      setSettingsTab(detail?.tab ?? 'profile');
+      setShowSettings(true);
+    };
     document.addEventListener('open-settings', handler);
     return () => document.removeEventListener('open-settings', handler);
   }, []);
@@ -1353,7 +1358,10 @@ function UserBar({ user }: { user: User | null; logout: () => void }) {
 
           {/* Settings */}
           <button
-            onClick={() => setShowSettings(true)}
+            onClick={() => {
+              setSettingsTab('profile');
+              setShowSettings(true);
+            }}
             title="User Settings"
             className="w-8 h-8 rounded-md flex items-center justify-center text-riftapp-text-dim
               hover:text-riftapp-text hover:bg-riftapp-panel/60 transition-all duration-150 active:scale-90"
@@ -1365,7 +1373,7 @@ function UserBar({ user }: { user: User | null; logout: () => void }) {
           </button>
         </div>
       </div>
-      {showSettings && <SettingsModal onClose={closeSettings} />}
+      {showSettings && <SettingsModal onClose={closeSettings} initialTab={settingsTab} />}
     </>
   );
 }

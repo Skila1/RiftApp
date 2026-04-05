@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ConnectionState, ConnectionQuality } from 'livekit-client';
 import SoundboardPanel from './SoundboardPanel';
-import { useAppSettingsStore } from '../../stores/appSettingsStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 
 interface VoicePanelProps {
@@ -23,7 +22,7 @@ interface VoicePanelProps {
   onDismissScreenShareNotice: () => void;
 }
 
-function KrispWaveformIcon({ active }: { active: boolean }) {
+function NoiseSuppressionIcon({ active }: { active: boolean }) {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className={active ? 'text-riftapp-text' : 'text-riftapp-text-dim'} aria-hidden>
       <rect x="4" y="10" width="2.5" height="8" rx="1" fill="currentColor" />
@@ -141,15 +140,8 @@ export default function VoicePanel({
   onDismissScreenShareNotice,
 }: VoicePanelProps) {
   const [soundboardOpen, setSoundboardOpen] = useState(false);
-  const developerMode = useAppSettingsStore((s) => s.developerMode);
-  const micLevel = useVoiceStore((s) => s.micLevel);
-  const vadThreshold = useVoiceStore((s) => s.vadThreshold);
-  const localSpeaking = useVoiceStore((s) => Boolean(s.participants[0]?.isSpeaking));
   const connectionState = useVoiceStore((s) => s.connectionStats.state);
   const controlsDisabled = !connected || connecting;
-  const meterMax = 0.1;
-  const meterPercent = Math.min(100, (micLevel / meterMax) * 100);
-  const thresholdPercent = Math.min(100, (vadThreshold / meterMax) * 100);
   const status = useMemo(() => {
     if (connecting || connectionState === ConnectionState.Connecting) {
       return { label: 'Connecting…', className: 'text-riftapp-warning' };
@@ -175,7 +167,7 @@ export default function VoicePanel({
           </span>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          {/* Noise suppression (Discord / Krisp-style control) */}
+          {/* Noise suppression control */}
           <div className="relative group">
             <button
               type="button"
@@ -189,14 +181,14 @@ export default function VoicePanel({
                   : 'text-riftapp-text-dim hover:text-riftapp-text hover:bg-riftapp-surface-hover/80'
               }`}
             >
-              <KrispWaveformIcon active={noiseSuppressionEnabled} />
+              <NoiseSuppressionIcon active={noiseSuppressionEnabled} />
             </button>
             {/* Tooltip bubble (Discord-style) */}
             <div
               className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max max-w-[220px] -translate-x-1/2 rounded-lg border border-black/50 bg-[#111214] px-3 py-2 text-center text-[12px] leading-snug text-white shadow-[0_4px_16px_rgba(0,0,0,0.5)] opacity-0 transition-opacity duration-150 group-hover:opacity-100"
               role="tooltip"
             >
-              Noise Suppression powered by Krisp
+              Noise Suppression
               <div
                 className="absolute left-1/2 top-full h-0 w-0 -translate-x-1/2 border-x-[6px] border-x-transparent border-t-[6px] border-t-[#111214]"
                 aria-hidden
@@ -220,31 +212,6 @@ export default function VoicePanel({
       <p className="text-[11px] text-riftapp-text-dim truncate mb-3 ml-3.5">
         {streamName} / {hubName}
       </p>
-
-      {connected && developerMode && (
-        <div className="mb-3 rounded-xl border border-riftapp-border/40 bg-riftapp-panel/60 px-3 py-2.5">
-          <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.14em] text-riftapp-text-dim">
-            <span>Mic VAD</span>
-            <span className={localSpeaking ? 'text-riftapp-success' : 'text-riftapp-text-dim'}>
-              {localSpeaking ? 'Speaking' : 'Idle'}
-            </span>
-          </div>
-          <div className="relative mt-2 h-2.5 overflow-hidden rounded-full bg-black/25">
-            <div
-              className={`h-full rounded-full transition-[width,background-color] duration-75 ${localSpeaking ? 'bg-riftapp-success' : 'bg-riftapp-accent/70'}`}
-              style={{ width: `${meterPercent}%` }}
-            />
-            <div
-              className="absolute inset-y-0 w-px bg-white/75"
-              style={{ left: `${thresholdPercent}%` }}
-            />
-          </div>
-          <div className="mt-1.5 flex items-center justify-between text-[11px] text-riftapp-text-dim">
-            <span>Level {micLevel.toFixed(3)}</span>
-            <span>Threshold {vadThreshold.toFixed(3)}</span>
-          </div>
-        </div>
-      )}
 
       {screenShareNotice && (
         <div className={`mb-3 flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-[12px] ${

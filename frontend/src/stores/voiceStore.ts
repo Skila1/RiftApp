@@ -15,25 +15,153 @@ import {
 } from 'livekit-client';
 import { api } from '../api/client';
 import { wsSend } from '../hooks/useWebSocket';
+import {
+  DEFAULT_MANUAL_MIC_THRESHOLD,
+  DEFAULT_MIC_GATE_RELEASE_MS,
+  MicNoiseGateProcessor,
+} from '../utils/audio/micNoiseGate';
 
-const NS_STORAGE_KEY = 'riftapp-noise-suppression-mode';
-
-export type NoiseSuppressionMode = 'krisp' | 'standard' | 'off';
+const VOICE_SETTINGS_STORAGE_KEY = 'riftapp-voice-settings-v2';
 export type ScreenShareKind = 'screen' | 'window' | 'tab';
+
+type VoiceDeviceKind = 'audioinput' | 'audiooutput' | 'videoinput';
 
 type ScreenShareNotice = {
   tone: 'info' | 'error';
   message: string;
 };
 
-const VAD_THRESHOLD = 0.03;
-const VAD_RELEASE_MS = 110;
-const VAD_SPEAKING_BROADCAST_INTERVAL_MS = 80;
-const VAD_LEVEL_PUSH_INTERVAL_MS = 33;
+const SPEAKING_BROADCAST_INTERVAL_MS = 80;
 const CONNECTION_STATS_POLL_INTERVAL_MS = 1000;
+const MANUAL_INPUT_SENSITIVITY_MIN = 0;
+const MANUAL_INPUT_SENSITIVITY_MAX = 0.08;
 
 type VoiceConnectionTone = 'good' | 'medium' | 'bad' | 'neutral';
 type VoiceConnectionSource = 'webrtc' | 'livekit' | 'unknown';
+
+export interface VoiceMediaDevice {
+  deviceId: string;
+  label: string;
+}
+
+type VoiceMediaDevices = Record<VoiceDeviceKind, VoiceMediaDevice[]>;
+
+type VoiceSettingsSnapshot = {
+  inputDeviceId: string | null;
+  outputDeviceId: string | null;
+  cameraDeviceId: string | null;
+  automaticInputSensitivity: boolean;
+  manualInputSensitivity: number;
+  noiseSuppressionEnabled: boolean;
+};
+
+const DEFAULT_VOICE_SETTINGS: VoiceSettingsSnapshot = {
+  inputDeviceId: null,
+  outputDeviceId: null,
+  cameraDeviceId: null,
+  automaticInputSensitivity: true,
+  manualInputSensitivity: DEFAULT_MANUAL_MIC_THRESHOLD,
+  noiseSuppressionEnabled: true,
+};
+
+function emptyVoiceMediaDevices(): VoiceMediaDevices {
+  return {
+    audioinput: [],
+    audiooutput: [],
+    videoinput: [],
+  };
+}
+
+function clampManualInputSensitivity(value: number) {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_MANUAL_MIC_THRESHOLD;
+  }
+
+  return Math.min(
+    MANUAL_INPUT_SENSITIVITY_MAX,
+    Math.max(MANUAL_INPUT_SENSITIVITY_MIN, value),
+  );
+}
+
+function normalizeSelectedDeviceId(deviceId: string | null | undefined) {
+  if (typeof deviceId !== 'string') {
+    return null;
+  }
+
+  const trimmed = deviceId.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function loadVoiceSettings(): VoiceSettingsSnapshot {
+  try {
+    const raw = localStorage.getItem(VOICE_SETTINGS_STORAGE_KEY);
+    if (!raw) {
+      return DEFAULT_VOICE_SETTINGS;
+    }
+
+    const parsed = JSON.parse(raw) as Partial<VoiceSettingsSnapshot>;
+    return {
+      inputDeviceId: normalizeSelectedDeviceId(parsed.inputDeviceId),
+      outputDeviceId: normalizeSelectedDeviceId(parsed.outputDeviceId),
+      cameraDeviceId: normalizeSelectedDeviceId(parsed.cameraDeviceId),
+      automaticInputSensitivity: parsed.automaticInputSensitivity !== false,
+      manualInputSensitivity: clampManualInputSensitivity(
+        typeof parsed.manualInputSensitivity === 'number'
+          ? parsed.manualInputSensitivity
+          : DEFAULT_MANUAL_MIC_THRESHOLD,
+      ),
+      noiseSuppressionEnabled: parsed.noiseSuppressionEnabled !== false,
+    };
+  } catch {
+    return DEFAULT_VOICE_SETTINGS;
+  }
+}
+
+function persistVoiceSettings(settings: VoiceSettingsSnapshot) {
+  try {
+    localStorage.setItem(VOICE_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    /* ignore */
+  }
+}
+
+function fallbackDeviceLabel(kind: VoiceDeviceKind, index: number) {
+  if (kind === 'audioinput') return `Microphone ${index}`;
+  if (kind === 'audiooutput') return `Speaker ${index}`;
+  return `Camera ${index}`;
+}
+
+async function enumerateVoiceMediaDevices(): Promise<VoiceMediaDevices> {
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) {
+    return emptyVoiceMediaDevices();
+  }
+
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const counts: Record<VoiceDeviceKind, number> = {
+      audioinput: 0,
+      audiooutput: 0,
+      videoinput: 0,
+    };
+    const next = emptyVoiceMediaDevices();
+
+    for (const device of devices) {
+      if (device.kind !== 'audioinput' && device.kind !== 'audiooutput' && device.kind !== 'videoinput') {
+        continue;
+      }
+
+      counts[device.kind] += 1;
+      next[device.kind].push({
+        deviceId: device.deviceId,
+        label: device.label || fallbackDeviceLabel(device.kind, counts[device.kind]),
+      });
+    }
+
+    return next;
+  } catch {
+    return emptyVoiceMediaDevices();
+  }
+}
 
 export interface VoiceConnectionStats {
   state: ConnectionState;
@@ -44,24 +172,6 @@ export interface VoiceConnectionStats {
   tone: VoiceConnectionTone;
   source: VoiceConnectionSource;
   quality: ConnectionQuality;
-}
-
-function loadNoiseSuppressionMode(): NoiseSuppressionMode {
-  try {
-    const v = localStorage.getItem(NS_STORAGE_KEY);
-    if (v === 'krisp' || v === 'standard' || v === 'off') return v;
-  } catch {
-    /* private mode / unavailable */
-  }
-  return 'krisp';
-}
-
-function persistNoiseSuppressionMode(mode: NoiseSuppressionMode) {
-  try {
-    localStorage.setItem(NS_STORAGE_KEY, mode);
-  } catch {
-    /* ignore */
-  }
 }
 
 export interface VoiceParticipant {
@@ -75,6 +185,13 @@ export interface VoiceParticipant {
 }
 
 interface VoiceStore {
+  inputDeviceId: string | null;
+  outputDeviceId: string | null;
+  cameraDeviceId: string | null;
+  automaticInputSensitivity: boolean;
+  manualInputSensitivity: number;
+  noiseSuppressionEnabled: boolean;
+  mediaDevices: VoiceMediaDevices;
   connected: boolean;
   connecting: boolean;
   roomName: string | null;
@@ -88,8 +205,6 @@ interface VoiceStore {
   isScreenSharing: boolean;
   pttActive: boolean;
   pttMode: boolean;
-  micLevel: number;
-  vadThreshold: number;
   /** 0–1 per remote identity; used for HTML audio elements tagged with data-riftapp-voice-id */
   participantVolumes: Record<string, number>;
   /** Mutes all remote voice output without changing per-user slider values */
@@ -107,11 +222,6 @@ interface VoiceStore {
   screenShareKind: ScreenShareKind;
   screenShareSurfaceLabel: string | null;
   screenShareNotice: ScreenShareNotice | null;
-  /**
-   * Browser capture processing (Discord-style labels; uses WebRTC constraints, not the Krisp SDK).
-   * `krisp` prefers experimental voice isolation where supported; `standard` uses classic noise suppression.
-   */
-  noiseSuppressionMode: NoiseSuppressionMode;
 
   join: (streamId: string) => Promise<void>;
   leave: () => void;
@@ -130,7 +240,13 @@ interface VoiceStore {
   toggleStreamAudioMute: (identity: string) => void;
   setStreamAttenuationEnabled: (enabled: boolean) => void;
   setStreamAttenuationStrength: (strength: number) => void;
-  setNoiseSuppressionMode: (mode: NoiseSuppressionMode) => Promise<void>;
+  refreshMediaDevices: () => Promise<void>;
+  setInputDeviceId: (deviceId: string | null) => Promise<void>;
+  setOutputDeviceId: (deviceId: string | null) => Promise<void>;
+  setCameraDeviceId: (deviceId: string | null) => Promise<void>;
+  setAutomaticInputSensitivity: (enabled: boolean) => void;
+  setManualInputSensitivity: (threshold: number) => void;
+  setNoiseSuppressionEnabled: (enabled: boolean) => Promise<void>;
   toggleNoiseSuppression: () => Promise<void>;
   moveToStream: (streamId: string) => Promise<void>;
   applySpeakingSignal: (identity: string, speaking: boolean) => void;
@@ -140,16 +256,30 @@ interface VoiceStore {
 
 const CONNECT_TIMEOUT_MS = 15_000;
 
-/** Constraints passed to LiveKit when enabling the microphone */
-function micAudioCaptureOptions(mode: NoiseSuppressionMode): AudioCaptureOptions {
+function micAudioCaptureOptions(state: Pick<VoiceStore, 'inputDeviceId' | 'noiseSuppressionEnabled'>, processor?: MicNoiseGateProcessor): AudioCaptureOptions {
   const base: AudioCaptureOptions = {
     echoCancellation: true,
     autoGainControl: true,
+    noiseSuppression: state.noiseSuppressionEnabled,
+    deviceId: state.inputDeviceId ?? undefined,
+    processor,
   };
-  if (mode === 'off') return { ...base, noiseSuppression: false };
-  if (mode === 'standard') return { ...base, noiseSuppression: true };
-  // "Krisp" branding: strongest stack the browser exposes (voice isolation supersedes noiseSuppression when supported)
-  return { ...base, voiceIsolation: true };
+
+  if (!state.noiseSuppressionEnabled) {
+    return base;
+  }
+
+  return {
+    ...base,
+    voiceIsolation: true,
+  };
+}
+
+function cameraCaptureOptions(cameraDeviceId: string | null) {
+  return {
+    deviceId: cameraDeviceId ?? undefined,
+    resolution: VideoPresets.h1080.resolution,
+  };
 }
 
 let roomRef: Room | null = null;
@@ -159,17 +289,8 @@ let wasMutedBeforeDeafen = false;
 let screenShareNoticeTimer: number | null = null;
 let transientSpeakingExpiry = new Map<string, number>();
 let transientSpeakingTimers = new Map<string, number>();
-let micVadContext: AudioContext | null = null;
-let micVadAnalyser: AnalyserNode | null = null;
-let micVadSource: MediaStreamAudioSourceNode | null = null;
-let micVadData: Uint8Array<ArrayBuffer> | null = null;
-let micVadFrame: number | null = null;
-let micVadTrackId: string | null = null;
-let micVadSpeaking = false;
-let micVadHoldUntil = 0;
-let micVadLastLevelPushAt = 0;
-let micVadLastSpeakingBroadcastAt = 0;
-let micVadDisplayLevel = 0;
+let micGateProcessor: MicNoiseGateProcessor | null = null;
+let micLastSpeakingBroadcastAt = 0;
 let connectionStatsTimer: number | null = null;
 
 function createDefaultConnectionStats(): VoiceConnectionStats {
@@ -422,15 +543,50 @@ function hasOwnKey(record: Record<string, boolean>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, key);
 }
 
+function voiceSettingsSnapshot(
+  state: Pick<
+    VoiceStore,
+    | 'inputDeviceId'
+    | 'outputDeviceId'
+    | 'cameraDeviceId'
+    | 'automaticInputSensitivity'
+    | 'manualInputSensitivity'
+    | 'noiseSuppressionEnabled'
+  >,
+): VoiceSettingsSnapshot {
+  return {
+    inputDeviceId: normalizeSelectedDeviceId(state.inputDeviceId),
+    outputDeviceId: normalizeSelectedDeviceId(state.outputDeviceId),
+    cameraDeviceId: normalizeSelectedDeviceId(state.cameraDeviceId),
+    automaticInputSensitivity: state.automaticInputSensitivity,
+    manualInputSensitivity: clampManualInputSensitivity(state.manualInputSensitivity),
+    noiseSuppressionEnabled: state.noiseSuppressionEnabled,
+  };
+}
+
+function persistVoiceSettingsFromStore(
+  state: Pick<
+    VoiceStore,
+    | 'inputDeviceId'
+    | 'outputDeviceId'
+    | 'cameraDeviceId'
+    | 'automaticInputSensitivity'
+    | 'manualInputSensitivity'
+    | 'noiseSuppressionEnabled'
+  >,
+) {
+  persistVoiceSettings(voiceSettingsSnapshot(state));
+}
+
 function broadcastLocalSpeakingState(identity: string, speaking: boolean, force = false) {
   const state = useVoiceStore.getState();
   const streamId = state.streamId;
   const now = performance.now();
 
-  if (!force && speaking && now - micVadLastSpeakingBroadcastAt < VAD_SPEAKING_BROADCAST_INTERVAL_MS) {
+  if (!force && speaking && now - micLastSpeakingBroadcastAt < SPEAKING_BROADCAST_INTERVAL_MS) {
     return;
   }
-  micVadLastSpeakingBroadcastAt = now;
+  micLastSpeakingBroadcastAt = now;
 
   state.applySpeakingSignal(identity, speaking);
   if (streamId) {
@@ -438,24 +594,44 @@ function broadcastLocalSpeakingState(identity: string, speaking: boolean, force 
   }
 }
 
-function stopMicActivityMonitor(options?: { broadcast?: boolean; identity?: string }) {
-  const identity = options?.identity;
+function currentMicGateSettings() {
+  const state = useVoiceStore.getState();
+  return {
+    automaticSensitivity: state.automaticInputSensitivity,
+    manualThreshold: state.manualInputSensitivity,
+    releaseMs: DEFAULT_MIC_GATE_RELEASE_MS,
+  };
+}
 
-  if (micVadFrame != null) {
-    window.cancelAnimationFrame(micVadFrame);
-    micVadFrame = null;
+function createMicGate(identity: string) {
+  const previousProcessor = micGateProcessor;
+  const nextProcessor = new MicNoiseGateProcessor(currentMicGateSettings(), {
+    onSpeakingStateChange: (speaking) => {
+      broadcastLocalSpeakingState(identity, speaking, true);
+    },
+  });
+
+  micGateProcessor = nextProcessor;
+
+  if (previousProcessor) {
+    void previousProcessor.destroy().catch(() => {});
   }
 
-  micVadSource?.disconnect();
-  micVadAnalyser?.disconnect();
-  micVadSource = null;
-  micVadAnalyser = null;
-  micVadData = null;
-  micVadTrackId = null;
+  return nextProcessor;
+}
 
-  if (micVadContext) {
-    void micVadContext.close().catch(() => {});
-    micVadContext = null;
+function updateMicGateSettings() {
+  micGateProcessor?.updateSettings(currentMicGateSettings());
+}
+
+function stopMicProcessing(options?: { broadcast?: boolean; identity?: string }) {
+  const identity = options?.identity;
+
+  const processor = micGateProcessor;
+  micGateProcessor = null;
+
+  if (processor) {
+    void processor.destroy().catch(() => {});
   }
 
   if (identity) {
@@ -466,102 +642,33 @@ function stopMicActivityMonitor(options?: { broadcast?: boolean; identity?: stri
     }
   }
 
-  micVadSpeaking = false;
-  micVadHoldUntil = 0;
-  micVadLastSpeakingBroadcastAt = 0;
-  micVadLastLevelPushAt = 0;
-  micVadDisplayLevel = 0;
-  useVoiceStore.setState({ micLevel: 0 });
+  micLastSpeakingBroadcastAt = 0;
 }
 
-function currentMicMediaTrack(room: Room): MediaStreamTrack | null {
-  const publication = room.localParticipant.getTrackPublication(Track.Source.Microphone) as LocalTrackPublication | undefined;
-  const mediaTrack = (publication?.track as { mediaStreamTrack?: MediaStreamTrack } | undefined)?.mediaStreamTrack;
-  return mediaTrack ?? null;
+async function enableLocalMicrophone(room: Room) {
+  await room.localParticipant.setMicrophoneEnabled(
+    true,
+    micAudioCaptureOptions(useVoiceStore.getState(), createMicGate(room.localParticipant.identity)),
+  );
 }
 
-async function ensureMicActivityMonitor(room: Room) {
-  if (room.state !== ConnectionState.Connected) return;
-  const identity = room.localParticipant.identity;
-  const mediaTrack = currentMicMediaTrack(room);
-  if (!mediaTrack || mediaTrack.readyState === 'ended') {
-    stopMicActivityMonitor({ broadcast: false, identity });
-    return;
-  }
-  if (micVadFrame != null && micVadTrackId === mediaTrack.id) {
+async function restartLocalMicrophone(room: Room) {
+  if (room.state !== ConnectionState.Connected || !room.localParticipant.isMicrophoneEnabled) {
+    updateMicGateSettings();
     return;
   }
 
-  stopMicActivityMonitor({ broadcast: false, identity });
+  await room.localParticipant.setMicrophoneEnabled(false);
+  stopMicProcessing({ broadcast: true, identity: room.localParticipant.identity });
+  await enableLocalMicrophone(room);
+}
 
-  const context = new AudioContext({ latencyHint: 'interactive' });
-  const source = context.createMediaStreamSource(new MediaStream([mediaTrack]));
-  const analyser = context.createAnalyser();
-  analyser.fftSize = 256;
-  analyser.smoothingTimeConstant = 0.12;
-  source.connect(analyser);
-
-  micVadContext = context;
-  micVadSource = source;
-  micVadAnalyser = analyser;
-  micVadData = new Uint8Array(new ArrayBuffer(analyser.fftSize));
-  micVadTrackId = mediaTrack.id;
-  micVadSpeaking = false;
-  micVadHoldUntil = 0;
-  micVadDisplayLevel = 0;
-  micVadLastLevelPushAt = 0;
-  micVadLastSpeakingBroadcastAt = 0;
-
+async function applyOutputDevice(room: Room, outputDeviceId: string | null) {
   try {
-    if (context.state === 'suspended') {
-      await context.resume();
-    }
+    await room.switchActiveDevice('audiooutput', outputDeviceId ?? 'default');
   } catch {
-    /* ignore audio context resume failures */
+    /* ignore unsupported browser sink switching */
   }
-
-  const step = () => {
-    if (micVadContext !== context || micVadAnalyser !== analyser || micVadData == null) {
-      return;
-    }
-
-    analyser.getByteTimeDomainData(micVadData);
-    let sumSquares = 0;
-    for (let index = 0; index < micVadData.length; index += 1) {
-      const sample = (micVadData[index] - 128) / 128;
-      sumSquares += sample * sample;
-    }
-    const rms = Math.sqrt(sumSquares / micVadData.length);
-    const now = performance.now();
-
-    micVadDisplayLevel = rms > micVadDisplayLevel
-      ? rms
-      : micVadDisplayLevel * (rms < 0.004 ? 0.78 : 0.9);
-
-    if (now - micVadLastLevelPushAt >= VAD_LEVEL_PUSH_INTERVAL_MS) {
-      micVadLastLevelPushAt = now;
-      useVoiceStore.setState({ micLevel: micVadDisplayLevel });
-    }
-
-    if (rms >= VAD_THRESHOLD) {
-      micVadHoldUntil = now + VAD_RELEASE_MS;
-      if (!micVadSpeaking) {
-        micVadSpeaking = true;
-        broadcastLocalSpeakingState(identity, true, true);
-      }
-    } else if (micVadSpeaking && now >= micVadHoldUntil) {
-      micVadSpeaking = false;
-      broadcastLocalSpeakingState(identity, false, true);
-    }
-
-    if (micVadSpeaking && now - micVadLastSpeakingBroadcastAt >= VAD_SPEAKING_BROADCAST_INTERVAL_MS) {
-      broadcastLocalSpeakingState(identity, true, true);
-    }
-
-    micVadFrame = window.requestAnimationFrame(step);
-  };
-
-  micVadFrame = window.requestAnimationFrame(step);
 }
 
 function clearScreenShareNoticeTimer() {
@@ -783,20 +890,20 @@ function resetState() {
   clearScreenShareNoticeTimer();
   clearTransientSpeaking();
   stopConnectionStatsMonitor();
-  stopMicActivityMonitor({ broadcast: false, identity: roomRef?.localParticipant.identity });
+  stopMicProcessing({ broadcast: false, identity: roomRef?.localParticipant.identity });
   useVoiceStore.setState({
     connected: false,
     connecting: false,
     roomName: null,
     streamId: null,
     participants: [],
+    speakingSignals: {},
     connectionStats: createDefaultConnectionStats(),
     isMuted: false,
     isDeafened: false,
     isCameraOn: false,
     isScreenSharing: false,
     pttActive: false,
-    micLevel: 0,
     participantVolumes: {},
     voiceOutputMuted: false,
     streamVolumes: {},
@@ -818,7 +925,16 @@ async function destroyRoom(room: Room) {
   room.disconnect();
 }
 
+const initialVoiceSettings = loadVoiceSettings();
+
 export const useVoiceStore = create<VoiceStore>((set, get) => ({
+  inputDeviceId: initialVoiceSettings.inputDeviceId,
+  outputDeviceId: initialVoiceSettings.outputDeviceId,
+  cameraDeviceId: initialVoiceSettings.cameraDeviceId,
+  automaticInputSensitivity: initialVoiceSettings.automaticInputSensitivity,
+  manualInputSensitivity: initialVoiceSettings.manualInputSensitivity,
+  noiseSuppressionEnabled: initialVoiceSettings.noiseSuppressionEnabled,
+  mediaDevices: emptyVoiceMediaDevices(),
   connected: false,
   connecting: false,
   roomName: null,
@@ -832,8 +948,6 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   isScreenSharing: false,
   pttActive: false,
   pttMode: false,
-  micLevel: 0,
-  vadThreshold: VAD_THRESHOLD,
   participantVolumes: {},
   voiceOutputMuted: false,
   streamVolumes: {},
@@ -845,7 +959,6 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   screenShareKind: 'screen',
   screenShareSurfaceLabel: null,
   screenShareNotice: null,
-  noiseSuppressionMode: loadNoiseSuppressionMode(),
 
   join: async (sid) => {
     if (joiningLock) return;
@@ -863,14 +976,15 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
       connectionStats: { ...createDefaultConnectionStats(), state: ConnectionState.Connecting },
     });
     try {
+      await get().refreshMediaDevices();
       const { token, url } = await api.getVoiceToken(sid);
 
-      let nsMode = useVoiceStore.getState().noiseSuppressionMode;
+      const voiceState = useVoiceStore.getState();
       const room = new Room({
         adaptiveStream: true,
         dynacast: true,
-        videoCaptureDefaults: { resolution: VideoPresets.h1080.resolution },
-        audioCaptureDefaults: micAudioCaptureOptions(nsMode),
+        videoCaptureDefaults: cameraCaptureOptions(voiceState.cameraDeviceId),
+        audioCaptureDefaults: micAudioCaptureOptions(voiceState),
       });
       roomRef = room;
 
@@ -893,7 +1007,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
           const currentSid = useVoiceStore.getState().streamId;
           if (currentSid) wsSend('voice_state_update', { stream_id: currentSid, action: 'leave' });
           stopConnectionStatsMonitor();
-          stopMicActivityMonitor({ broadcast: false, identity: room.localParticipant.identity });
+          stopMicProcessing({ broadcast: false, identity: room.localParticipant.identity });
           roomRef = null;
           detachAllRoomMedia(room);
           room.removeAllListeners();
@@ -919,15 +1033,14 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
 
       if (roomRef !== room) { room.disconnect(); return; }
 
+      await applyOutputDevice(room, useVoiceStore.getState().outputDeviceId);
+
       const startMuted = pttModeRef;
-      nsMode = useVoiceStore.getState().noiseSuppressionMode;
-      await room.localParticipant.setMicrophoneEnabled(
-        !startMuted,
-        !startMuted ? micAudioCaptureOptions(nsMode) : undefined,
-      );
       if (!startMuted) {
-        await ensureMicActivityMonitor(room);
+        await enableLocalMicrophone(room);
       }
+
+      await get().refreshMediaDevices();
 
       set({
         connected: true,
@@ -938,7 +1051,6 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
         isDeafened: false,
         isCameraOn: false,
         isScreenSharing: false,
-        micLevel: 0,
         participants: buildParticipants(room),
         participantVolumes: {},
         voiceOutputMuted: false,
@@ -965,7 +1077,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     const sid = get().streamId;
     if (!room) { resetState(); return; }
     stopConnectionStatsMonitor();
-    stopMicActivityMonitor({ broadcast: true, identity: room.localParticipant.identity });
+    stopMicProcessing({ broadcast: true, identity: room.localParticipant.identity });
     roomRef = null;
     if (sid) wsSend('voice_state_update', { stream_id: sid, action: 'leave' });
     playLeaveSound();
@@ -977,15 +1089,11 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     const room = roomRef;
     if (!room || room.state !== ConnectionState.Connected) return;
     const wasEnabled = room.localParticipant.isMicrophoneEnabled;
-    const nsMode = get().noiseSuppressionMode;
-    await room.localParticipant.setMicrophoneEnabled(
-      !wasEnabled,
-      !wasEnabled ? micAudioCaptureOptions(nsMode) : undefined,
-    );
     if (wasEnabled) {
-      stopMicActivityMonitor({ broadcast: true, identity: room.localParticipant.identity });
+      await room.localParticipant.setMicrophoneEnabled(false);
+      stopMicProcessing({ broadcast: true, identity: room.localParticipant.identity });
     } else {
-      await ensureMicActivityMonitor(room);
+      await enableLocalMicrophone(room);
     }
     set({ isMuted: wasEnabled });
     syncParticipants();
@@ -994,7 +1102,10 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   toggleCamera: async () => {
     if (!roomRef || roomRef.state !== ConnectionState.Connected) return;
     const wasEnabled = roomRef.localParticipant.isCameraEnabled;
-    await roomRef.localParticipant.setCameraEnabled(!wasEnabled);
+    await roomRef.localParticipant.setCameraEnabled(
+      !wasEnabled,
+      !wasEnabled ? cameraCaptureOptions(get().cameraDeviceId) : undefined,
+    );
     set({ isCameraOn: !wasEnabled });
     syncParticipants();
   },
@@ -1068,12 +1179,11 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
       wasMutedBeforeDeafen = !room.localParticipant.isMicrophoneEnabled;
       if (room.localParticipant.isMicrophoneEnabled) {
         await room.localParticipant.setMicrophoneEnabled(false);
-        stopMicActivityMonitor({ broadcast: true, identity: room.localParticipant.identity });
+        stopMicProcessing({ broadcast: true, identity: room.localParticipant.identity });
         set({ isMuted: true });
       }
     } else if (!wasMutedBeforeDeafen) {
-      await room.localParticipant.setMicrophoneEnabled(true, micAudioCaptureOptions(get().noiseSuppressionMode));
-      await ensureMicActivityMonitor(room);
+      await enableLocalMicrophone(room);
       set({ isMuted: false });
     }
     set({ isDeafened: next });
@@ -1085,13 +1195,12 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     pttModeRef = next;
     if (roomRef && roomRef.state === ConnectionState.Connected) {
       const room = roomRef;
-      const nsMode = get().noiseSuppressionMode;
       if (next) {
         void room.localParticipant.setMicrophoneEnabled(false);
-        stopMicActivityMonitor({ broadcast: true, identity: room.localParticipant.identity });
+        stopMicProcessing({ broadcast: true, identity: room.localParticipant.identity });
         set({ isMuted: true, pttActive: false, pttMode: next });
       } else {
-        void room.localParticipant.setMicrophoneEnabled(true, micAudioCaptureOptions(nsMode)).then(() => ensureMicActivityMonitor(room));
+        void enableLocalMicrophone(room);
         set({ isMuted: false, pttMode: next });
       }
       syncParticipants();
@@ -1136,21 +1245,125 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     queueMicrotask(() => reapplyAllRemoteVoiceVolumes());
   },
 
-  setNoiseSuppressionMode: async (mode) => {
-    persistNoiseSuppressionMode(mode);
-    set({ noiseSuppressionMode: mode });
+  refreshMediaDevices: async () => {
+    const mediaDevices = await enumerateVoiceMediaDevices();
+    const current = get();
+    const nextState = {
+      mediaDevices,
+      inputDeviceId:
+        current.inputDeviceId && mediaDevices.audioinput.length > 0 && !mediaDevices.audioinput.some((device) => device.deviceId === current.inputDeviceId)
+          ? null
+          : current.inputDeviceId,
+      outputDeviceId:
+        current.outputDeviceId && mediaDevices.audiooutput.length > 0 && !mediaDevices.audiooutput.some((device) => device.deviceId === current.outputDeviceId)
+          ? null
+          : current.outputDeviceId,
+      cameraDeviceId:
+        current.cameraDeviceId && mediaDevices.videoinput.length > 0 && !mediaDevices.videoinput.some((device) => device.deviceId === current.cameraDeviceId)
+          ? null
+          : current.cameraDeviceId,
+    };
+
+    set(nextState);
+    persistVoiceSettingsFromStore({ ...current, ...nextState });
+  },
+
+  setInputDeviceId: async (deviceId) => {
+    const nextDeviceId = normalizeSelectedDeviceId(deviceId);
+    const current = get();
+    if (current.inputDeviceId === nextDeviceId) {
+      return;
+    }
+
+    const nextState = { inputDeviceId: nextDeviceId };
+    set(nextState);
+    persistVoiceSettingsFromStore({ ...current, ...nextState });
+
     const room = roomRef;
     if (room?.state === ConnectionState.Connected && room.localParticipant.isMicrophoneEnabled) {
-      await room.localParticipant.setMicrophoneEnabled(false);
-      await room.localParticipant.setMicrophoneEnabled(true, micAudioCaptureOptions(mode));
-      await ensureMicActivityMonitor(room);
+      await restartLocalMicrophone(room);
+      syncParticipants();
+    }
+  },
+
+  setOutputDeviceId: async (deviceId) => {
+    const nextDeviceId = normalizeSelectedDeviceId(deviceId);
+    const current = get();
+    if (current.outputDeviceId === nextDeviceId) {
+      return;
+    }
+
+    const nextState = { outputDeviceId: nextDeviceId };
+    set(nextState);
+    persistVoiceSettingsFromStore({ ...current, ...nextState });
+
+    if (roomRef?.state === ConnectionState.Connected) {
+      await applyOutputDevice(roomRef, nextDeviceId);
+    }
+  },
+
+  setCameraDeviceId: async (deviceId) => {
+    const nextDeviceId = normalizeSelectedDeviceId(deviceId);
+    const current = get();
+    if (current.cameraDeviceId === nextDeviceId) {
+      return;
+    }
+
+    const nextState = { cameraDeviceId: nextDeviceId };
+    set(nextState);
+    persistVoiceSettingsFromStore({ ...current, ...nextState });
+
+    if (roomRef?.state === ConnectionState.Connected && roomRef.localParticipant.isCameraEnabled) {
+      await roomRef.localParticipant.setCameraEnabled(false);
+      await roomRef.localParticipant.setCameraEnabled(true, cameraCaptureOptions(nextDeviceId));
+      syncParticipants();
+    }
+  },
+
+  setAutomaticInputSensitivity: (enabled) => {
+    const current = get();
+    if (current.automaticInputSensitivity === enabled) {
+      return;
+    }
+
+    const nextState = { automaticInputSensitivity: enabled };
+    set(nextState);
+    persistVoiceSettingsFromStore({ ...current, ...nextState });
+    updateMicGateSettings();
+  },
+
+  setManualInputSensitivity: (threshold) => {
+    const nextThreshold = clampManualInputSensitivity(threshold);
+    const current = get();
+    if (current.manualInputSensitivity === nextThreshold) {
+      return;
+    }
+
+    const nextState = { manualInputSensitivity: nextThreshold };
+    set(nextState);
+    persistVoiceSettingsFromStore({ ...current, ...nextState });
+    updateMicGateSettings();
+  },
+
+  setNoiseSuppressionEnabled: async (enabled) => {
+    const current = get();
+    if (current.noiseSuppressionEnabled === enabled) {
+      return;
+    }
+
+    const nextState = { noiseSuppressionEnabled: enabled };
+    set(nextState);
+    persistVoiceSettingsFromStore({ ...current, ...nextState });
+
+    const room = roomRef;
+    if (room?.state === ConnectionState.Connected && room.localParticipant.isMicrophoneEnabled) {
+      await restartLocalMicrophone(room);
       syncParticipants();
     }
   },
 
   toggleNoiseSuppression: async () => {
-    const cur = get().noiseSuppressionMode;
-    await get().setNoiseSuppressionMode(cur === 'off' ? 'krisp' : 'off');
+    await get().setNoiseSuppressionEnabled(!get().noiseSuppressionEnabled);
   },
 
   moveToStream: async (sid) => {
@@ -1202,9 +1415,8 @@ if (typeof window !== 'undefined') {
     e.preventDefault();
     if (e.repeat) return;
     if (roomRef.state !== ConnectionState.Connected) return;
-    const nsMode = useVoiceStore.getState().noiseSuppressionMode;
     const room = roomRef;
-    void room.localParticipant.setMicrophoneEnabled(true, micAudioCaptureOptions(nsMode)).then(() => ensureMicActivityMonitor(room));
+    void enableLocalMicrophone(room);
     useVoiceStore.setState({ isMuted: false, pttActive: true });
     syncParticipants();
   });
@@ -1216,7 +1428,7 @@ if (typeof window !== 'undefined') {
     if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) return;
     if (roomRef.state !== ConnectionState.Connected) return;
     roomRef.localParticipant.setMicrophoneEnabled(false);
-    stopMicActivityMonitor({ broadcast: true, identity: roomRef.localParticipant.identity });
+    stopMicProcessing({ broadcast: true, identity: roomRef.localParticipant.identity });
     useVoiceStore.setState({ isMuted: true, pttActive: false });
     syncParticipants();
   });

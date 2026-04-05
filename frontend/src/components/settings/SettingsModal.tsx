@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, memo } from 'react';
+import { useCallback, useEffect, useRef, useState, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '../../stores/auth';
@@ -6,21 +6,29 @@ import { usePresenceStore } from '../../stores/presenceStore';
 import { useWsSend } from '../../hooks/useWebSocket';
 import { api } from '../../api/client';
 import { statusColor, statusLabel } from '../shared/StatusDot';
-import { useVoiceStore } from '../../stores/voiceStore';
+import { useVoiceStore, type VoiceMediaDevice } from '../../stores/voiceStore';
 import { useAppSettingsStore } from '../../stores/appSettingsStore';
-import type { NoiseSuppressionMode } from '../../stores/voiceStore';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { stripAssetVersion } from '../../utils/entityAssets';
 
-type Tab = 'profile' | 'account' | 'voice' | 'advanced';
+export type SettingsModalTab = 'profile' | 'account' | 'voice' | 'advanced';
 
-function SettingsModal({ onClose }: { onClose: () => void }) {
+type SettingsModalProps = {
+  onClose: () => void;
+  initialTab?: SettingsModalTab;
+};
+
+function SettingsModal({ onClose, initialTab = 'profile' }: SettingsModalProps) {
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
   const logout = useAuthStore((s) => s.logout);
-  const [activeTab, setActiveTab] = useState<Tab>('profile');
+  const [activeTab, setActiveTab] = useState<SettingsModalTab>(initialTab);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const backdropRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   // Close on Escape
   useEffect(() => {
@@ -33,7 +41,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
 
   if (!user) return null;
 
-  const tabs: { id: Tab; label: string; section?: 'user' | 'app' }[] = [
+  const tabs: { id: SettingsModalTab; label: string; section?: 'user' | 'app' }[] = [
     { id: 'profile', label: 'Profile', section: 'user' },
     { id: 'account', label: 'Account', section: 'user' },
     { id: 'voice', label: 'Voice & Video', section: 'app' },
@@ -167,51 +175,465 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-/* ───────── Voice & Video (noise suppression) ───────── */
+/* ───────── Voice & Video ───────── */
 
-const NOISE_SUPPRESSION_OPTIONS: { value: NoiseSuppressionMode; label: string }[] = [
-  { value: 'krisp', label: 'Krisp' },
-  { value: 'standard', label: 'Standard' },
-  { value: 'off', label: 'Off' },
-];
+const MANUAL_SENSITIVITY_STEP = 0.001;
+const MANUAL_SENSITIVITY_MIN = 0;
+const MANUAL_SENSITIVITY_MAX = 0.08;
 
-function VoiceVideoSettingsTab() {
-  const mode = useVoiceStore((s) => s.noiseSuppressionMode);
-  const setNoiseSuppressionMode = useVoiceStore((s) => s.setNoiseSuppressionMode);
+type SinkCapableAudioElement = HTMLAudioElement & {
+  setSinkId?: (deviceId: string) => Promise<void>;
+};
+
+function supportsAudioOutputSelection() {
+  return typeof HTMLMediaElement !== 'undefined'
+    && typeof (HTMLMediaElement.prototype as { setSinkId?: unknown }).setSinkId === 'function';
+}
+
+async function applyAudioSinkId(audio: HTMLAudioElement | null, outputDeviceId: string | null) {
+  if (!audio) {
+    return;
+  }
+
+  const sinkAudio = audio as SinkCapableAudioElement;
+  if (typeof sinkAudio.setSinkId !== 'function') {
+    return;
+  }
+
+  await sinkAudio.setSinkId(outputDeviceId ?? 'default');
+}
+
+function formatSensitivity(threshold: number) {
+  return threshold <= 0 ? 'Always transmit' : `Threshold ${threshold.toFixed(3)}`;
+}
+
+function systemDefaultLabel(kind: 'audioinput' | 'audiooutput' | 'videoinput') {
+  if (kind === 'audioinput') return 'System default microphone';
+  if (kind === 'audiooutput') return 'System default output';
+  return 'System default camera';
+}
+
+function DeviceSelect({
+  label,
+  description,
+  devices,
+  value,
+  onChange,
+  kind,
+  disabled = false,
+}: {
+  label: string;
+  description: string;
+  devices: VoiceMediaDevice[];
+  value: string | null;
+  onChange: (deviceId: string | null) => void | Promise<void>;
+  kind: 'audioinput' | 'audiooutput' | 'videoinput';
+  disabled?: boolean;
+}) {
+  return (
+    <Field label={label}>
+      <div className="space-y-2">
+        <select
+          value={value ?? ''}
+          onChange={(event) => void onChange(event.target.value || null)}
+          disabled={disabled}
+          className="settings-input w-full py-2 text-[13px] cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <option value="">{systemDefaultLabel(kind)}</option>
+          {devices.map((device) => (
+            <option key={device.deviceId} value={device.deviceId}>
+              {device.label}
+            </option>
+          ))}
+        </select>
+        <p className="text-[12px] leading-snug text-riftapp-text-dim">{description}</p>
+      </div>
+    </Field>
+  );
+}
+
+function SettingToggle({
+  label,
+  description,
+  enabled,
+  onToggle,
+}: {
+  label: string;
+  description: string;
+  enabled: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="w-full rounded-xl border border-riftapp-border/40 bg-riftapp-panel/40 px-4 py-3 text-left transition-colors hover:bg-riftapp-panel/60"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-riftapp-text">{label}</p>
+          <p className="mt-1 text-[13px] leading-snug text-riftapp-text-muted">{description}</p>
+        </div>
+        <span
+          className={`mt-0.5 inline-flex h-6 w-11 items-center rounded-full border transition-colors ${
+            enabled
+              ? 'bg-riftapp-accent border-riftapp-accent'
+              : 'bg-riftapp-bg/70 border-riftapp-border/60'
+          }`}
+          aria-hidden="true"
+        >
+          <span
+            className={`inline-block h-5 w-5 rounded-full bg-white transition-transform ${
+              enabled ? 'translate-x-5' : 'translate-x-0.5'
+            }`}
+          />
+        </span>
+      </div>
+    </button>
+  );
+}
+
+function CameraTestCard({ deviceId }: { deviceId: string | null }) {
+  const [previewEnabled, setPreviewEnabled] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const stopPreview = useCallback(() => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.srcObject = null;
+    }
+    setPreviewEnabled(false);
+  }, []);
+
+  const applyPreviewStream = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError('Camera preview is unavailable in this browser.');
+      setPreviewEnabled(false);
+      return;
+    }
+
+    setStarting(true);
+    setError(null);
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: deviceId ? { deviceId: { exact: deviceId } } : true,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.muted = true;
+        void videoRef.current.play().catch(() => {});
+      }
+    } catch {
+      setError('Could not start camera preview. Check camera permissions.');
+      setPreviewEnabled(false);
+    } finally {
+      setStarting(false);
+    }
+  }, [deviceId]);
+
+  useEffect(() => {
+    if (!previewEnabled) {
+      return undefined;
+    }
+
+    void applyPreviewStream();
+    return undefined;
+  }, [applyPreviewStream, previewEnabled]);
+
+  useEffect(() => () => {
+    stopPreview();
+  }, [stopPreview]);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-xs font-bold uppercase tracking-wide text-riftapp-text-dim mb-4">Voice</h3>
-        <div className="rounded-lg border border-riftapp-border/40 bg-riftapp-panel/40 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-riftapp-text">Noise Suppression</p>
-              <p className="text-[13px] text-riftapp-text-muted mt-1 leading-snug max-w-lg">
-                Reduces background noise from your mic. Powered by Krisp.
-              </p>
-              <p className="mt-3 text-[13px] font-bold text-riftapp-text tracking-tight lowercase">krisp</p>
-            </div>
-            <label className="flex flex-col gap-1 shrink-0">
-              <span className="sr-only">Noise suppression</span>
-              <select
-                value={mode}
-                onChange={(e) => void setNoiseSuppressionMode(e.target.value as NoiseSuppressionMode)}
-                className="settings-input min-w-[160px] py-2 text-[13px] cursor-pointer"
-              >
-                {NOISE_SUPPRESSION_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+    <div className="rounded-xl border border-riftapp-border/40 bg-riftapp-panel/40 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-riftapp-text">Camera Test</p>
+          <p className="mt-1 text-[13px] leading-snug text-riftapp-text-muted">
+            Preview the selected camera before joining video.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            if (previewEnabled) {
+              stopPreview();
+            } else {
+              setPreviewEnabled(true);
+            }
+          }}
+          className="rounded-md border border-riftapp-border/50 bg-riftapp-bg/60 px-3 py-2 text-[13px] font-medium text-riftapp-text transition-colors hover:bg-riftapp-bg"
+        >
+          {previewEnabled ? 'Stop Camera Test' : 'Start Camera Test'}
+        </button>
+      </div>
+      <div className="mt-4 overflow-hidden rounded-xl border border-riftapp-border/40 bg-black/30">
+        {previewEnabled ? (
+          <video ref={videoRef} playsInline muted className="aspect-video w-full bg-black object-cover" />
+        ) : (
+          <div className="flex aspect-video items-center justify-center text-[13px] text-riftapp-text-dim">
+            Camera preview is off.
           </div>
+        )}
+      </div>
+      {starting && <p className="mt-3 text-[12px] text-riftapp-text-dim">Starting preview…</p>}
+      {error && <p className="mt-3 text-[12px] text-riftapp-danger">{error}</p>}
+    </div>
+  );
+}
+
+function MicrophoneTestCard({
+  inputDeviceId,
+  outputDeviceId,
+  outputDeviceSelectionSupported,
+}: {
+  inputDeviceId: string | null;
+  outputDeviceId: string | null;
+  outputDeviceSelectionSupported: boolean;
+}) {
+  const [testing, setTesting] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const stopTest = useCallback(() => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.srcObject = null;
+    }
+    setTesting(false);
+  }, []);
+
+  const applyMicrophoneTest = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError('Microphone testing is unavailable in this browser.');
+      setTesting(false);
+      return;
+    }
+
+    setStarting(true);
+    setError(null);
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: inputDeviceId
+          ? {
+              deviceId: { exact: inputDeviceId },
+              echoCancellation: true,
+              autoGainControl: true,
+              noiseSuppression: true,
+            }
+          : {
+              echoCancellation: true,
+              autoGainControl: true,
+              noiseSuppression: true,
+            },
+        video: false,
+      });
+
+      streamRef.current = stream;
+      if (audioRef.current) {
+        audioRef.current.srcObject = stream;
+        audioRef.current.autoplay = true;
+        audioRef.current.muted = false;
+        if (outputDeviceSelectionSupported) {
+          await applyAudioSinkId(audioRef.current, outputDeviceId);
+        }
+        void audioRef.current.play().catch(() => {});
+      }
+    } catch {
+      setError('Could not start the microphone test. Check microphone permissions.');
+      setTesting(false);
+    } finally {
+      setStarting(false);
+    }
+  }, [inputDeviceId, outputDeviceId, outputDeviceSelectionSupported]);
+
+  useEffect(() => {
+    if (!testing) {
+      return undefined;
+    }
+
+    void applyMicrophoneTest();
+    return undefined;
+  }, [applyMicrophoneTest, testing]);
+
+  useEffect(() => () => {
+    stopTest();
+  }, [stopTest]);
+
+  return (
+    <div className="rounded-xl border border-riftapp-border/40 bg-riftapp-panel/40 p-4">
+      <audio ref={audioRef} className="hidden" />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-riftapp-text">Test Microphone</p>
+          <p className="mt-1 text-[13px] leading-snug text-riftapp-text-muted">
+            Plays your selected microphone back through the chosen output device so you can check levels and clarity.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            if (testing) {
+              stopTest();
+            } else {
+              setTesting(true);
+            }
+          }}
+          className="rounded-md border border-riftapp-border/50 bg-riftapp-bg/60 px-3 py-2 text-[13px] font-medium text-riftapp-text transition-colors hover:bg-riftapp-bg"
+        >
+          {testing ? 'Stop Mic Test' : 'Start Mic Test'}
+        </button>
+      </div>
+      <p className="mt-3 text-[12px] text-riftapp-text-dim">
+        Use headphones if possible to avoid feedback while the test is active.
+      </p>
+      {starting && <p className="mt-3 text-[12px] text-riftapp-text-dim">Starting microphone test…</p>}
+      {error && <p className="mt-3 text-[12px] text-riftapp-danger">{error}</p>}
+    </div>
+  );
+}
+
+function VoiceVideoSettingsTab() {
+  const inputDeviceId = useVoiceStore((s) => s.inputDeviceId);
+  const outputDeviceId = useVoiceStore((s) => s.outputDeviceId);
+  const cameraDeviceId = useVoiceStore((s) => s.cameraDeviceId);
+  const automaticInputSensitivity = useVoiceStore((s) => s.automaticInputSensitivity);
+  const manualInputSensitivity = useVoiceStore((s) => s.manualInputSensitivity);
+  const noiseSuppressionEnabled = useVoiceStore((s) => s.noiseSuppressionEnabled);
+  const mediaDevices = useVoiceStore((s) => s.mediaDevices);
+  const refreshMediaDevices = useVoiceStore((s) => s.refreshMediaDevices);
+  const setInputDeviceId = useVoiceStore((s) => s.setInputDeviceId);
+  const setOutputDeviceId = useVoiceStore((s) => s.setOutputDeviceId);
+  const setCameraDeviceId = useVoiceStore((s) => s.setCameraDeviceId);
+  const setAutomaticInputSensitivity = useVoiceStore((s) => s.setAutomaticInputSensitivity);
+  const setManualInputSensitivity = useVoiceStore((s) => s.setManualInputSensitivity);
+  const setNoiseSuppressionEnabled = useVoiceStore((s) => s.setNoiseSuppressionEnabled);
+
+  const outputDeviceSelectionSupported = supportsAudioOutputSelection();
+
+  useEffect(() => {
+    void refreshMediaDevices();
+
+    const handleDeviceChange = () => {
+      void refreshMediaDevices();
+    };
+
+    navigator.mediaDevices?.addEventListener?.('devicechange', handleDeviceChange);
+    return () => {
+      navigator.mediaDevices?.removeEventListener?.('devicechange', handleDeviceChange);
+    };
+  }, [refreshMediaDevices]);
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h3 className="mb-4 text-xs font-bold uppercase tracking-wide text-riftapp-text-dim">Voice</h3>
+        <div className="space-y-4">
+          <div className="rounded-xl border border-riftapp-border/40 bg-riftapp-panel/40 p-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <DeviceSelect
+                label="Input Device"
+                description="Switch microphones without leaving the call."
+                devices={mediaDevices.audioinput}
+                value={inputDeviceId}
+                onChange={setInputDeviceId}
+                kind="audioinput"
+              />
+              <DeviceSelect
+                label="Output Device"
+                description={outputDeviceSelectionSupported
+                  ? 'Choose where voice playback should be heard.'
+                  : 'Your browser does not support changing speaker output from the app.'}
+                devices={mediaDevices.audiooutput}
+                value={outputDeviceId}
+                onChange={setOutputDeviceId}
+                kind="audiooutput"
+                disabled={!outputDeviceSelectionSupported}
+              />
+            </div>
+          </div>
+
+          <SettingToggle
+            label="Noise Suppression"
+            description="Applies browser-level microphone cleanup before the gate so background noise is less likely to open the mic."
+            enabled={noiseSuppressionEnabled}
+            onToggle={() => void setNoiseSuppressionEnabled(!noiseSuppressionEnabled)}
+          />
+
+          <SettingToggle
+            label="Automatically Determine Input Sensitivity"
+            description="Continuously adapts the mic gate to your room noise. Turn this off to use a fixed threshold instead."
+            enabled={automaticInputSensitivity}
+            onToggle={() => setAutomaticInputSensitivity(!automaticInputSensitivity)}
+          />
+
+          <div className={`rounded-xl border border-riftapp-border/40 bg-riftapp-panel/40 p-4 ${automaticInputSensitivity ? 'opacity-70' : ''}`}>
+            <Field label="Manual Input Sensitivity">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-[13px] text-riftapp-text">
+                  <span>{automaticInputSensitivity ? 'Automatic sensitivity is active' : formatSensitivity(manualInputSensitivity)}</span>
+                  {!automaticInputSensitivity && <span className="text-riftapp-text-dim">Set to 0 to keep the mic open</span>}
+                </div>
+                <input
+                  type="range"
+                  min={MANUAL_SENSITIVITY_MIN}
+                  max={MANUAL_SENSITIVITY_MAX}
+                  step={MANUAL_SENSITIVITY_STEP}
+                  value={manualInputSensitivity}
+                  disabled={automaticInputSensitivity}
+                  onChange={(event) => setManualInputSensitivity(Number(event.target.value))}
+                  className="w-full accent-riftapp-accent disabled:cursor-not-allowed"
+                />
+                <div className="flex items-center justify-between text-[11px] text-riftapp-text-dim">
+                  <span>More sensitive</span>
+                  <span>Less sensitive</span>
+                </div>
+                <p className="text-[12px] leading-snug text-riftapp-text-dim">
+                  One threshold controls both the speaking ring and whether audio is transmitted, so the indicator always matches what leaves your mic.
+                </p>
+              </div>
+            </Field>
+          </div>
+
+          <MicrophoneTestCard
+            inputDeviceId={inputDeviceId}
+            outputDeviceId={outputDeviceId}
+            outputDeviceSelectionSupported={outputDeviceSelectionSupported}
+          />
         </div>
       </div>
-      <p className="text-[11px] text-riftapp-text-dim leading-relaxed">
-        Krisp and Standard use your browser&apos;s microphone processing over WebRTC. Krisp enables stronger voice isolation when the browser supports it; it is not the standalone Krisp app SDK.
-      </p>
+
+      <div>
+        <h3 className="mb-4 text-xs font-bold uppercase tracking-wide text-riftapp-text-dim">Video</h3>
+        <div className="space-y-4">
+          <div className="rounded-xl border border-riftapp-border/40 bg-riftapp-panel/40 p-4">
+            <DeviceSelect
+              label="Camera Device"
+              description="Choose which camera to use when you turn video on."
+              devices={mediaDevices.videoinput}
+              value={cameraDeviceId}
+              onChange={setCameraDeviceId}
+              kind="videoinput"
+            />
+          </div>
+          <CameraTestCard deviceId={cameraDeviceId} />
+        </div>
+      </div>
     </div>
   );
 }

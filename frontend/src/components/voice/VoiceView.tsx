@@ -407,7 +407,14 @@ export default function VoiceView() {
                   <button type="button" className="w-full text-left px-3 py-2 text-[14px] text-[#dbdee1] hover:bg-[#5865f2]/30 rounded-md" onClick={() => { setMoreOpen(false); void toggleDeafen(); }}>
                     {isDeafened ? 'Undeafen' : 'Deafen'}
                   </button>
-                  <button type="button" className="w-full text-left px-3 py-2 text-[14px] text-[#dbdee1] hover:bg-[#5865f2]/30 rounded-md" onClick={() => setMoreOpen(false)}>
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-[14px] text-[#dbdee1] hover:bg-[#5865f2]/30 rounded-md"
+                    onClick={() => {
+                      setMoreOpen(false);
+                      document.dispatchEvent(new CustomEvent('open-settings', { detail: { tab: 'voice' } }));
+                    }}
+                  >
                     Voice settings…
                   </button>
                 </div>
