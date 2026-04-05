@@ -97,6 +97,16 @@ func (h *StreamHandler) ReadStates(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, states)
 }
 
+func (h *StreamHandler) MarkHubRead(w http.ResponseWriter, r *http.Request) {
+	hubID := chi.URLParam(r, "hubID")
+	userID := middleware.GetUserID(r.Context())
+	if err := h.svc.MarkAllReadInHub(r.Context(), hubID, userID); err != nil {
+		writeAppError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func parseLimit(r *http.Request) int {
 	limit := 50
 	if l := r.URL.Query().Get("limit"); l != "" {

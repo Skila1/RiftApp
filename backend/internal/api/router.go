@@ -110,6 +110,9 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 		r.Post("/api/hubs/{hubID}/streams", streamH.Create)
 		r.Get("/api/hubs/{hubID}/streams", streamH.List)
 		r.Get("/api/hubs/{hubID}/read-states", streamH.ReadStates)
+		r.Post("/api/hubs/{hubID}/mark-read", streamH.MarkHubRead)
+		r.Get("/api/hubs/{hubID}/notification-settings", hubH.GetNotificationSettings)
+		r.Patch("/api/hubs/{hubID}/notification-settings", hubH.PatchNotificationSettings)
 
 		r.Post("/api/hubs/{hubID}/categories", catH.Create)
 		r.Get("/api/hubs/{hubID}/categories", catH.List)

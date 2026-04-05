@@ -2,6 +2,9 @@ import { create } from 'zustand';
 import type { Stream, Category } from '../types';
 import { api } from '../api/client';
 
+/** Monotonic id so an older in-flight `loadStreams` cannot apply after a newer hub switch. */
+let loadStreamsRequestId = 0;
+
 interface StreamState {
   streams: Stream[];
   categories: Category[];
@@ -21,6 +24,8 @@ interface StreamState {
   createCategory: (hubId: string, name: string) => Promise<Category>;
   deleteCategory: (hubId: string, categoryId: string) => Promise<void>;
   loadReadStates: (hubId: string) => Promise<void>;
+  /** Merge read-state counts for a hub (e.g. after Mark as Read); does not require the hub to be active. */
+  mergeReadStatesForHub: (hubId: string) => Promise<void>;
   ackStream: (streamId: string) => Promise<void>;
   incrementUnread: (streamId: string) => void;
   clearStreams: () => void;
@@ -39,13 +44,14 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   voiceMembers: {},
 
   loadStreams: async (hubId) => {
+    const myId = ++loadStreamsRequestId;
     const [streams, categories, voiceStates] = await Promise.all([
       api.getStreams(hubId),
       api.getCategories(hubId),
       api.getVoiceStates(hubId).catch(() => ({} as Record<string, string[]>)),
     ]);
     const { useHubStore } = await import('./hubStore');
-    if (useHubStore.getState().activeHubId !== hubId) return;
+    if (myId !== loadStreamsRequestId || useHubStore.getState().activeHubId !== hubId) return;
     set((s) => {
       const streamHubMap = { ...s.streamHubMap };
       for (const st of streams) {
@@ -117,6 +123,23 @@ export const useStreamStore = create<StreamState>((set, get) => ({
         return { streamUnreads, lastReadMessageIds };
       });
     } catch {}
+  },
+
+  mergeReadStatesForHub: async (hubId) => {
+    try {
+      const states = await api.getReadStates(hubId);
+      set((s) => {
+        const streamUnreads = { ...s.streamUnreads };
+        const lastReadMessageIds = { ...s.lastReadMessageIds };
+        for (const rs of states) {
+          streamUnreads[rs.stream_id] = rs.unread_count;
+          if (rs.last_read_message_id) {
+            lastReadMessageIds[rs.stream_id] = rs.last_read_message_id;
+          }
+        }
+        return { streamUnreads, lastReadMessageIds };
+      });
+    } catch { /* ignore */ }
   },
 
   ackStream: async (streamId) => {

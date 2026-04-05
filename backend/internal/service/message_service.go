@@ -20,11 +20,12 @@ const maxAttachmentsPerMessage = 10
 const maxMentionsPerMessage = 25
 
 type MessageService struct {
-	msgRepo    *repository.MessageRepo
-	streamRepo *repository.StreamRepo
-	hubService *HubService
-	notifSvc   *NotificationService
-	hub        *ws.Hub
+	msgRepo       *repository.MessageRepo
+	streamRepo    *repository.StreamRepo
+	hubService    *HubService
+	notifSvc      *NotificationService
+	hub           *ws.Hub
+	hubNotifRepo  *repository.HubNotificationSettingsRepo
 }
 
 func NewMessageService(
@@ -33,13 +34,15 @@ func NewMessageService(
 	hubService *HubService,
 	notifSvc *NotificationService,
 	hub *ws.Hub,
+	hubNotifRepo *repository.HubNotificationSettingsRepo,
 ) *MessageService {
 	return &MessageService{
-		msgRepo:    msgRepo,
-		streamRepo: streamRepo,
-		hubService: hubService,
-		notifSvc:   notifSvc,
-		hub:        hub,
+		msgRepo:      msgRepo,
+		streamRepo:   streamRepo,
+		hubService:   hubService,
+		notifSvc:     notifSvc,
+		hub:          hub,
+		hubNotifRepo: hubNotifRepo,
 	}
 }
 
@@ -282,7 +285,28 @@ func (s *MessageService) createMentionNotifications(ctx context.Context, msg *mo
 		if !ok || mentionedID == authorID {
 			continue
 		}
+		st, err := s.hubNotifRepo.Get(ctx, mentionedID, hubID)
+		if err != nil {
+			continue
+		}
+		if !hubMentionNotificationsEnabled(st) {
+			continue
+		}
 		mID, hID, sID, aID := msg.ID, hubID, streamID, authorID
 		go s.notifSvc.Create(mentionedID, "mention", title, &bodyStr, &mID, &hID, &sID, &aID)
+	}
+}
+
+func hubMentionNotificationsEnabled(st repository.HubNotificationSettings) bool {
+	if st.ServerMuted {
+		return false
+	}
+	switch st.NotificationLevel {
+	case "nothing":
+		return false
+	case "all", "mentions_only":
+		return true
+	default:
+		return true
 	}
 }

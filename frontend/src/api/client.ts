@@ -1,4 +1,4 @@
-import type { AuthResponse, Hub, HubInvite, Stream, Category, Message, User, Attachment, Notification, Conversation, Friendship, Block, RelationshipType } from '../types';
+import type { AuthResponse, Hub, HubInvite, HubNotificationSettings, Stream, Category, Message, User, Attachment, Notification, Conversation, Friendship, Block, RelationshipType } from '../types';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -115,6 +115,19 @@ class ApiClient {
   createInvite(hubId: string, options?: { max_uses?: number; expires_in?: number }) { return this.request<HubInvite>(`/hubs/${hubId}/invite`, { method: 'POST', body: JSON.stringify(options ?? {}) }); }
   joinInvite(code: string) { return this.request<{ status: string; hub: Hub }>(`/invites/${code}`, { method: 'POST' }); }
   getInviteInfo(code: string) { return this.request<{ code: string; hub_id: string; hub_name: string; hub_icon_url?: string; member_count: number; expires_at?: string }>(`/invites/${code}`); }
+
+  getHubNotificationSettings(hubId: string) {
+    return this.request<HubNotificationSettings>(`/hubs/${hubId}/notification-settings`);
+  }
+  patchHubNotificationSettings(hubId: string, body: HubNotificationSettings) {
+    return this.request<HubNotificationSettings>(`/hubs/${hubId}/notification-settings`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  }
+  markHubRead(hubId: string) {
+    return this.request<void>(`/hubs/${hubId}/mark-read`, { method: 'POST' });
+  }
 
   getStreams(hubId: string) { return this.request<Stream[]>(`/hubs/${hubId}/streams`); }
   createStream(hubId: string, name: string, type: number = 0, categoryId?: string) { return this.request<Stream>(`/hubs/${hubId}/streams`, { method: 'POST', body: JSON.stringify({ name, type, category_id: categoryId }) }); }

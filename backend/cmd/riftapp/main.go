@@ -41,6 +41,7 @@ func main() {
 	msgRepo := repository.NewMessageRepo(db)
 	dmRepo := repository.NewDMRepo(db)
 	notifRepo := repository.NewNotificationRepo(db)
+	hubNotifRepo := repository.NewHubNotificationSettingsRepo(db)
 	inviteRepo := repository.NewInviteRepo(db)
 
 	// Auth & User services (existing)
@@ -66,10 +67,10 @@ func main() {
 	friendRepo := repository.NewFriendshipRepo(db)
 	blockRepo := repository.NewBlockRepo(db)
 	notifSvc := service.NewNotificationService(notifRepo, wsHub)
-	hubSvc := service.NewHubService(hubRepo, streamRepo, inviteRepo, notifRepo)
-	streamSvc := service.NewStreamService(streamRepo, hubSvc)
+	hubSvc := service.NewHubService(hubRepo, streamRepo, inviteRepo, notifRepo, hubNotifRepo)
+	streamSvc := service.NewStreamService(streamRepo, hubSvc, msgRepo, notifRepo)
 	catSvc := service.NewCategoryService(catRepo, hubSvc)
-	msgSvc := service.NewMessageService(msgRepo, streamRepo, hubSvc, notifSvc, wsHub)
+	msgSvc := service.NewMessageService(msgRepo, streamRepo, hubSvc, notifSvc, wsHub, hubNotifRepo)
 	dmSvc := service.NewDMService(dmRepo, msgRepo, notifSvc, wsHub)
 	friendSvc := service.NewFriendService(friendRepo, blockRepo, wsHub)
 

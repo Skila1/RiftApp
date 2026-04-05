@@ -14,10 +14,22 @@ import (
 type StreamService struct {
 	streamRepo *repository.StreamRepo
 	hubService *HubService
+	msgRepo    *repository.MessageRepo
+	notifRepo  *repository.NotificationRepo
 }
 
-func NewStreamService(streamRepo *repository.StreamRepo, hubService *HubService) *StreamService {
-	return &StreamService{streamRepo: streamRepo, hubService: hubService}
+func NewStreamService(
+	streamRepo *repository.StreamRepo,
+	hubService *HubService,
+	msgRepo *repository.MessageRepo,
+	notifRepo *repository.NotificationRepo,
+) *StreamService {
+	return &StreamService{
+		streamRepo: streamRepo,
+		hubService: hubService,
+		msgRepo:    msgRepo,
+		notifRepo:  notifRepo,
+	}
 }
 
 func (s *StreamService) Create(ctx context.Context, hubID, userID, name string, streamType int, isPrivate bool, categoryID *string) (*models.Stream, error) {
@@ -101,4 +113,24 @@ func (s *StreamService) GetHubID(ctx context.Context, streamID string) (string, 
 
 func (s *StreamService) GetName(ctx context.Context, streamID string) (string, error) {
 	return s.streamRepo.GetName(ctx, streamID)
+}
+
+// MarkAllReadInHub marks every text stream in the hub read (latest message per stream) and clears hub notifications.
+func (s *StreamService) MarkAllReadInHub(ctx context.Context, hubID, userID string) error {
+	if err := s.hubService.AssertHubMember(ctx, hubID, userID); err != nil {
+		return err
+	}
+	latest, err := s.msgRepo.LatestMessageIDsForHubTextStreams(ctx, hubID)
+	if err != nil {
+		return apperror.Internal("failed to list latest messages", err)
+	}
+	for streamID, msgID := range latest {
+		if err := s.streamRepo.AckStream(ctx, userID, streamID, msgID); err != nil {
+			return apperror.Internal("failed to ack stream", err)
+		}
+	}
+	if err := s.notifRepo.MarkReadForHub(ctx, userID, hubID); err != nil {
+		return apperror.Internal("failed to mark notifications read", err)
+	}
+	return nil
 }

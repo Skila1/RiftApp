@@ -79,6 +79,18 @@ export interface HubInvite {
   created_at: string;
 }
 
+/** Per-user notification preferences for a hub (Discord-style). */
+export interface HubNotificationSettings {
+  notification_level: 'all' | 'mentions_only' | 'nothing';
+  suppress_everyone: boolean;
+  suppress_role_mentions: boolean;
+  suppress_highlights: boolean;
+  mute_events: boolean;
+  mobile_push: boolean;
+  hide_muted_channels: boolean;
+  server_muted: boolean;
+}
+
 export interface Notification {
   id: string;
   user_id: string;

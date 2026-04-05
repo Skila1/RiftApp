@@ -24,9 +24,13 @@ export const useHubStore = create<HubState>((set) => ({
 
   setActiveHub: async (hubId) => {
     const { useStreamStore } = await import('./streamStore');
+    const { useMessageStore } = await import('./messageStore');
     const { useDMStore } = await import('./dmStore');
     const { usePresenceStore } = await import('./presenceStore');
 
+    // Drop previous hub's channels immediately so we never show hub A's list while hub B is selected.
+    useStreamStore.getState().clearStreams();
+    useMessageStore.getState().clearMessages();
     set({ activeHubId: hubId });
     useDMStore.getState().clearActive();
 

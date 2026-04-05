@@ -308,6 +308,30 @@ func reverse(msgs []models.Message) {
 	}
 }
 
+// LatestMessageIDsForHubTextStreams returns the newest message id per text stream in the hub.
+func (r *MessageRepo) LatestMessageIDsForHubTextStreams(ctx context.Context, hubID string) (map[string]string, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT DISTINCT ON (m.stream_id) m.stream_id::text, m.id::text
+		 FROM messages m
+		 INNER JOIN streams s ON s.id = m.stream_id AND s.hub_id = $1 AND s.type = 0
+		 ORDER BY m.stream_id, m.created_at DESC`,
+		hubID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make(map[string]string)
+	for rows.Next() {
+		var sid, mid string
+		if err := rows.Scan(&sid, &mid); err != nil {
+			return nil, err
+		}
+		out[sid] = mid
+	}
+	return out, rows.Err()
+}
+
 func (r *MessageRepo) GetDB() *pgxpool.Pool {
 	return r.db
 }

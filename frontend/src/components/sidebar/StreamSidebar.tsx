@@ -48,14 +48,26 @@ export default function StreamSidebar() {
 
   const activeHub = hubs.find((h) => h.id === activeHubId);
 
+  // Only list channels for the active hub (avoids stale UI if store ever mixes hubs).
+  const streamsForHub = useMemo(
+    () =>
+      activeHubId != null ? streams.filter((s) => s.hub_id === activeHubId) : [],
+    [streams, activeHubId],
+  );
+  const categoriesForHub = useMemo(
+    () =>
+      activeHubId != null ? categories.filter((c) => c.hub_id === activeHubId) : [],
+    [categories, activeHubId],
+  );
+
   // Group streams by category
   const { uncategorized, grouped } = useMemo(() => {
     const uncategorized: Stream[] = [];
     const grouped: Record<string, Stream[]> = {};
-    for (const cat of categories) {
+    for (const cat of categoriesForHub) {
       grouped[cat.id] = [];
     }
-    for (const s of streams) {
+    for (const s of streamsForHub) {
       if (s.category_id && grouped[s.category_id]) {
         grouped[s.category_id].push(s);
       } else {
@@ -63,7 +75,7 @@ export default function StreamSidebar() {
       }
     }
     return { uncategorized, grouped };
-  }, [streams, categories]);
+  }, [streamsForHub, categoriesForHub]);
 
   const handleGenerateInvite = async () => {
     if (!activeHubId) return;

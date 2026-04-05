@@ -72,6 +72,13 @@ func (r *NotificationRepo) MarkAllRead(ctx context.Context, userID string) error
 	return err
 }
 
+func (r *NotificationRepo) MarkReadForHub(ctx context.Context, userID, hubID string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE notifications SET read = true WHERE user_id = $1 AND read = false AND hub_id = $2`,
+		userID, hubID)
+	return err
+}
+
 func (r *NotificationRepo) Create(ctx context.Context, notif *models.Notification) error {
 	_, err := r.db.Exec(ctx,
 		`INSERT INTO notifications (id, user_id, type, title, body, reference_id, hub_id, stream_id, actor_id, created_at)

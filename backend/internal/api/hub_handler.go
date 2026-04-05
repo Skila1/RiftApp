@@ -143,11 +143,38 @@ func (h *HubHandler) JoinViaInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if creatorID != userID && h.notifSvc != nil && hub != nil {
+	if creatorID != userID && h.notifSvc != nil && hub != nil && h.svc.ShouldDeliverInviteJoinNotif(r.Context(), creatorID, hub.ID) {
 		joinerName, _ := h.notifRepo.GetDisplayName(r.Context(), userID)
 		title := joinerName + " joined " + hub.Name + " via your invite"
 		go h.notifSvc.Create(creatorID, "invite", title, nil, nil, &hub.ID, nil, &userID)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "joined", "hub": hub})
+}
+
+func (h *HubHandler) GetNotificationSettings(w http.ResponseWriter, r *http.Request) {
+	hubID := chi.URLParam(r, "hubID")
+	userID := middleware.GetUserID(r.Context())
+	st, err := h.svc.GetNotificationSettings(r.Context(), hubID, userID)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, st)
+}
+
+func (h *HubHandler) PatchNotificationSettings(w http.ResponseWriter, r *http.Request) {
+	hubID := chi.URLParam(r, "hubID")
+	userID := middleware.GetUserID(r.Context())
+	var body repository.HubNotificationSettings
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	st, err := h.svc.UpdateNotificationSettings(r.Context(), hubID, userID, body)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, st)
 }

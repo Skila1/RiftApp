@@ -13,14 +13,27 @@ import (
 )
 
 type HubService struct {
-	hubRepo    *repository.HubRepo
-	streamRepo *repository.StreamRepo
-	inviteRepo *repository.InviteRepo
-	notifRepo  *repository.NotificationRepo
+	hubRepo       *repository.HubRepo
+	streamRepo    *repository.StreamRepo
+	inviteRepo    *repository.InviteRepo
+	notifRepo     *repository.NotificationRepo
+	hubNotifRepo  *repository.HubNotificationSettingsRepo
 }
 
-func NewHubService(hubRepo *repository.HubRepo, streamRepo *repository.StreamRepo, inviteRepo *repository.InviteRepo, notifRepo *repository.NotificationRepo) *HubService {
-	return &HubService{hubRepo: hubRepo, streamRepo: streamRepo, inviteRepo: inviteRepo, notifRepo: notifRepo}
+func NewHubService(
+	hubRepo *repository.HubRepo,
+	streamRepo *repository.StreamRepo,
+	inviteRepo *repository.InviteRepo,
+	notifRepo *repository.NotificationRepo,
+	hubNotifRepo *repository.HubNotificationSettingsRepo,
+) *HubService {
+	return &HubService{
+		hubRepo:      hubRepo,
+		streamRepo:   streamRepo,
+		inviteRepo:   inviteRepo,
+		notifRepo:    notifRepo,
+		hubNotifRepo: hubNotifRepo,
+	}
 }
 
 func (s *HubService) Create(ctx context.Context, userID, name string) (*models.Hub, error) {
@@ -253,4 +266,42 @@ func (s *HubService) GetStreamHubID(ctx context.Context, streamID, userID string
 		return "", apperror.Forbidden("not a member")
 	}
 	return hubID, nil
+}
+
+func (s *HubService) AssertHubMember(ctx context.Context, hubID, userID string) error {
+	if !s.hubRepo.IsMember(ctx, hubID, userID) {
+		return apperror.Forbidden("not a member")
+	}
+	return nil
+}
+
+func (s *HubService) GetNotificationSettings(ctx context.Context, hubID, userID string) (repository.HubNotificationSettings, error) {
+	if err := s.AssertHubMember(ctx, hubID, userID); err != nil {
+		return repository.HubNotificationSettings{}, err
+	}
+	return s.hubNotifRepo.Get(ctx, userID, hubID)
+}
+
+// ShouldDeliverInviteJoinNotif is false when the hub owner has muted server event notifications.
+func (s *HubService) ShouldDeliverInviteJoinNotif(ctx context.Context, creatorID, hubID string) bool {
+	st, err := s.hubNotifRepo.Get(ctx, creatorID, hubID)
+	if err != nil {
+		return true
+	}
+	return !st.MuteEvents
+}
+
+func (s *HubService) UpdateNotificationSettings(ctx context.Context, hubID, userID string, in repository.HubNotificationSettings) (repository.HubNotificationSettings, error) {
+	if err := s.AssertHubMember(ctx, hubID, userID); err != nil {
+		return repository.HubNotificationSettings{}, err
+	}
+	switch in.NotificationLevel {
+	case "all", "mentions_only", "nothing":
+	default:
+		return repository.HubNotificationSettings{}, apperror.BadRequest("invalid notification_level")
+	}
+	if err := s.hubNotifRepo.Upsert(ctx, userID, hubID, in); err != nil {
+		return repository.HubNotificationSettings{}, apperror.Internal("failed to save settings", err)
+	}
+	return s.hubNotifRepo.Get(ctx, userID, hubID)
 }

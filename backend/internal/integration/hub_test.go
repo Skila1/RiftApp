@@ -28,8 +28,9 @@ func setupHubTest(t *testing.T) (*service.HubService, string) {
 	streamRepo := repository.NewStreamRepo(testPool)
 	inviteRepo := repository.NewInviteRepo(testPool)
 	notifRepo := repository.NewNotificationRepo(testPool)
+	hubNotifRepo := repository.NewHubNotificationSettingsRepo(testPool)
 
-	hubSvc := service.NewHubService(hubRepo, streamRepo, inviteRepo, notifRepo)
+	hubSvc := service.NewHubService(hubRepo, streamRepo, inviteRepo, notifRepo, hubNotifRepo)
 	return hubSvc, resp.User.ID
 }
 
@@ -183,7 +184,9 @@ func TestStream_CreateAndList(t *testing.T) {
 	hub, _ := hubSvc.Create(ctx, ownerID, "Stream Hub")
 
 	streamRepo := repository.NewStreamRepo(testPool)
-	streamSvc := service.NewStreamService(streamRepo, hubSvc)
+	msgRepo := repository.NewMessageRepo(testPool)
+	notifRepo := repository.NewNotificationRepo(testPool)
+	streamSvc := service.NewStreamService(streamRepo, hubSvc, msgRepo, notifRepo)
 
 	stream, err := streamSvc.Create(ctx, hub.ID, ownerID, "general-2", 0, false, nil)
 	if err != nil {
@@ -209,20 +212,20 @@ func TestMessage_CreateAndList(t *testing.T) {
 	hub, _ := hubSvc.Create(ctx, ownerID, "Msg Hub")
 
 	streamRepo := repository.NewStreamRepo(testPool)
-	streams, _ := service.NewStreamService(streamRepo, hubSvc).List(ctx, hub.ID)
+	msgRepo := repository.NewMessageRepo(testPool)
+	notifRepo := repository.NewNotificationRepo(testPool)
+	hubNotifRepo := repository.NewHubNotificationSettingsRepo(testPool)
+	streams, _ := service.NewStreamService(streamRepo, hubSvc, msgRepo, notifRepo).List(ctx, hub.ID)
 	if len(streams) == 0 {
 		t.Fatal("expected at least one stream")
 	}
 	streamID := streams[0].ID
 
-	msgRepo := repository.NewMessageRepo(testPool)
-	notifRepo := repository.NewNotificationRepo(testPool)
-
 	wsHub := ws.NewHub(nil)
 	go wsHub.Run()
 
 	notifSvc := service.NewNotificationService(notifRepo, wsHub)
-	msgSvc := service.NewMessageService(msgRepo, streamRepo, hubSvc, notifSvc, wsHub)
+	msgSvc := service.NewMessageService(msgRepo, streamRepo, hubSvc, notifSvc, wsHub, hubNotifRepo)
 
 	msg, err := msgSvc.Create(ctx, ownerID, streamID, service.CreateMessageInput{
 		Content: "Hello world!",
