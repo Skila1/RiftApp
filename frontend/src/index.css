@@ -48,10 +48,7 @@
     background: rgba(99, 102, 241, 0.3);
   }
 
-  /* Smooth scrolling globally */
-  * {
-    scroll-behavior: smooth;
-  }
+
 }
 
 @layer components {

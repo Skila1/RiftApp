@@ -70,11 +70,13 @@ export default function ChatPanel() {
   }, [activeStreamId, send]);
 
   const hasScrolledToUnread = useRef(false);
+  const justSwitchedRef = useRef(false);
 
   useEffect(() => {
     hasScrolledToUnread.current = false;
     prevMessageCountRef.current = 0;
     wasNearBottomRef.current = true;
+    justSwitchedRef.current = true;
   }, [activeStreamId, activeConversationId]);
 
   // After tab sleep, reconcile the open channel with the server (cache avoids routine refetch).
@@ -113,9 +115,12 @@ export default function ChatPanel() {
     prevMessageCountRef.current = displayMessages.length;
 
     if (grew && (wasNearBottomRef.current || distBottom < 80)) {
-      bottomEl.scrollIntoView({ behavior: 'smooth' });
+      const instant = justSwitchedRef.current;
+      justSwitchedRef.current = false;
+      bottomEl.scrollIntoView({ behavior: instant ? 'auto' : 'smooth' });
       wasNearBottomRef.current = true;
     } else {
+      justSwitchedRef.current = false;
       wasNearBottomRef.current = distBottom < 80;
     }
   }, [displayMessages.length, isLoading, firstUnreadIndex]);
