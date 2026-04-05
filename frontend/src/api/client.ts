@@ -99,6 +99,10 @@ class ApiClient {
     return this.request<User>('/users/@me');
   }
 
+  getUser(userId: string) {
+    return this.request<User>(`/users/${userId}`);
+  }
+
   updateMe(data: { username?: string; display_name?: string; bio?: string; avatar_url?: string }) {
     return this.request<User>('/users/@me', {
       method: 'PATCH',
@@ -217,6 +221,18 @@ class ApiClient {
   listBlocked() { return this.request<Block[]>('/blocks'); }
   getVoiceToken(streamId: string) { return this.request<{ token: string; url: string; room: string }>(`/voice/token?streamID=${streamId}`); }
   getVoiceStates(hubId: string) { return this.request<Record<string, string[]>>(`/hubs/${hubId}/voice-states`); }
+  moveUserToChannel(hubId: string, userId: string, targetStreamId: string) {
+    return this.request<{ status: string }>(`/hubs/${hubId}/voice/move`, {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, target_stream_id: targetStreamId }),
+    });
+  }
+  disconnectVoiceUser(hubId: string, userId: string) {
+    return this.request<{ status: string }>(`/hubs/${hubId}/voice/disconnect`, {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId }),
+    });
+  }
 
   // Hub Customization — Emojis
   getHubEmojis(hubId: string) { return this.request<HubEmoji[]>(`/hubs/${hubId}/emojis`); }

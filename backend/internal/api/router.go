@@ -60,7 +60,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 	catH := NewCategoryHandler(deps.CategoryService)
 	msgH := NewMessageHandler(deps.MsgService)
 	wsH := NewWSHandler(deps.WSHub, deps.AuthService, deps.Config.AllowedOrigins)
-	voiceH := NewVoiceHandler(deps.Config, deps.HubService, deps.WSHub, deps.HubCustomizationRepo)
+	voiceH := NewVoiceHandler(deps.Config, deps.HubService, deps.StreamService, deps.WSHub, deps.HubCustomizationRepo)
 	notifH := NewNotifHandler(deps.NotifService)
 	dmH := NewDMHandler(deps.DMService)
 	friendH := NewFriendHandler(deps.FriendService)
@@ -160,6 +160,8 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 
 		r.Get("/api/voice/token", voiceH.Token)
 		r.Get("/api/hubs/{hubID}/voice-states", voiceH.States)
+		r.Post("/api/hubs/{hubID}/voice/move", voiceH.MoveUser)
+		r.Post("/api/hubs/{hubID}/voice/disconnect", voiceH.DisconnectUser)
 		r.Post("/api/hubs/{hubID}/sounds/{soundID}/play", voiceH.PlaySound)
 
 		if deps.UploadHandler != nil {

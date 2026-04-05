@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"sync"
 	"time"
@@ -19,6 +20,7 @@ import (
 type VoiceHandler struct {
 	cfg        *config.Config
 	hubSvc     *service.HubService
+	streamSvc  *service.StreamService
 	hub        *ws.Hub
 	customRepo *repository.HubCustomizationRepo
 	// Per-user soundboard rate limiter: userID -> last play timestamps
@@ -31,14 +33,24 @@ const (
 	soundboardWindow   = 5 * time.Second
 )
 
-func NewVoiceHandler(cfg *config.Config, hubSvc *service.HubService, hub *ws.Hub, customRepo *repository.HubCustomizationRepo) *VoiceHandler {
+func NewVoiceHandler(cfg *config.Config, hubSvc *service.HubService, streamSvc *service.StreamService, hub *ws.Hub, customRepo *repository.HubCustomizationRepo) *VoiceHandler {
 	return &VoiceHandler{
 		cfg:        cfg,
 		hubSvc:     hubSvc,
+		streamSvc:  streamSvc,
 		hub:        hub,
 		customRepo: customRepo,
 		sbLastPlay: make(map[string][]time.Time),
 	}
+}
+
+type moveVoiceUserInput struct {
+	UserID         string `json:"user_id"`
+	TargetStreamID string `json:"target_stream_id"`
+}
+
+type disconnectVoiceUserInput struct {
+	UserID string `json:"user_id"`
 }
 
 func (h *VoiceHandler) Token(w http.ResponseWriter, r *http.Request) {
@@ -55,6 +67,11 @@ func (h *VoiceHandler) Token(w http.ResponseWriter, r *http.Request) {
 	hubID, err := h.hubSvc.GetStreamHubID(r.Context(), streamID, userID)
 	if err != nil {
 		writeError(w, http.StatusForbidden, "stream not found or access denied")
+		return
+	}
+	stream, err := h.streamSvc.Get(r.Context(), streamID)
+	if err != nil || stream.Type != 1 {
+		writeError(w, http.StatusBadRequest, "stream is not a voice channel")
 		return
 	}
 	if !h.hubSvc.HasPermission(r.Context(), hubID, userID, models.PermConnectVoice) {
@@ -104,6 +121,97 @@ func (h *VoiceHandler) States(w http.ResponseWriter, r *http.Request) {
 		states = make(map[string][]string)
 	}
 	writeData(w, http.StatusOK, states)
+}
+
+func (h *VoiceHandler) MoveUser(w http.ResponseWriter, r *http.Request) {
+	requesterID := middleware.GetUserID(r.Context())
+	hubID := chi.URLParam(r, "hubID")
+	if hubID == "" {
+		writeError(w, http.StatusBadRequest, "hubID is required")
+		return
+	}
+	if !h.canModerateVoice(r.Context(), hubID, requesterID) {
+		writeError(w, http.StatusForbidden, "you do not have permission to move voice users")
+		return
+	}
+
+	var input moveVoiceUserInput
+	if err := readJSON(r, &input); err != nil || input.UserID == "" || input.TargetStreamID == "" {
+		writeError(w, http.StatusBadRequest, "user_id and target_stream_id are required")
+		return
+	}
+
+	targetHubID, err := h.hubSvc.GetStreamHubID(r.Context(), input.TargetStreamID, requesterID)
+	if err != nil || targetHubID != hubID {
+		writeError(w, http.StatusBadRequest, "target stream is invalid")
+		return
+	}
+	targetStream, err := h.streamSvc.Get(r.Context(), input.TargetStreamID)
+	if err != nil || targetStream.Type != 1 {
+		writeError(w, http.StatusBadRequest, "target stream must be a voice channel")
+		return
+	}
+
+	currentStreamID := h.hub.GetUserVoiceStreamID(input.UserID)
+	if currentStreamID == "" {
+		writeError(w, http.StatusBadRequest, "user is not connected to voice")
+		return
+	}
+	currentHubID, err := h.hubSvc.GetStreamHubID(r.Context(), currentStreamID, requesterID)
+	if err != nil || currentHubID != hubID {
+		writeError(w, http.StatusBadRequest, "user is not connected to voice in this hub")
+		return
+	}
+	if currentStreamID == input.TargetStreamID {
+		writeData(w, http.StatusOK, map[string]string{"status": "noop"})
+		return
+	}
+
+	if _, changed := h.hub.MoveUserToVoiceStream(input.UserID, input.TargetStreamID); !changed {
+		writeData(w, http.StatusOK, map[string]string{"status": "noop"})
+		return
+	}
+	h.hub.SendToUser(input.UserID, ws.NewEvent(ws.OpVoiceMove, ws.VoiceMoveData{StreamID: input.TargetStreamID}))
+
+	writeData(w, http.StatusOK, map[string]string{"status": "moved"})
+}
+
+func (h *VoiceHandler) DisconnectUser(w http.ResponseWriter, r *http.Request) {
+	requesterID := middleware.GetUserID(r.Context())
+	hubID := chi.URLParam(r, "hubID")
+	if hubID == "" {
+		writeError(w, http.StatusBadRequest, "hubID is required")
+		return
+	}
+	if !h.canModerateVoice(r.Context(), hubID, requesterID) {
+		writeError(w, http.StatusForbidden, "you do not have permission to disconnect voice users")
+		return
+	}
+
+	var input disconnectVoiceUserInput
+	if err := readJSON(r, &input); err != nil || input.UserID == "" {
+		writeError(w, http.StatusBadRequest, "user_id is required")
+		return
+	}
+
+	currentStreamID := h.hub.GetUserVoiceStreamID(input.UserID)
+	if currentStreamID == "" {
+		writeError(w, http.StatusBadRequest, "user is not connected to voice")
+		return
+	}
+	currentHubID, err := h.hubSvc.GetStreamHubID(r.Context(), currentStreamID, requesterID)
+	if err != nil || currentHubID != hubID {
+		writeError(w, http.StatusBadRequest, "user is not connected to voice in this hub")
+		return
+	}
+
+	if _, changed := h.hub.DisconnectUserFromVoice(input.UserID); !changed {
+		writeData(w, http.StatusOK, map[string]string{"status": "noop"})
+		return
+	}
+	h.hub.SendToUser(input.UserID, ws.NewEvent(ws.OpVoiceDisconnect, nil))
+
+	writeData(w, http.StatusOK, map[string]string{"status": "disconnected"})
 }
 
 func (h *VoiceHandler) PlaySound(w http.ResponseWriter, r *http.Request) {
@@ -177,4 +285,10 @@ func (h *VoiceHandler) soundboardAllow(userID string) bool {
 
 	h.sbLastPlay[userID] = append(filtered, now)
 	return true
+}
+
+func (h *VoiceHandler) canModerateVoice(ctx context.Context, hubID, userID string) bool {
+	return h.hubSvc.HasPermission(ctx, hubID, userID, models.PermKickMembers) ||
+		h.hubSvc.HasPermission(ctx, hubID, userID, models.PermManageStreams) ||
+		h.hubSvc.HasPermission(ctx, hubID, userID, models.PermManageHub)
 }

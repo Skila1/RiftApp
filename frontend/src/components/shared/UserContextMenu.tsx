@@ -5,6 +5,7 @@ import { useAuthStore } from '../../stores/auth';
 import { useDMStore } from '../../stores/dmStore';
 import { api } from '../../api/client';
 import { useFriendStore } from '../../stores/friendStore';
+import { useAppSettingsStore } from '../../stores/appSettingsStore';
 import type { RelationshipType } from '../../types';
 
 const MENU_WIDTH = 200;
@@ -15,8 +16,9 @@ export default function UserContextMenu() {
   const rawX = useUserContextMenuStore((s) => s.x);
   const rawY = useUserContextMenuStore((s) => s.y);
   const close = useUserContextMenuStore((s) => s.close);
-  const openProfile = useProfilePopoverStore((s) => s.open);
+  const openProfile = useProfilePopoverStore((s) => s.openModal);
   const currentUser = useAuthStore((s) => s.user);
+  const developerMode = useAppSettingsStore((s) => s.developerMode);
 
   const menuRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
@@ -92,8 +94,7 @@ export default function UserContextMenu() {
   const isSelf = currentUser?.id === user.id;
 
   const handleProfile = () => {
-    const rect = new DOMRect(rawX, rawY, 0, 0);
-    openProfile(user, rect);
+    openProfile(user);
     close();
   };
 
@@ -238,13 +239,16 @@ export default function UserContextMenu() {
           />
         )}
 
-        <Separator />
-
-        <MenuItem
-          icon={<CopyIcon />}
-          label={copied ? 'Copied!' : 'Copy User ID'}
-          onClick={handleCopyId}
-        />
+        {developerMode && (
+          <>
+            <Separator />
+            <MenuItem
+              icon={<CopyIcon />}
+              label={copied ? 'Copied!' : 'Copy User ID'}
+              onClick={handleCopyId}
+            />
+          </>
+        )}
       </div>
     </div>
   );

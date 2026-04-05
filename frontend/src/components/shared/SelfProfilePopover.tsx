@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSelfProfileStore } from '../../stores/selfProfileStore';
 import { useAuthStore } from '../../stores/auth';
 import { usePresenceStore } from '../../stores/presenceStore';
+import { useAppSettingsStore } from '../../stores/appSettingsStore';
 import { useWsSend } from '../../hooks/useWebSocket';
 import StatusDot, { statusLabel } from './StatusDot';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
@@ -34,6 +35,7 @@ export default function SelfProfilePopover() {
   const close = useSelfProfileStore((s) => s.close);
   const user = useAuthStore((s) => s.user);
   const liveStatus = usePresenceStore((s) => (user ? s.presence[user.id] : undefined));
+  const developerMode = useAppSettingsStore((s) => s.developerMode);
   const send = useWsSend();
 
   const cardRef = useRef<HTMLDivElement>(null);
@@ -217,17 +219,18 @@ export default function SelfProfilePopover() {
             <span className="text-sm font-medium">Edit Profile</span>
           </button>
 
-          {/* Copy User ID */}
-          <button
-            onClick={handleCopyId}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-riftapp-panel/60 transition-colors text-left"
-          >
-            <svg className="w-4 h-4 text-riftapp-text-dim" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M15.988 3.012A2.25 2.25 0 0118 5.25v6.5A2.25 2.25 0 0115.75 14H13.5v-3.379a3 3 0 00-.879-2.121l-3.12-3.121a3 3 0 00-1.402-.791 2.252 2.252 0 011.913-1.576A2.25 2.25 0 0112.25 1h1.5a2.25 2.25 0 012.238 2.012zM11.5 3.25a.75.75 0 01.75-.75h1.5a.75.75 0 01.75.75v.25a.75.75 0 01-.75.75h-1.5a.75.75 0 01-.75-.75v-.25z" clipRule="evenodd" />
-              <path d="M3.5 6A1.5 1.5 0 002 7.5v9A1.5 1.5 0 003.5 18h7a1.5 1.5 0 001.5-1.5v-5.879a1.5 1.5 0 00-.44-1.06L8.44 6.439A1.5 1.5 0 007.378 6H3.5z" />
-            </svg>
-            <span className="text-sm font-medium">{copied ? 'Copied!' : 'Copy User ID'}</span>
-          </button>
+          {developerMode && (
+            <button
+              onClick={handleCopyId}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-riftapp-panel/60 transition-colors text-left"
+            >
+              <svg className="w-4 h-4 text-riftapp-text-dim" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M15.988 3.012A2.25 2.25 0 0118 5.25v6.5A2.25 2.25 0 0115.75 14H13.5v-3.379a3 3 0 00-.879-2.121l-3.12-3.121a3 3 0 00-1.402-.791 2.252 2.252 0 011.913-1.576A2.25 2.25 0 0112.25 1h1.5a2.25 2.25 0 012.238 2.012zM11.5 3.25a.75.75 0 01.75-.75h1.5a.75.75 0 01.75.75v.25a.75.75 0 01-.75.75h-1.5a.75.75 0 01-.75-.75v-.25z" clipRule="evenodd" />
+                <path d="M3.5 6A1.5 1.5 0 002 7.5v9A1.5 1.5 0 003.5 18h7a1.5 1.5 0 001.5-1.5v-5.879a1.5 1.5 0 00-.44-1.06L8.44 6.439A1.5 1.5 0 007.378 6H3.5z" />
+              </svg>
+              <span className="text-sm font-medium">{copied ? 'Copied!' : 'Copy User ID'}</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

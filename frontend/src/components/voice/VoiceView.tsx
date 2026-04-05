@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Track } from 'livekit-client';
 import { usePresenceStore } from '../../stores/presenceStore';
+import { useHubStore } from '../../stores/hubStore';
 import { useStreamStore } from '../../stores/streamStore';
 import { useVoiceStore, type VoiceParticipant } from '../../stores/voiceStore';
 import type { User } from '../../types';
 import VoiceParticipantContextMenu from './VoiceParticipantContextMenu';
 import VoiceStreamContextMenu from './VoiceStreamContextMenu';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
+import { canModerateVoice } from '../../utils/permissions';
 
 type LayoutSlotKind = 'screen' | 'camera';
 
@@ -67,8 +69,11 @@ export default function VoiceView() {
   const streams = useStreamStore((s) => s.streams);
   const viewingVoiceStreamId = useStreamStore((s) => s.viewingVoiceStreamId);
   const hubMembers = usePresenceStore((s) => s.hubMembers);
+  const activeHubId = useHubStore((s) => s.activeHubId);
+  const hubPermissions = useHubStore((s) => (activeHubId ? s.hubPermissions[activeHubId] : undefined));
 
   const stream = streams.find((s) => s.id === viewingVoiceStreamId);
+  const canModerateUsers = canModerateVoice(hubPermissions);
 
   const [focusedSlotId, setFocusedSlotId] = useState<string | null>(null);
   const [showNonVideoParticipants, setShowNonVideoParticipants] = useState(true);
@@ -304,6 +309,8 @@ export default function VoiceView() {
           member={hubMembers[tileMenu.participant.identity]}
           x={tileMenu.x}
           y={tileMenu.y}
+          hubId={stream?.hub_id ?? activeHubId ?? null}
+          canModerate={canModerateUsers}
           showNonVideoParticipants={showNonVideoParticipants}
           onToggleShowNonVideo={() => setShowNonVideoParticipants((v) => !v)}
           onClose={() => setTileMenu(null)}

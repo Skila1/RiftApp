@@ -3,6 +3,7 @@ import { MenuOverlay, menuDivider } from './MenuOverlay';
 import type { Message } from '../../types';
 import { useMessageStore } from '../../stores/messageStore';
 import { useReplyDraftStore } from '../../stores/replyDraftStore';
+import { useAppSettingsStore } from '../../stores/appSettingsStore';
 
 const QUICK_ROW = ['😂', '✨', '🔥', '👍'];
 const REACTION_PICK = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '✨', '👀', '🎉'];
@@ -138,6 +139,7 @@ export default function MessageContextMenu({
 }: Props) {
   const toggleReaction = useMessageStore((s) => s.toggleReaction);
   const setReplyTo = useReplyDraftStore((s) => s.setReplyTo);
+  const developerMode = useAppSettingsStore((s) => s.developerMode);
 
   const [reactionOpen, setReactionOpen] = useState(false);
 
@@ -304,12 +306,15 @@ export default function MessageContextMenu({
             { danger: true },
           )}
 
-        {menuDivider()}
-
-        {row(
-          'Copy Message ID',
-          <span className="text-[10px] font-mono font-semibold px-1 py-0.5 rounded bg-[#1e1f22] border border-[#3f4147] text-[#b5bac1]">ID</span>,
-          copyId,
+        {developerMode && (
+          <>
+            {menuDivider()}
+            {row(
+              'Copy Message ID',
+              <span className="text-[10px] font-mono font-semibold px-1 py-0.5 rounded bg-[#1e1f22] border border-[#3f4147] text-[#b5bac1]">ID</span>,
+              copyId,
+            )}
+          </>
         )}
       </div>
     </MenuOverlay>

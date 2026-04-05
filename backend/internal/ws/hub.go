@@ -507,6 +507,50 @@ func (h *Hub) GetUserVoiceStreamID(userID string) string {
 	return ""
 }
 
+// MoveUserToVoiceStream moves a user between voice channels and broadcasts the leave/join updates.
+func (h *Hub) MoveUserToVoiceStream(userID, targetStreamID string) (string, bool) {
+	h.mu.Lock()
+	currentStreamID := ""
+	for streamID, users := range h.voiceState {
+		if users[userID] {
+			currentStreamID = streamID
+			break
+		}
+	}
+	if currentStreamID == targetStreamID {
+		h.mu.Unlock()
+		return currentStreamID, false
+	}
+	if currentStreamID != "" {
+		if users, ok := h.voiceState[currentStreamID]; ok {
+			delete(users, userID)
+			if len(users) == 0 {
+				delete(h.voiceState, currentStreamID)
+			}
+		}
+	}
+	if targetStreamID != "" {
+		if h.voiceState[targetStreamID] == nil {
+			h.voiceState[targetStreamID] = make(map[string]bool)
+		}
+		h.voiceState[targetStreamID][userID] = true
+	}
+	h.mu.Unlock()
+
+	if currentStreamID != "" {
+		h.broadcastVoiceState(currentStreamID, userID, "leave")
+	}
+	if targetStreamID != "" {
+		h.broadcastVoiceState(targetStreamID, userID, "join")
+	}
+
+	return currentStreamID, currentStreamID != "" || targetStreamID != ""
+}
+
+func (h *Hub) DisconnectUserFromVoice(userID string) (string, bool) {
+	return h.MoveUserToVoiceStream(userID, "")
+}
+
 // BroadcastToVoiceChannel sends data to every user currently in voice for the given stream.
 func (h *Hub) BroadcastToVoiceChannel(streamID string, data []byte) {
 	h.mu.RLock()

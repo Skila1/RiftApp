@@ -7,11 +7,12 @@ import { useWsSend } from '../../hooks/useWebSocket';
 import { api } from '../../api/client';
 import { statusColor, statusLabel } from '../shared/StatusDot';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { useAppSettingsStore } from '../../stores/appSettingsStore';
 import type { NoiseSuppressionMode } from '../../stores/voiceStore';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { stripAssetVersion } from '../../utils/entityAssets';
 
-type Tab = 'profile' | 'account' | 'voice';
+type Tab = 'profile' | 'account' | 'voice' | 'advanced';
 
 function SettingsModal({ onClose }: { onClose: () => void }) {
   const user = useAuthStore((s) => s.user);
@@ -36,6 +37,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
     { id: 'profile', label: 'Profile', section: 'user' },
     { id: 'account', label: 'Account', section: 'user' },
     { id: 'voice', label: 'Voice & Video', section: 'app' },
+    { id: 'advanced', label: 'Advanced', section: 'app' },
   ];
 
   return createPortal(
@@ -126,7 +128,13 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           {/* Header */}
           <div className="flex items-center justify-between px-6 h-14 border-b border-riftapp-border/40 flex-shrink-0">
             <h2 className="text-[17px] font-bold tracking-tight">
-              {activeTab === 'profile' ? 'Profile' : activeTab === 'account' ? 'My Account' : 'Voice & Video'}
+              {activeTab === 'profile'
+                ? 'Profile'
+                : activeTab === 'account'
+                  ? 'My Account'
+                  : activeTab === 'voice'
+                    ? 'Voice & Video'
+                    : 'Advanced'}
             </h2>
             <button
               onClick={onClose}
@@ -146,8 +154,10 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
               <ProfileTab user={user} setUser={setUser} />
             ) : activeTab === 'account' ? (
               <AccountTab user={user} logout={logout} onClose={onClose} />
-            ) : (
+            ) : activeTab === 'voice' ? (
               <VoiceVideoSettingsTab />
+            ) : (
+              <AdvancedSettingsTab />
             )}
           </div>
         </div>
@@ -202,6 +212,47 @@ function VoiceVideoSettingsTab() {
       <p className="text-[11px] text-riftapp-text-dim leading-relaxed">
         Krisp and Standard use your browser&apos;s microphone processing over WebRTC. Krisp enables stronger voice isolation when the browser supports it; it is not the standalone Krisp app SDK.
       </p>
+    </div>
+  );
+}
+
+function AdvancedSettingsTab() {
+  const developerMode = useAppSettingsStore((s) => s.developerMode);
+  const setDeveloperMode = useAppSettingsStore((s) => s.setDeveloperMode);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-xs font-bold uppercase tracking-wide text-riftapp-text-dim mb-4">Advanced</h3>
+        <div className="rounded-lg border border-riftapp-border/40 bg-riftapp-panel/40 p-4 space-y-3">
+          <button
+            type="button"
+            onClick={() => setDeveloperMode(!developerMode)}
+            className="w-full flex items-start justify-between gap-4 text-left"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-riftapp-text">Developer Mode</p>
+              <p className="text-[13px] text-riftapp-text-muted mt-1 leading-snug max-w-lg">
+                Shows developer-only copy actions like message IDs and user IDs across menus and profile surfaces.
+              </p>
+            </div>
+            <span
+              className={`mt-0.5 inline-flex h-6 w-11 items-center rounded-full border transition-colors ${
+                developerMode
+                  ? 'bg-riftapp-accent border-riftapp-accent'
+                  : 'bg-riftapp-bg/70 border-riftapp-border/60'
+              }`}
+              aria-hidden="true"
+            >
+              <span
+                className={`inline-block h-5 w-5 rounded-full bg-white transition-transform ${
+                  developerMode ? 'translate-x-5' : 'translate-x-0.5'
+                }`}
+              />
+            </span>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

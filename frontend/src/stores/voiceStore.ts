@@ -107,6 +107,7 @@ interface VoiceStore {
   setStreamAttenuationStrength: (strength: number) => void;
   setNoiseSuppressionMode: (mode: NoiseSuppressionMode) => Promise<void>;
   toggleNoiseSuppression: () => Promise<void>;
+  moveToStream: (streamId: string) => Promise<void>;
   triggerSoundboardSpeaking: (identity: string, durationMs: number) => void;
 }
 
@@ -679,6 +680,12 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   toggleNoiseSuppression: async () => {
     const cur = get().noiseSuppressionMode;
     await get().setNoiseSuppressionMode(cur === 'off' ? 'krisp' : 'off');
+  },
+
+  moveToStream: async (sid) => {
+    if (get().streamId === sid && get().connected) return;
+    await get().leave();
+    await get().join(sid);
   },
 
   triggerSoundboardSpeaking: (identity, durationMs) => {

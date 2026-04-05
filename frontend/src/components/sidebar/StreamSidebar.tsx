@@ -33,11 +33,13 @@ import CreateChannelModal from '../modals/CreateChannelModal';
 import CreateCategoryModal from '../modals/CreateCategoryModal';
 import EditChannelModal from '../modals/EditChannelModal';
 import InviteToServerModal from '../modals/InviteToServerModal';
+import VoiceUserItem from '../voice/VoiceUserItem';
 import ChannelContextMenu, { type ChannelMenuTarget } from '../context-menus/ChannelContextMenu';
 import { MenuOverlay } from '../context-menus/MenuOverlay';
 import type { User, Stream } from '../../types';
+import { api } from '../../api/client';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
-import { hasPermission, PermManageStreams } from '../../utils/permissions';
+import { canModerateVoice, hasPermission, PermManageStreams } from '../../utils/permissions';
 
 export default function StreamSidebar() {
   const streams = useStreamStore((s) => s.streams);
@@ -51,6 +53,7 @@ export default function StreamSidebar() {
   const user = useAuthStore((s) => s.user);
   const hubPermissions = useHubStore((s) => (activeHubId ? s.hubPermissions[activeHubId] : undefined));
   const canManageChannels = hasPermission(hubPermissions, PermManageStreams);
+  const canModerateUsers = canModerateVoice(hubPermissions);
   const logout = useAuthStore((s) => s.logout);
   const streamUnreads = useStreamStore((s) => s.streamUnreads);
   const hubMembers = usePresenceStore((s) => s.hubMembers);
@@ -83,6 +86,8 @@ export default function StreamSidebar() {
   const [channelMenu, setChannelMenu] = useState<ChannelMenuTarget | null>(null);
   const [editChannelStream, setEditChannelStream] = useState<Stream | null>(null);
   const [createChannelInitialType, setCreateChannelInitialType] = useState<number | undefined>(undefined);
+  const [draggedVoiceUser, setDraggedVoiceUser] = useState<{ userId: string; sourceStreamId: string } | null>(null);
+  const [voiceDropTargetId, setVoiceDropTargetId] = useState<string | null>(null);
 
   // Collapsible categories
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -146,6 +151,31 @@ export default function StreamSidebar() {
     },
     [voiceStreamId, voiceConnected, voiceJoin, setViewingVoice],
   );
+
+  const clearVoiceDragState = useCallback(() => {
+    setDraggedVoiceUser(null);
+    setVoiceDropTargetId(null);
+  }, []);
+
+  const handleVoiceUserDragStart = useCallback((userId: string, sourceStreamId: string) => {
+    if (!canModerateUsers) return;
+    setDraggedVoiceUser({ userId, sourceStreamId });
+  }, [canModerateUsers]);
+
+  const handleVoiceUserDrop = useCallback(async (targetStreamId: string) => {
+    if (!activeHubId || !draggedVoiceUser) return;
+    if (draggedVoiceUser.sourceStreamId === targetStreamId) {
+      clearVoiceDragState();
+      return;
+    }
+    try {
+      await api.moveUserToChannel(activeHubId, draggedVoiceUser.userId, targetStreamId);
+    } catch {
+      /* ignore drop failure */
+    } finally {
+      clearVoiceDragState();
+    }
+  }, [activeHubId, draggedVoiceUser, clearVoiceDragState]);
 
   const closeHubSettings = useCallback(() => setShowHubSettings(false), []);
   const closeCreateChannel = useCallback(() => setShowCreateChannel(false), []);
@@ -374,6 +404,13 @@ export default function StreamSidebar() {
         handleVoiceClick={handleVoiceClick}
         voiceMembers={voiceMembers}
         hubMembers={hubMembers}
+        canModerateUsers={canModerateUsers}
+        draggedVoiceUser={draggedVoiceUser}
+        voiceDropTargetId={voiceDropTargetId}
+        onVoiceUserDragStart={handleVoiceUserDragStart}
+        onVoiceUserDragEnd={clearVoiceDragState}
+        onVoiceDropTargetChange={setVoiceDropTargetId}
+        onVoiceUserDrop={handleVoiceUserDrop}
         canManageChannels={canManageChannels}
         streamsForHub={streamsForHub}
         onChannelContext={(stream, e) => {
@@ -446,6 +483,13 @@ interface DndChannelListProps {
   handleVoiceClick: (streamId: string) => void;
   voiceMembers: Record<string, string[]>;
   hubMembers: Record<string, User>;
+  canModerateUsers: boolean;
+  draggedVoiceUser: { userId: string; sourceStreamId: string } | null;
+  voiceDropTargetId: string | null;
+  onVoiceUserDragStart: (userId: string, sourceStreamId: string) => void;
+  onVoiceUserDragEnd: () => void;
+  onVoiceDropTargetChange: (streamId: string | null) => void;
+  onVoiceUserDrop: (targetStreamId: string) => void;
   canManageChannels: boolean;
   streamsForHub: Stream[];
   onChannelContext: (stream: Stream, e: React.MouseEvent) => void;
@@ -466,6 +510,13 @@ function DndChannelList({
   handleVoiceClick,
   voiceMembers,
   hubMembers,
+  canModerateUsers,
+  draggedVoiceUser,
+  voiceDropTargetId,
+  onVoiceUserDragStart,
+  onVoiceUserDragEnd,
+  onVoiceDropTargetChange,
+  onVoiceUserDrop,
   canManageChannels,
   streamsForHub,
   onChannelContext,
@@ -697,6 +748,7 @@ function DndChannelList({
             <div className={`rounded-md transition-colors ${overCategoryId === UNCATEGORIZED_CONTAINER && activeType === 'channel' ? 'bg-riftapp-accent/5' : ''}`}>
               <ChannelGroup
                 streams={uncategorized}
+                hubId={activeHubId}
                 activeStreamId={activeStreamId}
                 viewingVoiceStreamId={viewingVoiceStreamId}
                 streamUnreads={streamUnreads}
@@ -704,6 +756,13 @@ function DndChannelList({
                 onVoiceClick={handleVoiceClick}
                 voiceMembers={voiceMembers}
                 hubMembers={hubMembers}
+                canModerateVoiceUsers={canModerateUsers}
+                draggedVoiceUser={draggedVoiceUser}
+                voiceDropTargetId={voiceDropTargetId}
+                onVoiceUserDragStart={onVoiceUserDragStart}
+                onVoiceUserDragEnd={onVoiceUserDragEnd}
+                onVoiceDropTargetChange={onVoiceDropTargetChange}
+                onVoiceUserDrop={onVoiceUserDrop}
                 draggable={canManageChannels}
                 dragActiveId={activeId}
                 onChannelContext={onChannelContext}
@@ -733,6 +792,7 @@ function DndChannelList({
                   {!isCollapsed && (
                     <ChannelGroup
                       streams={catStreams}
+                      hubId={activeHubId}
                       activeStreamId={activeStreamId}
                       viewingVoiceStreamId={viewingVoiceStreamId}
                       streamUnreads={streamUnreads}
@@ -740,6 +800,13 @@ function DndChannelList({
                       onVoiceClick={handleVoiceClick}
                       voiceMembers={voiceMembers}
                       hubMembers={hubMembers}
+                      canModerateVoiceUsers={canModerateUsers}
+                      draggedVoiceUser={draggedVoiceUser}
+                      voiceDropTargetId={voiceDropTargetId}
+                      onVoiceUserDragStart={onVoiceUserDragStart}
+                      onVoiceUserDragEnd={onVoiceUserDragEnd}
+                      onVoiceDropTargetChange={onVoiceDropTargetChange}
+                      onVoiceUserDrop={onVoiceUserDrop}
                       draggable={canManageChannels}
                       dragActiveId={activeId}
                       onChannelContext={onChannelContext}
@@ -841,6 +908,7 @@ function SortableCategory({ cat, isCollapsed, toggleCollapse, isOver, draggable,
 
 interface ChannelGroupProps {
   streams: Stream[];
+  hubId: string | null;
   activeStreamId: string | null;
   viewingVoiceStreamId: string | null;
   streamUnreads: Record<string, number>;
@@ -848,6 +916,13 @@ interface ChannelGroupProps {
   onVoiceClick: (streamId: string) => void;
   voiceMembers: Record<string, string[]>;
   hubMembers: Record<string, User>;
+  canModerateVoiceUsers: boolean;
+  draggedVoiceUser: { userId: string; sourceStreamId: string } | null;
+  voiceDropTargetId: string | null;
+  onVoiceUserDragStart: (userId: string, sourceStreamId: string) => void;
+  onVoiceUserDragEnd: () => void;
+  onVoiceDropTargetChange: (streamId: string | null) => void;
+  onVoiceUserDrop: (targetStreamId: string) => void;
   onChannelContext: (stream: Stream, e: React.MouseEvent) => void;
   draggable?: boolean;
   dragActiveId?: UniqueIdentifier | null;
@@ -855,6 +930,7 @@ interface ChannelGroupProps {
 
 function ChannelGroup({
   streams,
+  hubId,
   activeStreamId,
   viewingVoiceStreamId,
   streamUnreads,
@@ -862,6 +938,13 @@ function ChannelGroup({
   onVoiceClick,
   voiceMembers,
   hubMembers,
+  canModerateVoiceUsers,
+  draggedVoiceUser,
+  voiceDropTargetId,
+  onVoiceUserDragStart,
+  onVoiceUserDragEnd,
+  onVoiceDropTargetChange,
+  onVoiceUserDrop,
   onChannelContext,
   draggable,
   dragActiveId,
@@ -905,6 +988,14 @@ function ChannelGroup({
             hideVcNames={hideVcNames}
             voiceParticipants={isConnected ? voiceParticipants : []}
             hubMembers={hubMembers}
+            hubId={hubId}
+            canModerateVoiceUsers={canModerateVoiceUsers}
+            draggedVoiceUser={draggedVoiceUser}
+            voiceDropTargetId={voiceDropTargetId}
+            onVoiceUserDragStart={onVoiceUserDragStart}
+            onVoiceUserDragEnd={onVoiceUserDragEnd}
+            onVoiceDropTargetChange={onVoiceDropTargetChange}
+            onVoiceUserDrop={onVoiceUserDrop}
             onVoiceClick={onVoiceClick}
             onContextMenu={onChannelContext}
             draggable={draggable}
@@ -996,6 +1087,14 @@ function SortableVoiceItem({
   hideVcNames,
   voiceParticipants,
   hubMembers,
+  hubId,
+  canModerateVoiceUsers,
+  draggedVoiceUser,
+  voiceDropTargetId,
+  onVoiceUserDragStart,
+  onVoiceUserDragEnd,
+  onVoiceDropTargetChange,
+  onVoiceUserDrop,
   onVoiceClick,
   onContextMenu,
   draggable,
@@ -1009,6 +1108,14 @@ function SortableVoiceItem({
   hideVcNames: boolean;
   voiceParticipants: { identity: string; isSpeaking: boolean; isMuted: boolean; isScreenSharing: boolean }[];
   hubMembers: Record<string, User>;
+  hubId: string | null;
+  canModerateVoiceUsers: boolean;
+  draggedVoiceUser: { userId: string; sourceStreamId: string } | null;
+  voiceDropTargetId: string | null;
+  onVoiceUserDragStart: (userId: string, sourceStreamId: string) => void;
+  onVoiceUserDragEnd: () => void;
+  onVoiceDropTargetChange: (streamId: string | null) => void;
+  onVoiceUserDrop: (targetStreamId: string) => void;
   onVoiceClick: (streamId: string) => void;
   onContextMenu: (stream: Stream, e: React.MouseEvent) => void;
   draggable?: boolean;
@@ -1031,6 +1138,10 @@ function SortableVoiceItem({
     transform: CSS.Transform.toString(transform),
     transition,
   };
+  const canAcceptVoiceDrop = Boolean(
+    canModerateVoiceUsers && draggedVoiceUser && draggedVoiceUser.sourceStreamId !== stream.id,
+  );
+  const isVoiceDropTarget = voiceDropTargetId === stream.id && canAcceptVoiceDrop;
 
   return (
     <div
@@ -1043,8 +1154,29 @@ function SortableVoiceItem({
         type="button"
         onClick={() => onVoiceClick(stream.id)}
         onContextMenu={(e) => onContextMenu(stream, e)}
+        onDragEnter={() => {
+          if (!canAcceptVoiceDrop) return;
+          onVoiceDropTargetChange(stream.id);
+        }}
+        onDragOver={(e) => {
+          if (!canAcceptVoiceDrop) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          if (voiceDropTargetId !== stream.id) onVoiceDropTargetChange(stream.id);
+        }}
+        onDragLeave={(e) => {
+          if (!canAcceptVoiceDrop) return;
+          const nextTarget = e.relatedTarget as Node | null;
+          if (nextTarget && e.currentTarget.contains(nextTarget)) return;
+          if (voiceDropTargetId === stream.id) onVoiceDropTargetChange(null);
+        }}
+        onDrop={(e) => {
+          if (!canAcceptVoiceDrop) return;
+          e.preventDefault();
+          void onVoiceUserDrop(stream.id);
+        }}
         title={isConnected ? stream.name : `Join ${stream.name}`}
-        className={`channel-item ${isViewing ? 'channel-item-active !text-riftapp-success' : isConnected ? '!text-riftapp-success channel-item-idle' : hasMembers ? '!text-riftapp-success/70 channel-item-idle' : 'channel-item-idle'} ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}`}
+        className={`channel-item ${isViewing ? 'channel-item-active !text-riftapp-success' : isConnected ? '!text-riftapp-success channel-item-idle' : hasMembers ? '!text-riftapp-success/70 channel-item-idle' : 'channel-item-idle'} ${draggable ? 'cursor-grab active:cursor-grabbing' : ''} ${isVoiceDropTarget ? '!bg-riftapp-accent/15 !text-riftapp-accent ring-1 ring-riftapp-accent/50' : ''}`}
         {...(draggable ? { ...attributes, ...listeners } : {})}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
@@ -1059,36 +1191,19 @@ function SortableVoiceItem({
         <div className="ml-3 pl-3 border-l-2 border-riftapp-border/30 space-y-0.5 mt-0.5 mb-1">
           {voiceParticipants.map((p) => {
             const member = hubMembers[p.identity];
-            const name = member?.display_name || member?.username || p.identity;
-            const avatarUrl = member?.avatar_url;
             return (
-              <div key={p.identity} className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-riftapp-surface-hover/50 transition-colors group">
-                <div className={`w-6 h-6 rounded-full flex-shrink-0 overflow-hidden ${p.isSpeaking ? 'ring-2 ring-riftapp-success ring-offset-1 ring-offset-riftapp-surface' : ''}`}>
-                  {avatarUrl ? (
-                    <img src={publicAssetUrl(avatarUrl)} alt={name} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className={`w-full h-full flex items-center justify-center text-[9px] font-semibold ${
-                      p.isSpeaking ? 'bg-riftapp-success text-white' : 'bg-riftapp-panel text-riftapp-text-muted'
-                    }`}>
-                      {name.slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
-                </div>
-                <span className={`text-[13px] truncate flex-1 ${p.isSpeaking ? 'text-riftapp-success font-medium' : 'text-riftapp-text-muted'}`}>
-                  {hideVcNames ? 'User' : name}
-                </span>
-                {p.isMuted && (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-riftapp-danger/70 flex-shrink-0">
-                    <line x1="1" y1="1" x2="23" y2="23" />
-                    <path d="M9 9v3a3 3 0 005.12 2.12M15 9.34V4a3 3 0 00-5.94-.6" />
-                  </svg>
-                )}
-                {p.isScreenSharing && (
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-riftapp-accent flex-shrink-0">
-                    <rect x="2" y="3" width="20" height="14" rx="2" /><line x1="12" y1="17" x2="12" y2="21" />
-                  </svg>
-                )}
-              </div>
+              <VoiceUserItem
+                key={p.identity}
+                participant={{ ...p, isCameraOn: false, videoTrack: undefined, screenTrack: undefined }}
+                member={member}
+                streamId={stream.id}
+                hubId={hubId}
+                hideName={hideVcNames}
+                canModerate={canModerateVoiceUsers}
+                onVoiceDragStart={onVoiceUserDragStart}
+                onVoiceDragEnd={onVoiceUserDragEnd}
+                isDragging={draggedVoiceUser?.userId === p.identity}
+              />
             );
           })}
         </div>
@@ -1097,21 +1212,25 @@ function SortableVoiceItem({
         <div className="ml-3 pl-3 border-l-2 border-riftapp-border/30 space-y-0.5 mt-0.5 mb-1">
           {memberIds.map((uid) => {
             const member = hubMembers[uid];
-            const name = member?.display_name || member?.username || uid.slice(0, 8);
-            const avatarUrl = member?.avatar_url;
             return (
-              <div key={uid} className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-riftapp-surface-hover/50 transition-colors">
-                <div className="w-6 h-6 rounded-full flex-shrink-0 overflow-hidden">
-                  {avatarUrl ? (
-                    <img src={publicAssetUrl(avatarUrl)} alt={name} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-[9px] font-semibold bg-riftapp-panel text-riftapp-text-muted">
-                      {name.slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
-                </div>
-                <span className="text-[13px] truncate flex-1 text-riftapp-text-muted">{hideVcNames ? 'User' : name}</span>
-              </div>
+              <VoiceUserItem
+                key={uid}
+                participant={{
+                  identity: uid,
+                  isSpeaking: false,
+                  isMuted: false,
+                  isCameraOn: false,
+                  isScreenSharing: false,
+                }}
+                member={member}
+                streamId={stream.id}
+                hubId={hubId}
+                hideName={hideVcNames}
+                canModerate={canModerateVoiceUsers}
+                onVoiceDragStart={onVoiceUserDragStart}
+                onVoiceDragEnd={onVoiceUserDragEnd}
+                isDragging={draggedVoiceUser?.userId === uid}
+              />
             );
           })}
         </div>

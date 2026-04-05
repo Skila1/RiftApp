@@ -16,3 +16,9 @@ export function hasPermission(perms: number | undefined, flag: number): boolean 
   if ((perms & PermAdministrator) !== 0) return true;
   return (perms & flag) !== 0;
 }
+
+export function canModerateVoice(perms: number | undefined): boolean {
+  return hasPermission(perms, PermKickMembers)
+    || hasPermission(perms, PermManageStreams)
+    || hasPermission(perms, PermManageHub);
+}

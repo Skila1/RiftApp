@@ -187,6 +187,17 @@ export function useWebSocket() {
             useStreamStore.getState().applyVoiceState(stream_id, user_id, action);
             break;
           }
+          case 'voice_move': {
+            const { stream_id } = evt.d as { stream_id: string };
+            useStreamStore.getState().setViewingVoice(stream_id);
+            void useVoiceStore.getState().moveToStream(stream_id);
+            break;
+          }
+          case 'voice_disconnect': {
+            useStreamStore.getState().setViewingVoice(null);
+            void useVoiceStore.getState().leave();
+            break;
+          }
           case 'friend_request': {
             const { user_id } = evt.d as { user_id: string };
             useFriendStore.getState().handleFriendRequest(user_id);

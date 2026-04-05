@@ -7,7 +7,8 @@ import MemberList from '../sidebar/MemberList';
 import ChatPanel from '../chat/ChatPanel';
 import VoiceView from '../voice/VoiceView';
 import FriendsPage from '../friends/FriendsPage';
-import UserProfilePopover from '../shared/UserProfilePopover';
+import MiniProfilePopover from '../shared/MiniProfilePopover';
+import FullProfileModal from '../shared/FullProfileModal';
 import SelfProfilePopover from '../shared/SelfProfilePopover';
 import UserContextMenu from '../shared/UserContextMenu';
 import ScreenShareModal from '../voice/ScreenShareModal';
@@ -82,7 +83,8 @@ export default function AppLayout() {
         <ChatPanel />
       )}
       {activeHubId && !activeConversationId && !viewingVoiceStreamId && <MemberList />}
-      <UserProfilePopover />
+      <MiniProfilePopover />
+      <FullProfileModal />
       <SelfProfilePopover />
       <UserContextMenu />
       <ScreenShareModal />
