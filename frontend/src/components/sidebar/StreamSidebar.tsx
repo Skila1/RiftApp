@@ -35,7 +35,6 @@ import EditChannelModal from '../modals/EditChannelModal';
 import InviteToServerModal from '../modals/InviteToServerModal';
 import ChannelContextMenu, { type ChannelMenuTarget } from '../context-menus/ChannelContextMenu';
 import { MenuOverlay } from '../context-menus/MenuOverlay';
-import { api } from '../../api/client';
 import type { User, Stream } from '../../types';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 
@@ -55,10 +54,6 @@ export default function StreamSidebar() {
   const streamUnreads = useStreamStore((s) => s.streamUnreads);
   const hubMembers = usePresenceStore((s) => s.hubMembers);
   const [showHubSettings, setShowHubSettings] = useState(false);
-  const [showInvitePopover, setShowInvitePopover] = useState(false);
-  const [inviteCode, setInviteCode] = useState<string | null>(null);
-  const [inviteGenerating, setInviteGenerating] = useState(false);
-  const [inviteCopied, setInviteCopied] = useState(false);
   const voiceStreamId = useVoiceStore((s) => s.streamId);
   const voiceConnected = useVoiceStore((s) => s.connected);
   const voiceConnecting = useVoiceStore((s) => s.connecting);
@@ -123,31 +118,7 @@ export default function StreamSidebar() {
     return { uncategorized, grouped };
   }, [streamsForHub, categoriesForHub]);
 
-  const handleGenerateInvite = async () => {
-    if (!activeHubId) return;
-    setInviteGenerating(true);
-    try {
-      const invite = await api.createInvite(activeHubId, { expires_in: 604800 });
-      setInviteCode(`${window.location.origin}/invite/${invite.code}`);
-    } finally {
-      setInviteGenerating(false);
-    }
-  };
 
-  const handleCopyInvite = () => {
-    if (!inviteCode) return;
-    navigator.clipboard.writeText(inviteCode);
-    setInviteCopied(true);
-    setTimeout(() => setInviteCopied(false), 2000);
-  };
-
-  const handleInviteToggle = () => {
-    setShowInvitePopover((s) => !s);
-    if (!showInvitePopover) {
-      setInviteCode(null);
-      setInviteCopied(false);
-    }
-  };
 
   const toggleCollapse = (catId: string) => {
     setCollapsed((prev) => {
@@ -231,10 +202,10 @@ export default function StreamSidebar() {
           </svg>
         </button>
         <button
-          onClick={handleInviteToggle}
+          onClick={() => setShowInviteModal(true)}
           title="Invite people to this hub"
           className={`w-10 h-full flex items-center justify-center border-l border-riftapp-border/40 transition-all duration-150 active:scale-95 flex-shrink-0 ${
-            showInvitePopover
+            showInviteModal
               ? 'bg-riftapp-accent/15 text-riftapp-accent'
               : 'text-riftapp-text-dim hover:text-riftapp-text hover:bg-riftapp-surface-hover'
           }`}
@@ -251,30 +222,6 @@ export default function StreamSidebar() {
 
       {showHubSettings && activeHub && (
         <HubSettingsModal hub={activeHub} onClose={closeHubSettings} />
-      )}
-
-      {/* Invite popover */}
-      {showInvitePopover && (
-        <div className="mx-2 mt-2 p-3 rounded-xl bg-riftapp-panel border border-riftapp-border/40 animate-scale-in">
-          <p className="text-[12px] font-semibold mb-1">Invite People</p>
-          <p className="text-[11px] text-riftapp-text-dim mb-2">Share this link to invite someone to <span className="font-medium text-riftapp-text">{activeHub?.name}</span>.</p>
-          {inviteCode ? (
-            <div className="flex gap-1.5">
-              <code className="flex-1 px-2 py-1 rounded-md bg-riftapp-bg border border-riftapp-border text-[12px] font-mono text-riftapp-accent select-all truncate">{inviteCode}</code>
-              <button onClick={handleCopyInvite} className="btn-primary py-1 px-2 text-[12px] flex-shrink-0">
-                {inviteCopied ? '✓' : 'Copy'}
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={handleGenerateInvite}
-              disabled={inviteGenerating}
-              className="btn-primary w-full py-1.5 text-[13px]"
-            >
-              {inviteGenerating ? 'Generating…' : 'Generate Invite Link'}
-            </button>
-          )}
-        </div>
       )}
 
       {headerMenu && (
