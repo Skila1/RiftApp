@@ -59,7 +59,9 @@ jobs:
       - run: npm install
 
       - name: Build Windows installer
-        run: npm run dist:win
+        run: npm run compile && npm run icons && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Tag the commit with the new version
       - name: Create git tag
