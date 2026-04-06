@@ -241,6 +241,13 @@ export function useWebSocket() {
             useHubStore.getState().applyHubUpdate(evt.d as Hub);
             break;
           }
+          case 'role_update': {
+            const { hub_id } = evt.d as { hub_id: string };
+            if (hub_id) {
+              useHubStore.getState().loadHubPermissions(hub_id);
+            }
+            break;
+          }
           case 'user_update': {
             const user = evt.d as User;
             const authState = useAuthStore.getState();

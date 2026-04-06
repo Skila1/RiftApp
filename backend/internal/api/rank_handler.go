@@ -7,14 +7,16 @@ import (
 
 	"github.com/riftapp-cloud/riftapp/internal/middleware"
 	"github.com/riftapp-cloud/riftapp/internal/service"
+	"github.com/riftapp-cloud/riftapp/internal/ws"
 )
 
 type RankHandler struct {
 	svc *service.RankService
+	hub *ws.Hub
 }
 
-func NewRankHandler(svc *service.RankService) *RankHandler {
-	return &RankHandler{svc: svc}
+func NewRankHandler(svc *service.RankService, hub *ws.Hub) *RankHandler {
+	return &RankHandler{svc: svc, hub: hub}
 }
 
 func (h *RankHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -45,6 +47,9 @@ func (h *RankHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
+	if h.hub != nil {
+		h.hub.BroadcastToHubMembers(hubID, ws.NewEvent(ws.OpRoleUpdate, map[string]string{"hub_id": hubID}))
+	}
 	writeData(w, http.StatusCreated, rank)
 }
 
@@ -67,6 +72,9 @@ func (h *RankHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
+	if h.hub != nil {
+		h.hub.BroadcastToHubMembers(hubID, ws.NewEvent(ws.OpRoleUpdate, map[string]string{"hub_id": hubID}))
+	}
 	writeData(w, http.StatusOK, rank)
 }
 
@@ -77,6 +85,9 @@ func (h *RankHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.Delete(r.Context(), hubID, userID, rankID); err != nil {
 		writeAppError(w, err)
 		return
+	}
+	if h.hub != nil {
+		h.hub.BroadcastToHubMembers(hubID, ws.NewEvent(ws.OpRoleUpdate, map[string]string{"hub_id": hubID}))
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -91,6 +102,9 @@ func (h *RankHandler) AssignRank(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
+	if h.hub != nil {
+		h.hub.BroadcastToHubMembers(hubID, ws.NewEvent(ws.OpRoleUpdate, map[string]string{"hub_id": hubID}))
+	}
 	writeData(w, http.StatusOK, map[string]string{"status": "assigned"})
 }
 
@@ -102,6 +116,9 @@ func (h *RankHandler) RemoveRank(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.RemoveRank(r.Context(), hubID, userID, targetUserID); err != nil {
 		writeAppError(w, err)
 		return
+	}
+	if h.hub != nil {
+		h.hub.BroadcastToHubMembers(hubID, ws.NewEvent(ws.OpRoleUpdate, map[string]string{"hub_id": hubID}))
 	}
 	writeData(w, http.StatusOK, map[string]string{"status": "removed"})
 }

@@ -809,6 +809,9 @@ function CustomizationTab({ hub, isOwner, kind }: { hub: Hub; isOwner: boolean; 
   const [errorShake, setErrorShake] = useState(false);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const hubPermissions = useHubStore((s) => s.hubPermissions[hub.id]);
+  const canManage = isOwner || hasPermission(hubPermissions, PermManageHub);
+
   const showError = useCallback((msg: string) => {
     setError(msg);
     setErrorShake(true);
@@ -900,11 +903,11 @@ function CustomizationTab({ hub, isOwner, kind }: { hub: Hub; isOwner: boolean; 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    if (!isOwner) return;
+    if (!canManage) return;
     const file = e.dataTransfer.files[0];
     if (!file) return;
     void handleUpload(file);
-  }, [isOwner, handleUpload]);
+  }, [canManage, handleUpload]);
 
   const isImage = kind !== 'sounds';
 
@@ -952,7 +955,7 @@ function CustomizationTab({ hub, isOwner, kind }: { hub: Hub; isOwner: boolean; 
       className="space-y-4 relative"
       onDragOver={(e) => {
         e.preventDefault();
-        if (!isOwner || atLimit) { e.dataTransfer.dropEffect = 'none'; }
+        if (!canManage || atLimit) { e.dataTransfer.dropEffect = 'none'; }
         else { e.dataTransfer.dropEffect = 'copy'; }
         setDragOver(true);
       }}
@@ -960,7 +963,7 @@ function CustomizationTab({ hub, isOwner, kind }: { hub: Hub; isOwner: boolean; 
       onDrop={handleDrop}
     >
       {/* Drag overlay */}
-      {dragOver && isOwner && (
+      {dragOver && canManage && (
         <div className={`absolute inset-0 z-20 border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-2 pointer-events-none animate-fade-in transition-colors ${
           atLimit ? 'bg-[#f23f42]/10 border-[#f23f42]' : 'bg-[#5865f2]/10 border-[#5865f2]'
         }`}>
@@ -986,7 +989,7 @@ function CustomizationTab({ hub, isOwner, kind }: { hub: Hub; isOwner: boolean; 
         <p className="text-[13px] text-[#949ba4]">
           {items.length} / {cfg.maxItems} {cfg.label.toLowerCase()}
         </p>
-        {isOwner && (
+        {canManage && (
           <>
             <button
               disabled={uploading || atLimit}
@@ -1036,7 +1039,7 @@ function CustomizationTab({ hub, isOwner, kind }: { hub: Hub; isOwner: boolean; 
           </div>
           <h3 className="text-[16px] font-semibold text-white mb-1">No {cfg.label.toLowerCase()} yet</h3>
           <p className="text-[13px] text-[#949ba4] max-w-xs leading-relaxed">
-            {isOwner
+            {canManage
               ? `Upload ${cfg.label.toLowerCase()} by clicking the button above or dragging files here.`
               : `This server doesn't have any custom ${cfg.label.toLowerCase()} yet.`}
           </p>
@@ -1063,7 +1066,7 @@ function CustomizationTab({ hub, isOwner, kind }: { hub: Hub; isOwner: boolean; 
               <p className="text-[12px] text-[#dbdee1] truncate w-full text-center font-medium">
                 {item.name}
               </p>
-              {isOwner && (
+              {canManage && (
                 <button
                   onClick={() => setConfirmDeleteId(item.id)}
                   className="absolute top-1.5 right-1.5 w-6 h-6 rounded-md flex items-center justify-center
@@ -1148,7 +1151,7 @@ function CustomizationTab({ hub, isOwner, kind }: { hub: Hub; isOwner: boolean; 
                       </svg>
                     )}
                   </button>
-                  {isOwner && (
+                  {canManage && (
                     <button
                       onClick={() => setConfirmDeleteId(item.id)}
                       className="w-8 h-8 rounded-md flex items-center justify-center
@@ -1212,6 +1215,10 @@ function RolesTab({ hub }: { hub: Hub }) {
   const [newPerms, setNewPerms] = useState<number>(PermViewStreams | PermSendMessages | PermConnectVoice | PermSpeakVoice | PermUseSoundboard);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmDeleteRoleId, setConfirmDeleteRoleId] = useState<string | null>(null);
+  const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editColor, setEditColor] = useState('#99aab5');
+  const [editPerms, setEditPerms] = useState<number>(0);
   const hubPermissions = useHubStore((s) => s.hubPermissions[hub.id]);
   const canManage = hasPermission(hubPermissions, PermManageRanks);
 
@@ -1258,13 +1265,44 @@ function RolesTab({ hub }: { hub: Hub }) {
     setError(null);
     try {
       await api.deleteRole(hub.id, roleID);
+      if (editingRoleId === roleID) setEditingRoleId(null);
       await load();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to delete role');
     } finally {
       setBusyId(null);
     }
-  }, [canManage, hub.id, load]);
+  }, [canManage, hub.id, load, editingRoleId]);
+
+  const startEditing = useCallback((role: HubRole) => {
+    if (editingRoleId === role.id) {
+      setEditingRoleId(null);
+      return;
+    }
+    setEditingRoleId(role.id);
+    setEditName(role.name);
+    setEditColor(role.color || '#99aab5');
+    setEditPerms(role.permissions);
+  }, [editingRoleId]);
+
+  const saveRole = useCallback(async () => {
+    if (!editingRoleId || !canManage) return;
+    const name = editName.trim();
+    if (!name) return;
+    setBusyId(editingRoleId);
+    setError(null);
+    try {
+      await api.updateRole(hub.id, editingRoleId, { name, color: editColor, permissions: editPerms });
+      setEditingRoleId(null);
+      await load();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to update role');
+    } finally {
+      setBusyId(null);
+    }
+  }, [canManage, hub.id, editingRoleId, editName, editColor, editPerms, load]);
+
+  const isAdminPerm = (perms: number) => (perms & PermAdministrator) !== 0;
 
   if (!canManage) {
     return (
@@ -1304,16 +1342,20 @@ function RolesTab({ hub }: { hub: Hub }) {
         </div>
         <div className="grid grid-cols-2 gap-2">
           {ROLE_PERMISSION_OPTIONS.map((opt) => (
-            <label key={opt.key} className="flex items-center gap-2 text-[12px] text-[#dbdee1]">
+            <label key={opt.key} className={`flex items-center gap-2 text-[12px] ${isAdminPerm(newPerms) && opt.key !== PermAdministrator ? 'text-[#949ba4]' : 'text-[#dbdee1]'}`}>
               <input
                 type="checkbox"
-                checked={(newPerms & opt.key) !== 0}
+                checked={isAdminPerm(newPerms) || (newPerms & opt.key) !== 0}
                 onChange={() => setNewPerms((p) => toggleBit(p, opt.key))}
+                disabled={isAdminPerm(newPerms) && opt.key !== PermAdministrator}
               />
               {opt.label}
             </label>
           ))}
         </div>
+        {isAdminPerm(newPerms) && (
+          <p className="text-[11px] text-[#faa61a] mt-1">Administrator grants full access to all permissions.</p>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -1324,18 +1366,80 @@ function RolesTab({ hub }: { hub: Hub }) {
           <p className="text-[13px] text-[#949ba4]">No custom roles yet.</p>
         ) : (
           roles.map((role) => (
-            <div key={role.id} className="flex items-center justify-between bg-[#2b2d31] border border-[#1e1f22] rounded-lg px-3 py-2.5">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: role.color || '#99aab5' }} />
-                <span className="text-[13px] text-white truncate">{role.name}</span>
+            <div key={role.id} className="bg-[#2b2d31] border border-[#1e1f22] rounded-lg overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2.5">
+                <button
+                  onClick={() => startEditing(role)}
+                  className="flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity"
+                >
+                  <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: role.color || '#99aab5' }} />
+                  <span className="text-[13px] text-white truncate">{role.name}</span>
+                  <svg
+                    width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                    className={`text-[#949ba4] transition-transform duration-200 flex-shrink-0 ${editingRoleId === role.id ? 'rotate-180' : ''}`}
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setConfirmDeleteRoleId(role.id)}
+                  disabled={busyId === role.id}
+                  className="text-[12px] px-2.5 py-1 rounded bg-[#f23f42]/10 text-[#f23f42] hover:bg-[#f23f42]/20 disabled:opacity-40"
+                >
+                  {busyId === role.id ? 'Deleting…' : 'Delete'}
+                </button>
               </div>
-              <button
-                onClick={() => setConfirmDeleteRoleId(role.id)}
-                disabled={busyId === role.id}
-                className="text-[12px] px-2.5 py-1 rounded bg-[#f23f42]/10 text-[#f23f42] hover:bg-[#f23f42]/20 disabled:opacity-40"
-              >
-                {busyId === role.id ? 'Deleting…' : 'Delete'}
-              </button>
+
+              {editingRoleId === role.id && (
+                <div className="border-t border-[#1e1f22] px-3 py-3 space-y-3">
+                  <div className="flex gap-3 items-center">
+                    <input
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="Role name"
+                      maxLength={32}
+                      className="flex-1 px-3 py-2 rounded-[4px] bg-[#1e1f22] text-[13px] text-white focus:outline-none focus:ring-1 focus:ring-[#5865f2]"
+                    />
+                    <input
+                      type="color"
+                      value={editColor}
+                      onChange={(e) => setEditColor(e.target.value)}
+                      className="w-10 h-10 rounded bg-transparent"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {ROLE_PERMISSION_OPTIONS.map((opt) => (
+                      <label key={opt.key} className={`flex items-center gap-2 text-[12px] ${isAdminPerm(editPerms) && opt.key !== PermAdministrator ? 'text-[#949ba4]' : 'text-[#dbdee1]'}`}>
+                        <input
+                          type="checkbox"
+                          checked={isAdminPerm(editPerms) || (editPerms & opt.key) !== 0}
+                          onChange={() => setEditPerms((p) => toggleBit(p, opt.key))}
+                          disabled={isAdminPerm(editPerms) && opt.key !== PermAdministrator}
+                        />
+                        {opt.label}
+                      </label>
+                    ))}
+                  </div>
+                  {isAdminPerm(editPerms) && (
+                    <p className="text-[11px] text-[#faa61a]">Administrator grants full access to all permissions.</p>
+                  )}
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      onClick={() => setEditingRoleId(null)}
+                      className="px-3 py-1.5 rounded-[4px] text-[13px] text-[#b5bac1] hover:text-white transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => void saveRole()}
+                      disabled={!editName.trim() || busyId === editingRoleId}
+                      className="px-4 py-1.5 rounded-[4px] bg-[#248046] text-white text-[13px] font-medium hover:bg-[#1a6334] disabled:opacity-40"
+                    >
+                      {busyId === editingRoleId ? 'Saving…' : 'Save Changes'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))
         )}
