@@ -84,16 +84,17 @@ func (h *StreamHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		Bitrate   *int    `json:"bitrate"`
 		UserLimit *int    `json:"user_limit"`
 		Region    *string `json:"region"`
+		IsPrivate *bool   `json:"is_private"`
 	}
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if body.Name == nil && body.Bitrate == nil && body.UserLimit == nil && body.Region == nil {
+	if body.Name == nil && body.Bitrate == nil && body.UserLimit == nil && body.Region == nil && body.IsPrivate == nil {
 		writeError(w, http.StatusBadRequest, "no fields to update")
 		return
 	}
-	stream, err := h.svc.Patch(r.Context(), streamID, userID, body.Name, body.Bitrate, body.UserLimit, body.Region)
+	stream, err := h.svc.Patch(r.Context(), streamID, userID, body.Name, body.Bitrate, body.UserLimit, body.Region, body.IsPrivate)
 	if err != nil {
 		writeAppError(w, err)
 		return

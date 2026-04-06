@@ -155,7 +155,7 @@ class ApiClient {
 
   getStreams(hubId: string) { return this.request<Stream[]>(`/hubs/${hubId}/streams`); }
   createStream(hubId: string, name: string, type: number = 0, categoryId?: string) { return this.request<Stream>(`/hubs/${hubId}/streams`, { method: 'POST', body: JSON.stringify({ name, type, category_id: categoryId }) }); }
-  patchStream(streamId: string, body: { name?: string; bitrate?: number; user_limit?: number; region?: string }) {
+  patchStream(streamId: string, body: { name?: string; bitrate?: number; user_limit?: number; region?: string; is_private?: boolean }) {
     return this.request<Stream>(`/streams/${streamId}`, { method: 'PATCH', body: JSON.stringify(body) });
   }
   deleteStream(streamId: string) {

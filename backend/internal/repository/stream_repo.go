@@ -78,6 +78,11 @@ func (r *StreamRepo) UpdateSettings(ctx context.Context, streamID string, bitrat
 	return err
 }
 
+func (r *StreamRepo) UpdateIsPrivate(ctx context.Context, streamID string, isPrivate bool) error {
+	_, err := r.db.Exec(ctx, `UPDATE streams SET is_private = $1 WHERE id = $2`, isPrivate, streamID)
+	return err
+}
+
 func (r *StreamRepo) GetHubID(ctx context.Context, streamID string) (string, error) {
 	var hubID string
 	err := r.db.QueryRow(ctx, `SELECT hub_id FROM streams WHERE id = $1`, streamID).Scan(&hubID)

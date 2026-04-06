@@ -103,8 +103,8 @@ func normalizeStreamName(raw string) string {
 	return b.String()
 }
 
-// Patch updates editable stream fields (name, bitrate, user_limit, region). Requires manage channels permission.
-func (s *StreamService) Patch(ctx context.Context, streamID, userID string, name *string, bitrate *int, userLimit *int, region *string) (*models.Stream, error) {
+// Patch updates editable stream fields (name, bitrate, user_limit, region, is_private). Requires manage channels permission.
+func (s *StreamService) Patch(ctx context.Context, streamID, userID string, name *string, bitrate *int, userLimit *int, region *string, isPrivate *bool) (*models.Stream, error) {
 	hubID, err := s.streamRepo.GetHubID(ctx, streamID)
 	if err != nil {
 		return nil, apperror.NotFound("stream not found")
@@ -147,6 +147,11 @@ func (s *StreamService) Patch(ctx context.Context, streamID, userID string, name
 		}
 		if err := s.streamRepo.UpdateSettings(ctx, streamID, b, ul, rg); err != nil {
 			return nil, apperror.Internal("failed to update stream settings", err)
+		}
+	}
+	if isPrivate != nil {
+		if err := s.streamRepo.UpdateIsPrivate(ctx, streamID, *isPrivate); err != nil {
+			return nil, apperror.Internal("failed to update stream privacy", err)
 		}
 	}
 	return s.streamRepo.GetByID(ctx, streamID)

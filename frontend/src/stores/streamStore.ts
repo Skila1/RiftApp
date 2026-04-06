@@ -36,7 +36,7 @@ interface StreamState {
   reloadLayout: (hubId: string) => Promise<void>;
   setActiveStream: (streamId: string) => Promise<void>;
   createStream: (hubId: string, name: string, type?: number, categoryId?: string) => Promise<Stream>;
-  patchStream: (streamId: string, name: string, voiceSettings?: { bitrate?: number; user_limit?: number; region?: string }) => Promise<Stream>;
+  patchStream: (streamId: string, name: string, voiceSettings?: { bitrate?: number; user_limit?: number; region?: string }, isPrivate?: boolean) => Promise<Stream>;
   deleteStream: (streamId: string) => Promise<void>;
   /** Mark a text channel read using latest message on server (works when channel not open). */
   markStreamRead: (streamId: string) => Promise<void>;
@@ -202,8 +202,8 @@ export const useStreamStore = create<StreamState>((set, get) => ({
     return stream;
   },
 
-  patchStream: async (streamId, name, voiceSettings) => {
-    const updated = await api.patchStream(streamId, { name, ...voiceSettings });
+  patchStream: async (streamId, name, voiceSettings, isPrivate) => {
+    const updated = await api.patchStream(streamId, { name, ...voiceSettings, is_private: isPrivate });
     set((s) => {
       const streams = s.streams.map((st) => (st.id === streamId ? updated : st));
       const hubLayoutCache = { ...s.hubLayoutCache };
