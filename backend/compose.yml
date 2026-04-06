@@ -52,8 +52,9 @@ services:
       - "3478:3478/udp"
       - "5349:5349"
       - "55000-55100:55000-55100/udp"
-    volumes:
-      - ./livekit.yaml:/etc/livekit.yaml:ro
+    configs:
+      - source: livekit_config
+        target: /etc/livekit.yaml
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:7880"]
       interval: 5s
@@ -96,3 +97,36 @@ services:
 volumes:
   pgdata:
   minio_data:
+
+configs:
+  livekit_config:
+    content: |
+      port: 7880
+
+      rtc:
+        port_range_start: 50000
+        port_range_end: 60000
+        tcp_port: 7881
+        use_external_ip: true
+        stun_servers:
+          - stun.l.google.com:19302
+        pli_throttle:
+          low_quality: 500ms
+          mid_quality: 500ms
+          high_quality: 500ms
+
+      room:
+        empty_timeout: 300
+        max_participants: 100
+
+      audio:
+        active_level: 30
+        min_percentile: 1
+        update_interval: 400
+        smooth_intervals: 2
+
+      turn:
+        enabled: true
+        domain: livekit.riftapp.io
+        tls_port: 5349
+        udp_port: 3478
