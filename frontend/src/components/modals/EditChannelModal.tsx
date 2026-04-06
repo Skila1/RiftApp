@@ -182,6 +182,23 @@ function OverviewTab({
 
 /* ────────── Permissions tab ────────── */
 
+type PermState = 'neutral' | 'deny' | 'allow';
+
+const GENERAL_PERMS = [
+  { key: 'view_channel', name: 'View Channel', descText: (v: boolean) => `Allows members to ${v ? 'see' : 'view'} this channel.` },
+  { key: 'manage_channel', name: 'Manage Channel', descText: () => 'Allows members to change this channel\'s name, description and voice settings. They can also delete the channel.' },
+] as const;
+
+const VOICE_PERMS = [
+  { key: 'connect', name: 'Connect', descText: () => 'Allows members to join this voice channel and hear others.' },
+  { key: 'speak', name: 'Speak', descText: () => 'Allows members to talk in this voice channel.' },
+] as const;
+
+const TEXT_PERMS = [
+  { key: 'send_messages', name: 'Send Messages', descText: () => 'Allows members to send messages in this channel.' },
+  { key: 'manage_messages', name: 'Manage Messages', descText: () => 'Allows members to delete or pin messages by other members.' },
+] as const;
+
 function PermissionsTab({
   stream,
   isPrivate,
@@ -196,6 +213,23 @@ function PermissionsTab({
   rolesLoading: boolean;
 }) {
   const isVoice = stream.type === 1;
+  const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  // Per-role permission overrides: roleKey → permKey → state
+  const [overrides, setOverrides] = useState<Record<string, Record<string, PermState>>>({});
+
+  const getPermState = (roleKey: string, permKey: string): PermState =>
+    overrides[roleKey]?.[permKey] ?? 'neutral';
+
+  const setPermState = (roleKey: string, permKey: string, value: PermState) => {
+    setOverrides((prev) => ({
+      ...prev,
+      [roleKey]: { ...prev[roleKey], [permKey]: value },
+    }));
+  };
+
+  const selectedRoleInfo = selectedRole === 'everyone'
+    ? { name: '@everyone', color: '#5865f2' }
+    : roles.find((r) => r.id === selectedRole);
 
   return (
     <div className="space-y-6">
@@ -239,15 +273,32 @@ function PermissionsTab({
         ) : (
           <div className="space-y-1">
             {/* @everyone pseudo-role */}
-            <div className="flex items-center gap-3 px-3 py-2 rounded-md bg-[#2b2d31] border border-[#3f4147]">
+            <button
+              type="button"
+              onClick={() => setSelectedRole(selectedRole === 'everyone' ? null : 'everyone')}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors cursor-pointer ${
+                selectedRole === 'everyone'
+                  ? 'bg-[#404249] border border-[#5865f2]/50'
+                  : 'bg-[#2b2d31] border border-[#3f4147] hover:bg-[#35373c]'
+              }`}
+            >
               <div className="w-7 h-7 rounded-full bg-[#5865f2] flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0">@</div>
               <span className="text-[14px] text-[#dbdee1] font-medium">@everyone</span>
               <span className="ml-auto text-[12px] text-[#949ba4]">Default role</span>
-            </div>
+            </button>
 
             {/* Custom roles */}
             {roles.map((role) => (
-              <div key={role.id} className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-[#35373c] transition-colors">
+              <button
+                key={role.id}
+                type="button"
+                onClick={() => setSelectedRole(selectedRole === role.id ? null : role.id)}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors cursor-pointer ${
+                  selectedRole === role.id
+                    ? 'bg-[#404249] border border-[#5865f2]/50'
+                    : 'border border-transparent hover:bg-[#35373c]'
+                }`}
+              >
                 <div
                   className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0"
                   style={{ backgroundColor: role.color || '#5865f2' }}
@@ -255,7 +306,7 @@ function PermissionsTab({
                   {role.name.slice(0, 1).toUpperCase()}
                 </div>
                 <span className="text-[14px] text-[#dbdee1]">{role.name}</span>
-              </div>
+              </button>
             ))}
 
             {roles.length === 0 && (
@@ -267,57 +318,63 @@ function PermissionsTab({
         )}
       </div>
 
-      {/* Permission categories preview */}
+      {/* Permission overrides for selected role */}
       <div className="h-px bg-[#3f4147]" />
 
-      <div>
-        <h4 className="text-sm font-bold text-[#f2f3f5] mb-4">General Channel Permissions</h4>
-        <div className="space-y-4">
-          <PermissionRow
-            name="View Channel"
-            description={`Allows members to ${isVoice ? 'see' : 'view'} this channel by default.${!isVoice ? " Disabling this and the 'Connect' permission for @everyone will make this channel private." : ''}`}
-          />
-          <PermissionRow
-            name="Manage Channel"
-            description="Allows members to change this channel's name, description and voice settings. They can also delete the channel."
-          />
-          {isVoice && (
-            <>
-              <div className="h-px bg-[#3f4147]" />
-              <h4 className="text-sm font-bold text-[#f2f3f5]">Voice Channel Permissions</h4>
+      {selectedRole && selectedRoleInfo ? (
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <div
+              className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
+              style={{ backgroundColor: ('color' in selectedRoleInfo ? selectedRoleInfo.color : null) || '#5865f2' }}
+            >
+              {selectedRoleInfo.name === '@everyone' ? '@' : selectedRoleInfo.name.slice(0, 1).toUpperCase()}
+            </div>
+            <h4 className="text-sm font-bold text-[#f2f3f5]">{selectedRoleInfo.name} — Channel Permissions</h4>
+          </div>
+
+          <div className="space-y-4">
+            <h4 className="text-xs font-bold uppercase tracking-wide text-[#b5bac1]">General Channel Permissions</h4>
+            {GENERAL_PERMS.map((p) => (
               <PermissionRow
-                name="Connect"
-                description="Allows members to join this voice channel and hear others."
+                key={p.key}
+                name={p.name}
+                description={p.descText(isVoice)}
+                value={getPermState(selectedRole, p.key)}
+                onChange={(v) => setPermState(selectedRole, p.key, v)}
               />
+            ))}
+
+            <div className="h-px bg-[#3f4147]" />
+
+            <h4 className="text-xs font-bold uppercase tracking-wide text-[#b5bac1]">
+              {isVoice ? 'Voice Channel Permissions' : 'Text Channel Permissions'}
+            </h4>
+            {(isVoice ? VOICE_PERMS : TEXT_PERMS).map((p) => (
               <PermissionRow
-                name="Speak"
-                description="Allows members to talk in this voice channel."
+                key={p.key}
+                name={p.name}
+                description={p.descText()}
+                value={getPermState(selectedRole, p.key)}
+                onChange={(v) => setPermState(selectedRole, p.key, v)}
               />
-            </>
-          )}
-          {!isVoice && (
-            <>
-              <div className="h-px bg-[#3f4147]" />
-              <h4 className="text-sm font-bold text-[#f2f3f5]">Text Channel Permissions</h4>
-              <PermissionRow
-                name="Send Messages"
-                description="Allows members to send messages in this channel."
-              />
-              <PermissionRow
-                name="Manage Messages"
-                description="Allows members to delete or pin messages by other members."
-              />
-            </>
-          )}
+            ))}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center py-8 text-center">
+          <div className="w-12 h-12 rounded-full bg-[#2b2d31] flex items-center justify-center mb-3">
+            <IconShield />
+          </div>
+          <p className="text-[14px] text-[#dbdee1] font-medium">Select a role to configure permissions</p>
+          <p className="text-[13px] text-[#949ba4] mt-1">Click on a role above to view and edit its channel permissions.</p>
+        </div>
+      )}
     </div>
   );
 }
 
-function PermissionRow({ name, description }: { name: string; description: string }) {
-  const [state, setState] = useState<'neutral' | 'deny' | 'allow'>('neutral');
-
+function PermissionRow({ name, description, value, onChange }: { name: string; description: string; value: PermState; onChange: (v: PermState) => void }) {
   return (
     <div className="flex items-start justify-between gap-4">
       <div className="min-w-0">
@@ -327,9 +384,9 @@ function PermissionRow({ name, description }: { name: string; description: strin
       <div className="flex items-center gap-1 flex-shrink-0">
         <button
           type="button"
-          onClick={() => setState(state === 'deny' ? 'neutral' : 'deny')}
+          onClick={() => onChange(value === 'deny' ? 'neutral' : 'deny')}
           className={`w-7 h-7 rounded flex items-center justify-center transition-colors ${
-            state === 'deny' ? 'bg-[#da373c] text-white' : 'text-[#949ba4] hover:text-[#dbdee1] hover:bg-[#35373c]'
+            value === 'deny' ? 'bg-[#da373c] text-white' : 'text-[#949ba4] hover:text-[#dbdee1] hover:bg-[#35373c]'
           }`}
           title="Deny"
         >
@@ -339,9 +396,9 @@ function PermissionRow({ name, description }: { name: string; description: strin
         </button>
         <button
           type="button"
-          onClick={() => setState('neutral')}
+          onClick={() => onChange('neutral')}
           className={`w-7 h-7 rounded flex items-center justify-center transition-colors ${
-            state === 'neutral' ? 'bg-[#4e5058] text-white' : 'text-[#949ba4] hover:text-[#dbdee1] hover:bg-[#35373c]'
+            value === 'neutral' ? 'bg-[#4e5058] text-white' : 'text-[#949ba4] hover:text-[#dbdee1] hover:bg-[#35373c]'
           }`}
           title="Neutral"
         >
@@ -351,9 +408,9 @@ function PermissionRow({ name, description }: { name: string; description: strin
         </button>
         <button
           type="button"
-          onClick={() => setState(state === 'allow' ? 'neutral' : 'allow')}
+          onClick={() => onChange(value === 'allow' ? 'neutral' : 'allow')}
           className={`w-7 h-7 rounded flex items-center justify-center transition-colors ${
-            state === 'allow' ? 'bg-[#248046] text-white' : 'text-[#949ba4] hover:text-[#dbdee1] hover:bg-[#35373c]'
+            value === 'allow' ? 'bg-[#248046] text-white' : 'text-[#949ba4] hover:text-[#dbdee1] hover:bg-[#35373c]'
           }`}
           title="Allow"
         >

@@ -700,17 +700,17 @@ async function disableMicrophoneAfterFailedAttempt(room: Room) {
 async function enableLocalMicrophone(room: Room) {
   const currentState = useVoiceStore.getState();
   const identity = room.localParticipant.identity;
-  const fallbacks: Array<{ label: string; overrides?: MicCaptureOptionsOverrides }> = [
-    { label: 'processed-selected-device' },
+  const fallbacks: Array<{ label: string; processor?: MicNoiseGateProcessor; overrides?: MicCaptureOptionsOverrides }> = [
+    { label: 'processed-selected-device', processor: createMicGate(identity) },
     { label: 'raw-selected-device', overrides: { includeVoiceIsolation: false } },
     { label: 'raw-default-device', overrides: { includeDeviceId: false, includeVoiceIsolation: false } },
   ];
 
   let lastError: unknown = null;
 
-  for (const { label, overrides } of fallbacks) {
+  for (const { label, processor, overrides } of fallbacks) {
     try {
-      const options = micAudioCaptureOptions(currentState, createMicGate(identity), overrides);
+      const options = micAudioCaptureOptions(currentState, processor, overrides);
       await room.localParticipant.setMicrophoneEnabled(true, options);
       setScreenShareNotice(null);
       return true;
@@ -918,7 +918,7 @@ function buildParticipants(room: Room): VoiceParticipant[] {
   const speakingSignals = useVoiceStore.getState().speakingSignals;
   const toVP = (p: Participant): VoiceParticipant => ({
     identity: p.identity,
-    isSpeaking: (hasOwnKey(speakingSignals, p.identity) ? speakingSignals[p.identity] : false) || isTransientSpeaking(p.identity),
+    isSpeaking: (hasOwnKey(speakingSignals, p.identity) ? speakingSignals[p.identity] : false) || isTransientSpeaking(p.identity) || p.isSpeaking,
     isMuted: !p.isMicrophoneEnabled,
     isCameraOn: p.isCameraEnabled,
     isScreenSharing: p.isScreenShareEnabled,
