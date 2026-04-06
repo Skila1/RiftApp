@@ -9,6 +9,7 @@ import { api } from '../../api/client';
 import type { Hub, HubNotificationSettings, Notification } from '../../types';
 import AddServerModal from '../modals/AddServerModal';
 import InviteToServerModal from '../modals/InviteToServerModal';
+import ModalOverlay from '../shared/ModalOverlay';
 import { useAuthStore } from '../../stores/auth';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 
@@ -79,6 +80,7 @@ export default function HubSidebar() {
   const [dmHovered, setDmHovered] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; hub: Hub } | null>(null);
   const [inviteHub, setInviteHub] = useState<Hub | null>(null);
+  const [leaveConfirmHub, setLeaveConfirmHub] = useState<Hub | null>(null);
   const [hubNotifSettings, setHubNotifSettings] = useState<HubNotificationSettings | null>(null);
   const [notifSubmenuOpen, setNotifSubmenuOpen] = useState(false);
   const mergeReadStatesForHub = useStreamStore((s) => s.mergeReadStatesForHub);
@@ -551,13 +553,10 @@ export default function HubSidebar() {
                   <div className="mx-2 my-1 h-px bg-white/[0.06]" />
                   <button
                     type="button"
-                    onClick={async () => {
+                    onClick={() => {
                       const hub = contextMenu.hub;
                       setContextMenu(null);
-                      if (!window.confirm(`Are you sure you want to leave "${hub.name}"?`)) return;
-                      try {
-                        await leaveHub(hub.id);
-                      } catch { /* ignore */ }
+                      setLeaveConfirmHub(hub);
                     }}
                     className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-red-500/20 text-left w-[calc(100%-8px)] text-red-400 hover:text-red-300"
                   >
@@ -580,6 +579,42 @@ export default function HubSidebar() {
 
       {/* Invite to Server modal */}
       {inviteHub && <InviteToServerModal hub={inviteHub} onClose={() => setInviteHub(null)} />}
+
+      {/* Leave Server confirmation modal */}
+      {leaveConfirmHub && (
+        <ModalOverlay isOpen onClose={() => setLeaveConfirmHub(null)} zIndex={250}>
+          <div className="w-full max-w-[400px] rounded-xl bg-[#2b2d31] shadow-modal">
+            <div className="px-5 pt-5 pb-2">
+              <h3 className="text-lg font-semibold text-white">Leave Server</h3>
+              <p className="mt-2 text-sm text-riftapp-text-muted">
+                Are you sure you want to leave <span className="font-semibold text-white">{leaveConfirmHub.name}</span>?
+              </p>
+            </div>
+            <div className="flex justify-end gap-3 px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setLeaveConfirmHub(null)}
+                className="rounded-md px-4 py-2 text-sm font-medium text-riftapp-text-muted transition-colors hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const hubId = leaveConfirmHub.id;
+                  setLeaveConfirmHub(null);
+                  try {
+                    await leaveHub(hubId);
+                  } catch { /* ignore */ }
+                }}
+                className="rounded-md bg-riftapp-danger px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-riftapp-danger/90 active:scale-[0.98]"
+              >
+                Leave Server
+              </button>
+            </div>
+          </div>
+        </ModalOverlay>
+      )}
     </div>
   );
 }
