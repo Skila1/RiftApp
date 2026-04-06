@@ -30,7 +30,7 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-riftapp-bg">
+    <div className="h-full flex items-center justify-center bg-riftapp-bg">
       <div className="w-full max-w-sm animate-fade-in">
         {/* Brand */}
         <div className="text-center mb-8">

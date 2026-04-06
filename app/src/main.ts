@@ -125,7 +125,6 @@ function createWindow(show: boolean): void {
     minWidth: 940,
     minHeight: 560,
     frame: false,
-    titleBarStyle: "hidden",
     show,
     center: true,
     title: "Rift",

@@ -54,7 +54,7 @@ export default function InviteJoinPage() {
 
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-riftapp-bg">
+      <div className="h-full flex items-center justify-center bg-riftapp-bg">
         <div className="text-center animate-fade-in">
           <h1 className="text-3xl font-bold text-riftapp-accent mb-4 font-display tracking-tight">riftapp</h1>
           <div className="w-8 h-8 border-2 border-riftapp-accent border-t-transparent rounded-full animate-spin mx-auto" />
@@ -66,7 +66,7 @@ export default function InviteJoinPage() {
 
   if (error || !info) {
     return (
-      <div className="h-screen flex items-center justify-center bg-riftapp-bg">
+      <div className="h-full flex items-center justify-center bg-riftapp-bg">
         <div className="text-center max-w-sm animate-fade-in">
           <div className="w-16 h-16 rounded-2xl bg-riftapp-surface flex items-center justify-center mx-auto mb-4">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-riftapp-danger">
@@ -84,7 +84,7 @@ export default function InviteJoinPage() {
   }
 
   return (
-    <div className="h-screen flex items-center justify-center bg-riftapp-bg">
+    <div className="h-full flex items-center justify-center bg-riftapp-bg">
       <div className="text-center max-w-sm animate-scale-in">
         {/* Hub icon */}
         <div className="w-20 h-20 rounded-3xl bg-riftapp-surface flex items-center justify-center mx-auto mb-4 overflow-hidden shadow-elevation-low">

@@ -17,6 +17,7 @@
   "build": {
     "appId": "io.riftapp.desktop",
     "productName": "Rift",
+    "executableName": "Rift",
     "copyright": "Copyright © 2026",
     "directories": {
       "output": "dist-electron",
@@ -51,6 +52,7 @@
       "include": "installer.nsh",
       "warningsAsErrors": false
     },
+    "afterPack": "./scripts/afterPack.cjs",
     "publish": null
   },
   "dependencies": {
@@ -64,6 +66,7 @@
     "electron-builder": "^25.1.8",
     "png-to-ico": "^3.0.1",
     "pngjs": "^7.0.0",
+    "rcedit": "^5.0.2",
     "typescript": "^5.7.2",
     "wait-on": "^8.0.1"
   },
