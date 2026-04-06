@@ -4,7 +4,6 @@ const desktop = {
   minimize: () => {
     ipcRenderer.send("window:minimize");
   },
-  /** Toggles maximize / restore (same as native square control). */
   maximize: () => {
     ipcRenderer.send("window:maximize-toggle");
   },
@@ -16,6 +15,14 @@ const desktop = {
     const handler = (_e: Electron.IpcRendererEvent, v: boolean) => cb(v);
     ipcRenderer.on("window-maximized", handler);
     return () => ipcRenderer.removeListener("window-maximized", handler);
+  },
+  onUpdateReady: (cb: () => void) => {
+    const handler = () => cb();
+    ipcRenderer.on("update-ready", handler);
+    return () => ipcRenderer.removeListener("update-ready", handler);
+  },
+  restartToUpdate: () => {
+    ipcRenderer.send("app:restart-to-update");
   },
 };
 

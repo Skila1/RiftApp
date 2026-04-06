@@ -224,14 +224,18 @@ function registerIpc(): void {
   ipcMain.handle("window:is-maximized", (e) => {
     return windowFromEvent(e.sender)?.isMaximized() ?? false;
   });
+
+  ipcMain.on("app:restart-to-update", () => {
+    allowMainWindowClose = true;
+    autoUpdater.quitAndInstall(false, true);
+  });
 }
 
-// ── Auto-updater (drives splash status) ────────────────────
+// ── Auto-updater ───────────────────────────────────────────
+// Splash: quick check only (no download).
+// After main window: download in background, notify frontend when ready.
 
-function runAutoUpdater(): Promise<void> {
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
-
+function configureUpdaterFeed(): void {
   const customUrl = process.env.RIFT_UPDATE_URL?.trim();
   if (customUrl) {
     try {
@@ -240,20 +244,20 @@ function runAutoUpdater(): Promise<void> {
       /* ignore */
     }
   }
+}
+
+/** Splash phase: just check if an update exists (no download yet). */
+function splashUpdateCheck(): Promise<void> {
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+  configureUpdaterFeed();
 
   return new Promise<void>((resolve) => {
     autoUpdater.on("checking-for-update", () =>
       updateSplash("Checking for updates\u2026")
     );
-    autoUpdater.on("update-available", () =>
-      updateSplash("Downloading update 1 of 1\u2026", 10)
-    );
-    autoUpdater.on("download-progress", (info) => {
-      const p = Math.round(info.percent);
-      updateSplash(`Downloading update\u2026 ${p}%`, p);
-    });
-    autoUpdater.on("update-downloaded", () => {
-      updateSplash("Update downloaded.", 100);
+    autoUpdater.on("update-available", () => {
+      updateSplash("Starting Rift\u2026", 100);
       resolve();
     });
     autoUpdater.on("update-not-available", () => {
@@ -265,8 +269,23 @@ function runAutoUpdater(): Promise<void> {
       resolve();
     });
 
-    autoUpdater.checkForUpdatesAndNotify().catch(() => resolve());
+    autoUpdater.checkForUpdates().catch(() => resolve());
   });
+}
+
+/** Post-splash: download in background, notify frontend when ready. */
+function backgroundUpdateDownload(): void {
+  autoUpdater.removeAllListeners();
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on("update-downloaded", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("update-ready");
+    }
+  });
+
+  autoUpdater.checkForUpdatesAndNotify().catch(() => {});
 }
 
 // ── Bootstrap ──────────────────────────────────────────────
@@ -316,12 +335,14 @@ if (!gotLock) {
       createTray();
 
       const minDisplayTime = new Promise<void>((r) => setTimeout(r, 3000));
-      const updateCheck = runAutoUpdater();
+      const updateCheck = splashUpdateCheck();
       await Promise.all([minDisplayTime, updateCheck]);
 
       closeSplash();
       mainWindow?.show();
       mainWindow?.focus();
+
+      backgroundUpdateDownload();
     }
 
     app.on("activate", () => {
