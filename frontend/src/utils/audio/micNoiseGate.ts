@@ -45,7 +45,7 @@ export class MicNoiseGateProcessor {
 
   private samples: Uint8Array<ArrayBuffer> | null = null;
 
-  private frame: number | null = null;
+  private frame: ReturnType<typeof setInterval> | null = null;
 
   private speaking = false;
 
@@ -95,7 +95,7 @@ export class MicNoiseGateProcessor {
       /* ignore audio context resume failures */
     }
 
-    this.tick();
+    this.startTicking();
   }
 
   async restart(options: MicNoiseGateInitOptions) {
@@ -107,6 +107,10 @@ export class MicNoiseGateProcessor {
     this.setSpeaking(false);
     this.processedTrack?.stop();
     this.processedTrack = undefined;
+  }
+
+  private startTicking() {
+    this.frame = setInterval(() => this.tick(), 16);
   }
 
   private tick() {
@@ -138,8 +142,6 @@ export class MicNoiseGateProcessor {
     if (this.settings.automaticSensitivity && !this.speaking && threshold > 0) {
       this.updateNoiseFloor(level);
     }
-
-    this.frame = window.requestAnimationFrame(() => this.tick());
   }
 
   private getThreshold() {
@@ -186,7 +188,7 @@ export class MicNoiseGateProcessor {
 
   private teardownGraph() {
     if (this.frame != null) {
-      window.cancelAnimationFrame(this.frame);
+      clearInterval(this.frame);
       this.frame = null;
     }
 

@@ -699,34 +699,23 @@ async function disableMicrophoneAfterFailedAttempt(room: Room) {
 async function enableLocalMicrophone(room: Room) {
   const currentState = useVoiceStore.getState();
   const identity = room.localParticipant.identity;
-  const attempts: Array<{ label: string; options: AudioCaptureOptions }> = [
-    {
-      label: 'processed-selected-device',
-      options: micAudioCaptureOptions(currentState, createMicGate(identity)),
-    },
-    {
-      label: 'raw-selected-device',
-      options: micAudioCaptureOptions(currentState, undefined, { includeVoiceIsolation: false }),
-    },
-    {
-      label: 'raw-default-device',
-      options: micAudioCaptureOptions(currentState, undefined, {
-        includeDeviceId: false,
-        includeVoiceIsolation: false,
-      }),
-    },
+  const fallbacks: Array<{ label: string; overrides?: MicCaptureOptionsOverrides }> = [
+    { label: 'processed-selected-device' },
+    { label: 'raw-selected-device', overrides: { includeVoiceIsolation: false } },
+    { label: 'raw-default-device', overrides: { includeDeviceId: false, includeVoiceIsolation: false } },
   ];
 
   let lastError: unknown = null;
 
-  for (const attempt of attempts) {
+  for (const { label, overrides } of fallbacks) {
     try {
-      await room.localParticipant.setMicrophoneEnabled(true, attempt.options);
+      const options = micAudioCaptureOptions(currentState, createMicGate(identity), overrides);
+      await room.localParticipant.setMicrophoneEnabled(true, options);
       setScreenShareNotice(null);
       return true;
     } catch (err) {
       lastError = err;
-      console.warn(`Failed to enable microphone via ${attempt.label}:`, err);
+      console.warn(`Failed to enable microphone via ${label}:`, err);
       await disableMicrophoneAfterFailedAttempt(room);
     }
   }
