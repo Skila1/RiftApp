@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import MarketingLogo from './MarketingLogo';
 
 const COLUMNS = [
   {
@@ -38,7 +39,7 @@ export default function MarketingFooter() {
           {/* Brand column */}
           <div className="col-span-2 md:col-span-1">
             <div className="flex items-center gap-2.5 mb-6">
-              <img src="/rift-logo.svg" alt="Rift" className="h-10 w-10 rounded-xl" />
+              <MarketingLogo className="h-10 w-10 rounded-xl" />
             </div>
             <p className="text-sm text-indigo-200/60">
               Fast. Clean. Yours.
@@ -83,7 +84,7 @@ export default function MarketingFooter() {
         {/* Divider + bottom row */}
         <div className="mt-14 border-t border-white/10 pt-6 flex flex-col items-center justify-between gap-4 sm:flex-row">
           <div className="flex items-center gap-2.5">
-            <img src="/rift-logo.svg" alt="Rift" className="h-7 w-7 rounded-lg" />
+            <MarketingLogo className="h-7 w-7 rounded-lg" />
             <span className="text-sm font-semibold">Rift</span>
           </div>
           <Link

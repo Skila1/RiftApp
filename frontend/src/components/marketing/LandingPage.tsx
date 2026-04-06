@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import MarketingLogo from './MarketingLogo';
 
 const DOWNLOAD_URL = 'https://github.com/Skila1/RiftApp/releases/latest';
 
@@ -60,7 +61,7 @@ export default function LandingPage() {
               </div>
               <div className="flex h-64 items-center justify-center sm:h-80 lg:h-96">
                 <div className="text-center">
-                  <img src="/rift-logo.svg" alt="Rift" className="mx-auto h-16 w-16 rounded-2xl opacity-60" />
+                  <MarketingLogo className="mx-auto h-16 w-16 rounded-2xl opacity-60" />
                   <p className="mt-4 text-sm text-white/30">Your Rift experience</p>
                 </div>
               </div>

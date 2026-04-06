@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/auth';
+import MarketingLogo from './MarketingLogo';
 
 const NAV_LINKS = [
   { label: 'Discover', to: '/discover' },
@@ -20,7 +21,7 @@ export default function MarketingNav() {
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2.5">
-          <img src="/rift-logo.svg" alt="Rift" className="h-8 w-8 rounded-lg" />
+          <MarketingLogo className="h-8 w-8 rounded-lg" />
           <span
             className={`text-lg font-bold tracking-tight ${
               isHero ? 'text-white' : 'text-gray-900'
