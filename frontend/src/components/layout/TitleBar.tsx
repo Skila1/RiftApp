@@ -18,6 +18,8 @@ function getDesktop(): DesktopAPI | undefined {
     },
     isMaximized: () => r.isMaximized(),
     onMaximizedChange: r.onMaximizedChange,
+    onUpdateReady: () => () => {},
+    restartToUpdate: () => {},
   };
 }
 

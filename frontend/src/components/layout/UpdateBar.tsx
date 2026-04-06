@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 function getDesktopUpdate() {
   if (typeof window === 'undefined') return null;
   const d = window.desktop;
-  if (d?.onUpdateReady && d?.restartToUpdate) return d;
+  if (d && typeof d.onUpdateReady === 'function' && typeof d.restartToUpdate === 'function') return d;
   return null;
 }
 
