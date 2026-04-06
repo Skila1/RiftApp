@@ -34,7 +34,7 @@ function SettingsModal() {
     <ModalOverlay isOpen onClose={closeSettings} center={false} backdropClose zIndex={200}>
       <div className="h-full w-full text-riftapp-text">
         <div className="mx-auto flex h-full w-full max-w-[1240px] flex-col overflow-hidden md:flex-row">
-          <nav className="w-full shrink-0 overflow-y-auto border-b border-riftapp-border/40 bg-riftapp-surface/65 px-4 py-5 md:w-[272px] md:border-b-0 md:border-r md:px-5 md:py-8 backdrop-blur-xl bg-[#1e1f22]/80">
+            <nav className="w-full shrink-0 overflow-y-auto border-b border-riftapp-border/40 px-4 py-5 md:w-[272px] md:border-b-0 md:border-r md:px-5 md:py-8 bg-[#1e1f22]">
             <div className="mx-auto flex w-full max-w-[232px] flex-col gap-5">
               <div>
                 <h3 className="section-label px-2 mb-3">User Settings</h3>
@@ -105,9 +105,9 @@ function SettingsModal() {
             </div>
           </nav>
 
-          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain [contain:content] bg-[#313338]/95 backdrop-blur-xl">
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain [contain:content] bg-[#313338]">
             <div className="mx-auto flex min-h-full w-full max-w-[960px] flex-col px-6 py-6 md:px-10 md:py-8">
-              <div className="sticky top-0 z-10 -mx-6 mb-6 flex items-center justify-between border-b border-riftapp-border/40 bg-[#313338]/95 px-6 pb-4 pt-1 backdrop-blur md:-mx-10 md:px-10 md:pb-5">
+              <div className="sticky top-0 z-10 -mx-6 mb-6 flex items-center justify-between border-b border-riftapp-border/40 bg-[#313338] px-6 pb-4 pt-1 md:-mx-10 md:px-10 md:pb-5">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-riftapp-text-dim">User Settings</p>
                   <h2 className="mt-2 text-[26px] font-black tracking-tight">
