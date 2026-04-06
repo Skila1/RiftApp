@@ -151,8 +151,10 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
   return createPortal(
     <div
       className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-[2px]"
-      onClick={onClose}
+      onClick={showSettings ? () => setShowSettings(false) : onClose}
     >
+      {/* ───── Invite Friends View ───── */}
+      {!showSettings && (
       <div
         className="bg-[#313338] rounded-xl w-[440px] max-h-[620px] flex flex-col shadow-modal animate-scale-in overflow-hidden"
         onClick={(e) => e.stopPropagation()}
@@ -312,8 +314,9 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
           </div>
         </div>
       </div>
+      )}
 
-      {/* ───── Invite Settings Sub-Modal ───── */}
+      {/* ───── Invite Settings View (replaces invite view) ───── */}
       {showSettings && (
         <InviteSettingsModal
           currentExpire={expireAfter}
@@ -322,7 +325,7 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
             setShowSettings(false);
             generateInvite(expire, maxUses);
           }}
-          onClose={() => setShowSettings(false)}
+          onBack={() => setShowSettings(false)}
         />
       )}
     </div>,
@@ -335,35 +338,42 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
 function InviteSettingsModal({
   currentExpire,
   onGenerate,
-  onClose,
+  onBack,
 }: {
   currentExpire: number;
   onGenerate: (expire: number, maxUses: number) => void;
-  onClose: () => void;
+  onBack: () => void;
 }) {
   const [expire, setExpire] = useState(currentExpire);
   const [maxUses, setMaxUses] = useState(0);
   const [tempMembership, setTempMembership] = useState(false);
 
   return (
-    <div
-      className="fixed inset-0 z-[310] flex items-center justify-center bg-black/40"
-      onClick={onClose}
-    >
       <div
         className="bg-[#313338] rounded-xl w-[400px] shadow-modal animate-scale-in overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="px-5 pt-5 pb-3 flex items-start justify-between">
-          <div>
-            <h3 className="text-[16px] font-bold text-white">Server invite link settings</h3>
-            <p className="text-[13px] text-[#b5bac1] mt-0.5">
-              Customize your invite link
-            </p>
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={onBack}
+              className="text-[#b5bac1] hover:text-white p-1 -ml-1 transition-colors rounded-md hover:bg-white/[0.06]"
+              title="Back"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </button>
+            <div>
+              <h3 className="text-[16px] font-bold text-white">Server invite link settings</h3>
+              <p className="text-[13px] text-[#b5bac1] mt-0.5">
+                Customize your invite link
+              </p>
+            </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={onBack}
             className="text-[#b5bac1] hover:text-white p-1 -mr-1 -mt-1 transition-colors rounded-md hover:bg-white/[0.06]"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -439,7 +449,7 @@ function InviteSettingsModal({
         {/* Actions */}
         <div className="px-5 py-4 bg-[#2b2d31] flex items-center justify-end gap-3">
           <button
-            onClick={onClose}
+            onClick={onBack}
             className="px-4 py-2 text-[13px] font-medium text-[#dbdee1] hover:underline"
           >
             Cancel
@@ -453,6 +463,5 @@ function InviteSettingsModal({
           </button>
         </div>
       </div>
-    </div>
   );
 }

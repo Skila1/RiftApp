@@ -91,7 +91,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     api.setRefreshToken(refresh);
     try {
       const user = normalizeUser(await api.getMe());
-      set({ user, token, refreshToken: refresh, isAuthenticated: true, isLoading: false });
+      // The API client may have silently refreshed the token during getMe().
+      // Re-read localStorage to pick up any updated tokens.
+      const currentToken = localStorage.getItem('riftapp_token') || token;
+      const currentRefresh = localStorage.getItem('riftapp_refresh') || refresh;
+      set({ user, token: currentToken, refreshToken: currentRefresh, isAuthenticated: true, isLoading: false });
     } catch {
       if (refresh) {
         try {

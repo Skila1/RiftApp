@@ -1,7 +1,9 @@
 package middleware
 
 import (
+	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -58,10 +60,34 @@ func (rl *RateLimiter) cleanup() {
 	}
 }
 
+// clientIP extracts the real client IP from the request, checking
+// trusted proxy headers before falling back to RemoteAddr.
+func clientIP(r *http.Request) string {
+	// Prefer CF-Connecting-IP (Cloudflare) then X-Real-Ip then X-Forwarded-For.
+	if ip := r.Header.Get("CF-Connecting-IP"); ip != "" {
+		return ip
+	}
+	if ip := r.Header.Get("X-Real-Ip"); ip != "" {
+		return ip
+	}
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		// First entry is the original client.
+		if ip, _, ok := strings.Cut(fwd, ","); ok {
+			return strings.TrimSpace(ip)
+		}
+		return strings.TrimSpace(fwd)
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
 func RateLimit(rl *RateLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			key := r.RemoteAddr
+			key := clientIP(r)
 			if userID := GetUserID(r.Context()); userID != "" {
 				key = "user:" + userID
 			}

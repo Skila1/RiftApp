@@ -53,10 +53,15 @@ function shouldRecoverFromPromiseRejection(reason: unknown) {
 
 function reloadOnceForStaleChunk() {
   try {
-    if (sessionStorage.getItem(CHUNK_RELOAD_SESSION_KEY) === '1') {
-      return;
+    const prev = sessionStorage.getItem(CHUNK_RELOAD_SESSION_KEY);
+    if (prev) {
+      const ts = Number(prev);
+      // If we already reloaded within the last 30 seconds, don't reload again.
+      if (!Number.isNaN(ts) && Date.now() - ts < 30_000) {
+        return;
+      }
     }
-    sessionStorage.setItem(CHUNK_RELOAD_SESSION_KEY, '1');
+    sessionStorage.setItem(CHUNK_RELOAD_SESSION_KEY, String(Date.now()));
   } catch {
     /* ignore storage failures */
   }
@@ -79,14 +84,6 @@ function installChunkMismatchRecovery() {
     if (shouldRecoverFromPromiseRejection(event.reason)) {
       event.preventDefault();
       reloadOnceForStaleChunk();
-    }
-  });
-
-  requestAnimationFrame(() => {
-    try {
-      sessionStorage.removeItem(CHUNK_RELOAD_SESSION_KEY);
-    } catch {
-      /* ignore storage failures */
     }
   });
 }

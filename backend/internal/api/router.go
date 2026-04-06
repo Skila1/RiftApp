@@ -88,7 +88,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 		r.Get("/api/unfurl", HandleUnfurl)
 	})
 
-	publicRL := middleware.NewRateLimiter(rate.Every(12*time.Second), 5)
+	publicRL := middleware.NewRateLimiter(rate.Every(6*time.Second), 10)
 	r.Route("/api/auth", func(r chi.Router) {
 		r.Use(middleware.RateLimit(publicRL))
 		r.Post("/register", authH.Register)
