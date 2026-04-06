@@ -10,34 +10,35 @@ type Event struct {
 
 // Operation codes
 const (
-	OpSubscribe            = "subscribe"
-	OpUnsubscribe          = "unsubscribe"
-	OpHeartbeat            = "heartbeat"
-	OpHeartbeatAck         = "heartbeat_ack"
-	OpReady                = "ready"
-	OpTyping               = "typing"
-	OpTypingStart          = "typing_start"
-	OpTypingStop           = "typing_stop"
-	OpMessageCreate        = "message_create"
-	OpMessageUpdate        = "message_update"
-	OpMessageDelete        = "message_delete"
-	OpReactionAdd          = "reaction_add"
-	OpReactionRemove       = "reaction_remove"
-	OpPresenceUpdate       = "presence_update"
-	OpSetStatus            = "set_status"
-	OpNotificationCreate   = "notification_create"
-	OpDMMessageCreate      = "dm_message_create"
-	OpDMConversationCreate = "dm_conversation_create"
-	OpVoiceStateUpdate     = "voice_state_update"
-	OpFriendRequest        = "friend_request"
-	OpFriendAccept         = "friend_accept"
-	OpFriendRemove         = "friend_remove"
-	OpSoundboardPlay       = "soundboard_play"
-	OpHubUpdate            = "hub_update"
-	OpUserUpdate           = "user_update"
-	OpVoiceMove            = "voice_move"
-	OpVoiceDisconnect      = "voice_disconnect"
-	OpVoiceSpeakingUpdate  = "voice_speaking_update"
+	OpSubscribe              = "subscribe"
+	OpUnsubscribe            = "unsubscribe"
+	OpHeartbeat              = "heartbeat"
+	OpHeartbeatAck           = "heartbeat_ack"
+	OpReady                  = "ready"
+	OpTyping                 = "typing"
+	OpTypingStart            = "typing_start"
+	OpTypingStop             = "typing_stop"
+	OpMessageCreate          = "message_create"
+	OpMessageUpdate          = "message_update"
+	OpMessageDelete          = "message_delete"
+	OpReactionAdd            = "reaction_add"
+	OpReactionRemove         = "reaction_remove"
+	OpPresenceUpdate         = "presence_update"
+	OpSetStatus              = "set_status"
+	OpNotificationCreate     = "notification_create"
+	OpDMMessageCreate        = "dm_message_create"
+	OpDMConversationCreate   = "dm_conversation_create"
+	OpVoiceStateUpdate       = "voice_state_update"
+	OpFriendRequest          = "friend_request"
+	OpFriendAccept           = "friend_accept"
+	OpFriendRemove           = "friend_remove"
+	OpSoundboardPlay         = "soundboard_play"
+	OpHubUpdate              = "hub_update"
+	OpUserUpdate             = "user_update"
+	OpVoiceMove              = "voice_move"
+	OpVoiceDisconnect        = "voice_disconnect"
+	OpVoiceSpeakingUpdate    = "voice_speaking_update"
+	OpVoiceScreenShareUpdate = "voice_screen_share_update"
 )
 
 type SubscribeData struct {
@@ -91,6 +92,17 @@ type VoiceSpeakingData struct {
 type VoiceSpeakingClientData struct {
 	StreamID string `json:"stream_id"`
 	Speaking bool   `json:"speaking"`
+}
+
+type VoiceScreenShareData struct {
+	StreamID string `json:"stream_id"`
+	UserID   string `json:"user_id"`
+	Sharing  bool   `json:"sharing"`
+}
+
+type VoiceScreenShareClientData struct {
+	StreamID string `json:"stream_id"`
+	Sharing  bool   `json:"sharing"`
 }
 
 func NewEvent(op string, data interface{}) []byte {

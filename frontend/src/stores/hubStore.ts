@@ -22,6 +22,7 @@ interface HubState {
   updateHub: (hubId: string, data: { name?: string; icon_url?: string; banner_url?: string }) => Promise<Hub>;
   applyHubUpdate: (hub: Hub) => void;
   deleteHub: (hubId: string) => Promise<void>;
+  leaveHub: (hubId: string) => Promise<void>;
   clearActive: () => void;
 }
 
@@ -197,5 +198,64 @@ export const useHubStore = create<HubState>((set, get) => ({
   clearActive: () => {
     useVoiceChannelUiStore.getState().closeVoiceView();
     set({ activeHubId: null });
+  },
+
+  leaveHub: async (hubId) => {
+    const { useStreamStore } = await import('./streamStore');
+    const { useMessageStore } = await import('./messageStore');
+    const { usePresenceStore } = await import('./presenceStore');
+    const { useVoiceStore } = await import('./voiceStore');
+
+    const streamState = useStreamStore.getState();
+    const streamIds = Object.entries(streamState.streamHubMap)
+      .filter(([, h]) => h === hubId)
+      .map(([id]) => id);
+
+    const voiceStreamId = useVoiceStore.getState().streamId;
+    if (voiceStreamId && streamIds.includes(voiceStreamId)) {
+      useVoiceStore.getState().leave();
+    }
+
+    await api.leaveHub(hubId);
+
+    for (const sid of streamIds) {
+      useMessageStore.getState().removeStreamCache(sid);
+    }
+
+    useStreamStore.setState((s) => {
+      const streamHubMap = { ...s.streamHubMap };
+      const streamUnreads = { ...s.streamUnreads };
+      const lastReadMessageIds = { ...s.lastReadMessageIds };
+      const voiceMembers = { ...s.voiceMembers };
+      for (const sid of streamIds) {
+        delete streamHubMap[sid];
+        delete streamUnreads[sid];
+        delete lastReadMessageIds[sid];
+        delete voiceMembers[sid];
+      }
+      const hubLayoutCache = { ...s.hubLayoutCache };
+      delete hubLayoutCache[hubId];
+      return { streamHubMap, streamUnreads, lastReadMessageIds, voiceMembers, hubLayoutCache };
+    });
+
+    const wasActive = get().activeHubId === hubId;
+
+    set((s) => {
+      const hubs = s.hubs.filter((h) => h.id !== hubId);
+      const activeHubId = s.activeHubId === hubId ? hubs[0]?.id ?? null : s.activeHubId;
+      persistHubs(hubs);
+      return { hubs, activeHubId };
+    });
+
+    if (wasActive) {
+      const nextId = get().activeHubId;
+      if (nextId) {
+        await get().setActiveHub(nextId);
+      } else {
+        useStreamStore.getState().clearStreams();
+        useMessageStore.getState().clearMessages();
+        usePresenceStore.setState({ hubMembers: {} });
+      }
+    }
   },
 }));

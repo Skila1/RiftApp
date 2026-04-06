@@ -22,6 +22,8 @@ interface StreamState {
   /** stream_id → hub_id for cross-hub unread indicators */
   streamHubMap: Record<string, string>;
   voiceMembers: Record<string, string[]>; // streamId -> userIds currently in voice
+  /** streamId → Set of userIds currently screen-sharing (tracked via WS for non-connected viewers). */
+  voiceScreenSharers: Record<string, string[]>;
   /** Last known channel layout per hub (instant restore when switching). */
   hubLayoutCache: Record<string, HubLayoutCacheEntry>;
 
@@ -48,6 +50,7 @@ interface StreamState {
   clearStreams: () => void;
   loadVoiceStates: (hubId: string) => Promise<void>;
   applyVoiceState: (streamId: string, userId: string, action: 'join' | 'leave') => void;
+  applyVoiceScreenShare: (streamId: string, userId: string, sharing: boolean) => void;
   /** Clear hub layout cache + stream UI (logout / account switch). */
   clearSessionCaches: () => void;
 }
@@ -60,6 +63,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   lastReadMessageIds: {},
   streamHubMap: {},
   voiceMembers: {},
+  voiceScreenSharers: {},
   hubLayoutCache: {},
 
   applyHubLayoutOrClear: (hubId) => {
@@ -441,6 +445,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       categories: [],
       activeStreamId: null,
       voiceMembers: {},
+      voiceScreenSharers: {},
     });
   },
 
@@ -465,7 +470,34 @@ export const useStreamStore = create<StreamState>((set, get) => ({
         } else {
           next[streamId] = filtered;
         }
-        return { voiceMembers: next };
+        // Also clear screen share state for this user
+        const sharers = (s.voiceScreenSharers[streamId] || []).filter((id) => id !== userId);
+        const nextSharers = { ...s.voiceScreenSharers };
+        if (sharers.length === 0) {
+          delete nextSharers[streamId];
+        } else {
+          nextSharers[streamId] = sharers;
+        }
+        return { voiceMembers: next, voiceScreenSharers: nextSharers };
+      }
+    });
+  },
+
+  applyVoiceScreenShare: (streamId, userId, sharing) => {
+    set((s) => {
+      const current = s.voiceScreenSharers[streamId] || [];
+      if (sharing) {
+        if (current.includes(userId)) return s;
+        return { voiceScreenSharers: { ...s.voiceScreenSharers, [streamId]: [...current, userId] } };
+      } else {
+        const filtered = current.filter((id) => id !== userId);
+        const next = { ...s.voiceScreenSharers };
+        if (filtered.length === 0) {
+          delete next[streamId];
+        } else {
+          next[streamId] = filtered;
+        }
+        return { voiceScreenSharers: next };
       }
     });
   },
@@ -479,6 +511,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       lastReadMessageIds: {},
       streamHubMap: {},
       voiceMembers: {},
+      voiceScreenSharers: {},
       hubLayoutCache: {},
     });
   },

@@ -58,9 +58,7 @@ export const usePresenceStore = create<PresenceState>((set) => ({
       presence: s.presence[nextUser.id] === nextUser.status
         ? s.presence
         : { ...s.presence, [nextUser.id]: nextUser.status },
-      hubMembers: s.hubMembers[nextUser.id]
-        ? { ...s.hubMembers, [nextUser.id]: { ...s.hubMembers[nextUser.id], ...nextUser } }
-        : s.hubMembers,
+      hubMembers: { ...s.hubMembers, [nextUser.id]: s.hubMembers[nextUser.id] ? { ...s.hubMembers[nextUser.id], ...nextUser } : nextUser },
     }));
   },
 

@@ -1132,6 +1132,7 @@ function SortableVoiceItem({
     canModerateVoiceUsers && draggedVoiceUser && draggedVoiceUser.sourceStreamId !== stream.id,
   );
   const isVoiceDropTarget = voiceDropTargetId === stream.id && canAcceptVoiceDrop;
+  const screenSharers = useStreamStore((s) => s.voiceScreenSharers[stream.id]);
 
   return (
     <div
@@ -1208,7 +1209,7 @@ function SortableVoiceItem({
                   isSpeaking: Boolean(speakingSignals[uid]),
                   isMuted: false,
                   isCameraOn: false,
-                  isScreenSharing: false,
+                  isScreenSharing: Boolean(screenSharers?.includes(uid)),
                 }}
                 member={member}
                 streamId={stream.id}

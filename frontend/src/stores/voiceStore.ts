@@ -1164,6 +1164,8 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     if (!room) { resetState(); return; }
     stopConnectionStatsMonitor();
     stopMicProcessing({ broadcast: true, identity: room.localParticipant.identity });
+    // Notify screen share stop before leaving
+    if (sid && get().isScreenSharing) wsSend('voice_screen_share_update', { stream_id: sid, sharing: false });
     roomRef = null;
     if (sid) wsSend('voice_state_update', { stream_id: sid, action: 'leave' });
     playLeaveSound();
@@ -1199,8 +1201,10 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
 
   toggleScreenShare: async () => {
     if (!roomRef || roomRef.state !== ConnectionState.Connected) return;
+    const streamId = get().streamId;
     if (roomRef.localParticipant.isScreenShareEnabled) {
       await stopScreenShare(roomRef);
+      if (streamId) wsSend('voice_screen_share_update', { stream_id: streamId, sharing: false });
     } else {
       // Go directly to browser's native picker — no intermediate modal
       set({ screenShareRequesting: true });
@@ -1213,6 +1217,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
           screenShareSurfaceLabel: inferSurfaceLabel('screen'),
           screenShareModalOpen: true,
         });
+        if (streamId) wsSend('voice_screen_share_update', { stream_id: streamId, sharing: true });
       } catch (err) {
         const name = err instanceof DOMException ? err.name : '';
         const message = err instanceof Error ? err.message.toLowerCase() : '';

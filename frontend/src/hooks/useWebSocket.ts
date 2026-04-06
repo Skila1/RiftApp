@@ -11,6 +11,7 @@ import { useVoiceStore } from '../stores/voiceStore';
 import { useVoiceChannelUiStore } from '../stores/voiceChannelUiStore';
 import type { Message, Notification, Conversation, Hub, User, WSEvent } from '../types';
 import { publicAssetUrl } from '../utils/publicAssetUrl';
+import { api } from '../api/client';
 
 const HEARTBEAT_INTERVAL = 30000;
 const TYPING_EXPIRE_MS = 3000;
@@ -191,9 +192,18 @@ export function useWebSocket() {
               if (!Object.prototype.hasOwnProperty.call(voiceState.speakingSignals, user_id)) {
                 voiceState.applySpeakingSignal(user_id, false);
               }
+              // Fetch profile for unknown users so their display name is shown immediately
+              if (!usePresenceStore.getState().hubMembers[user_id]) {
+                api.getUser(user_id).then((u) => usePresenceStore.getState().mergeUser(u)).catch(() => {});
+              }
             } else {
               voiceState.clearSpeakingSignal(user_id);
             }
+            break;
+          }
+          case 'voice_screen_share_update': {
+            const { stream_id, user_id, sharing } = evt.d as { stream_id: string; user_id: string; sharing: boolean };
+            useStreamStore.getState().applyVoiceScreenShare(stream_id, user_id, sharing);
             break;
           }
           case 'voice_speaking_update': {

@@ -360,6 +360,13 @@ func (h *Hub) handleClientEvent(c *Client, evt *Event) {
 			return
 		}
 		go h.handleVoiceSpeaking(c.userID, data.StreamID, data.Speaking)
+
+	case OpVoiceScreenShareUpdate:
+		var data VoiceScreenShareClientData
+		if err := json.Unmarshal(evt.Data, &data); err != nil || data.StreamID == "" {
+			return
+		}
+		go h.handleVoiceScreenShare(c.userID, data.StreamID, data.Sharing)
 	}
 }
 
@@ -402,6 +409,15 @@ func (h *Hub) handleVoiceState(userID, streamID, action string) {
 }
 
 func (h *Hub) broadcastVoiceState(streamID, userID, action string) {
+	h.broadcastToHubMembers(streamID, NewEvent(OpVoiceStateUpdate, VoiceStateData{
+		StreamID: streamID,
+		UserID:   userID,
+		Action:   action,
+	}))
+}
+
+// broadcastToHubMembers sends evt to every connected member of the hub that owns streamID.
+func (h *Hub) broadcastToHubMembers(streamID string, evt []byte) {
 	if h.db == nil {
 		return
 	}
@@ -417,11 +433,6 @@ func (h *Hub) broadcastVoiceState(streamID, userID, action string) {
 	}
 	defer rows.Close()
 
-	evt := NewEvent(OpVoiceStateUpdate, VoiceStateData{
-		StreamID: streamID,
-		UserID:   userID,
-		Action:   action,
-	})
 	h.mu.RLock()
 	for rows.Next() {
 		var memberID string
@@ -449,6 +460,21 @@ func (h *Hub) handleVoiceSpeaking(userID, streamID string, speaking bool) {
 		StreamID: streamID,
 		UserID:   userID,
 		Speaking: speaking,
+	}))
+}
+
+func (h *Hub) handleVoiceScreenShare(userID, streamID string, sharing bool) {
+	h.mu.RLock()
+	inVoice := h.voiceState[streamID] != nil && h.voiceState[streamID][userID]
+	h.mu.RUnlock()
+	if !inVoice {
+		return
+	}
+
+	h.broadcastToHubMembers(streamID, NewEvent(OpVoiceScreenShareUpdate, VoiceScreenShareData{
+		StreamID: streamID,
+		UserID:   userID,
+		Sharing:  sharing,
 	}))
 }
 

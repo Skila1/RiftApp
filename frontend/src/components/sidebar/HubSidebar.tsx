@@ -9,6 +9,7 @@ import { api } from '../../api/client';
 import type { Hub, HubNotificationSettings, Notification } from '../../types';
 import AddServerModal from '../modals/AddServerModal';
 import InviteToServerModal from '../modals/InviteToServerModal';
+import { useAuthStore } from '../../stores/auth';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 
 const DEFAULT_HUB_NOTIFICATION: HubNotificationSettings = {
@@ -70,6 +71,8 @@ export default function HubSidebar() {
   const hubs = useHubStore((s) => s.hubs);
   const activeHubId = useHubStore((s) => s.activeHubId);
   const setActiveHub = useHubStore((s) => s.setActiveHub);
+  const leaveHub = useHubStore((s) => s.leaveHub);
+  const currentUserId = useAuthStore((s) => s.user?.id);
   const loadConversations = useDMStore((s) => s.loadConversations);
   const [showAddServer, setShowAddServer] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -541,6 +544,32 @@ export default function HubSidebar() {
                 </span>
                 <span className="text-[10px] font-semibold px-1 py-0.5 rounded border border-riftapp-border/50 text-riftapp-text-dim">ID</span>
               </button>
+
+              {/* Leave Server – hidden for the hub owner */}
+              {currentUserId && contextMenu.hub.owner_id !== currentUserId && (
+                <>
+                  <div className="mx-2 my-1 h-px bg-white/[0.06]" />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const hub = contextMenu.hub;
+                      setContextMenu(null);
+                      if (!window.confirm(`Are you sure you want to leave "${hub.name}"?`)) return;
+                      try {
+                        await leaveHub(hub.id);
+                      } catch { /* ignore */ }
+                    }}
+                    className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-red-500/20 text-left w-[calc(100%-8px)] text-red-400 hover:text-red-300"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="shrink-0">
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                      <polyline points="16 17 21 12 16 7" />
+                      <line x1="21" y1="12" x2="9" y2="12" />
+                    </svg>
+                    Leave Server
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>,
