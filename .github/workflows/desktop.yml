@@ -1,0 +1,86 @@
+name: Desktop Build
+
+on:
+  push:
+    branches: [main]
+    paths: ['app/**']
+
+permissions:
+  contents: write
+
+env:
+  CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Compute next version from latest v* tag (default 0.1.0, patch increment)
+      - name: Compute version
+        id: version
+        shell: pwsh
+        working-directory: .
+        run: |
+          $tag = git describe --tags --abbrev=0 --match "v*" 2>$null
+          if ($LASTEXITCODE -ne 0 -or -not $tag) {
+            $version = "0.1.0"
+          } else {
+            $parts = $tag.TrimStart("v").Split(".")
+            $major = [int]$parts[0]
+            $minor = [int]$parts[1]
+            $patch = [int]$parts[2] + 1
+            $version = "$major.$minor.$patch"
+          }
+          Write-Host "Version: $version"
+          echo "value=$version" >> $env:GITHUB_OUTPUT
+
+      # Write computed version into package.json
+      - name: Patch package.json version
+        shell: pwsh
+        run: |
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          $pkg.version = "${{ steps.version.outputs.value }}"
+          $pkg | ConvertTo-Json -Depth 20 | Set-Content package.json -Encoding UTF8
+
+      - run: npm ci
+
+      - name: Build Windows installer
+        run: npm run dist:win
+
+      # Tag the commit with the new version
+      - name: Create git tag
+        shell: pwsh
+        working-directory: .
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "v${{ steps.version.outputs.value }}"
+          git push origin "v${{ steps.version.outputs.value }}"
+
+      # Publish GitHub Release with installer artifacts
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.value }}
+          name: Rift v${{ steps.version.outputs.value }}
+          body: |
+            Rift Desktop v${{ steps.version.outputs.value }}
+
+            Download **Rift Setup ${{ steps.version.outputs.value }}.exe** below to install or update.
+          files: |
+            app/dist-electron/Rift Setup ${{ steps.version.outputs.value }}.exe
+            app/dist-electron/Rift Setup ${{ steps.version.outputs.value }}.exe.blockmap
+            app/dist-electron/latest.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
