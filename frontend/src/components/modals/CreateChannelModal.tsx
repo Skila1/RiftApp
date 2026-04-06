@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { useStreamStore } from '../../stores/streamStore';
+import ModalOverlay from '../shared/ModalOverlay';
 
 interface Props {
   hubId: string;
@@ -41,16 +41,7 @@ export default function CreateChannelModal({ hubId, categoryId, initialType, onC
   const [isPrivate, setIsPrivate] = useState(false);
   const [creating, setCreating] = useState(false);
   const createStream = useStreamStore((s) => s.createStream);
-  const backdropRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [onClose]);
 
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 100);
@@ -72,13 +63,9 @@ export default function CreateChannelModal({ hubId, categoryId, initialType, onC
     }
   };
 
-  return createPortal(
-    <div
-      ref={backdropRef}
-      onClick={(e) => { if (e.target === backdropRef.current) onClose(); }}
-      className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60"
-    >
-      <div className="bg-riftapp-panel rounded-xl shadow-modal w-full max-w-[460px] overflow-hidden animate-scale-in">
+  return (
+    <ModalOverlay isOpen onClose={onClose} zIndex={300}>
+      <div className="bg-riftapp-panel rounded-xl shadow-modal w-full max-w-[460px] overflow-hidden">
         <div className="px-6 pt-6 pb-4">
           <div className="flex items-center justify-between mb-1">
             <h2 className="text-xl font-bold">Create Channel</h2>
@@ -181,7 +168,6 @@ export default function CreateChannelModal({ hubId, categoryId, initialType, onC
           </button>
         </div>
       </div>
-    </div>,
-    document.body
+    </ModalOverlay>
   );
 }

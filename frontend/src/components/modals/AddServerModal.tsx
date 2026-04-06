@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { api } from '../../api/client';
 import { useHubStore } from '../../stores/hubStore';
+import ModalOverlay from '../shared/ModalOverlay';
 
 type ServerFlowStep = 'choice' | 'create' | 'join';
 
@@ -88,7 +88,6 @@ export default function AddServerModal({ onClose }: Props) {
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
 
-  const backdropRef = useRef<HTMLDivElement>(null);
   const createInputRef = useRef<HTMLInputElement>(null);
   const joinInputRef = useRef<HTMLInputElement>(null);
 
@@ -113,16 +112,6 @@ export default function AddServerModal({ onClose }: Props) {
         };
     }
   }, [step]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [busy, onClose]);
 
   useEffect(() => {
     if (step === 'create') {
@@ -170,15 +159,9 @@ export default function AddServerModal({ onClose }: Props) {
     }
   };
 
-  return createPortal(
-    <div
-      ref={backdropRef}
-      onClick={(event) => {
-        if (event.target === backdropRef.current) handleBackdropClose();
-      }}
-      className="modal-backdrop"
-    >
-      <div className="modal-content w-full max-w-[440px] animate-scale-in" onClick={(event) => event.stopPropagation()}>
+  return (
+    <ModalOverlay isOpen onClose={handleBackdropClose} backdropClose={!busy} zIndex={300}>
+      <div className="modal-content w-full max-w-[440px]">
         <div className="px-6 pb-5 pt-6">
           <div className="mb-1 flex items-start justify-between gap-4">
             <div>
@@ -320,7 +303,6 @@ export default function AddServerModal({ onClose }: Props) {
           </div>
         )}
       </div>
-    </div>,
-    document.body,
+    </ModalOverlay>
   );
 }

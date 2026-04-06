@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState, memo } from 'react';
-import { motion } from 'framer-motion';
 import { useAuthStore } from '../../stores/auth';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useWsSend } from '../../hooks/useWebSocket';
 import { api } from '../../api/client';
 import { statusColor, statusLabel } from '../shared/StatusDot';
+import ModalOverlay from '../shared/ModalOverlay';
 import { useVoiceStore, type VoiceMediaDevice } from '../../stores/voiceStore';
 import { useAppSettingsStore, type SettingsOverlayTab } from '../../stores/appSettingsStore';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
@@ -21,15 +21,6 @@ function SettingsModal() {
   const setSettingsTab = useAppSettingsStore((s) => s.setSettingsTab);
   const [confirmLogout, setConfirmLogout] = useState(false);
 
-  // Close on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeSettings();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [closeSettings]);
-
   if (!user) return null;
 
   const tabs: { id: SettingsModalTab; label: string; section?: 'user' | 'app' }[] = [
@@ -40,22 +31,10 @@ function SettingsModal() {
   ];
 
   return (
-    <motion.div
-      className="fixed inset-0 z-[200] bg-riftapp-bg text-riftapp-text"
-      role="dialog"
-      aria-modal="true"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.15 }}
-    >
-      <motion.div
-        className="h-full w-full"
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-      >
+    <ModalOverlay isOpen onClose={closeSettings} center={false} backdropClose zIndex={200}>
+      <div className="h-full w-full text-riftapp-text">
         <div className="mx-auto flex h-full w-full max-w-[1240px] flex-col overflow-hidden md:flex-row">
-          <nav className="w-full shrink-0 overflow-y-auto border-b border-riftapp-border/40 bg-riftapp-surface/65 px-4 py-5 md:w-[272px] md:border-b-0 md:border-r md:px-5 md:py-8">
+          <nav className="w-full shrink-0 overflow-y-auto border-b border-riftapp-border/40 bg-riftapp-surface/65 px-4 py-5 md:w-[272px] md:border-b-0 md:border-r md:px-5 md:py-8 backdrop-blur-xl bg-[#1e1f22]/80">
             <div className="mx-auto flex w-full max-w-[232px] flex-col gap-5">
               <div>
                 <h3 className="section-label px-2 mb-3">User Settings</h3>
@@ -126,9 +105,9 @@ function SettingsModal() {
             </div>
           </nav>
 
-          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain [contain:content]">
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain [contain:content] bg-[#313338]/95 backdrop-blur-xl">
             <div className="mx-auto flex min-h-full w-full max-w-[960px] flex-col px-6 py-6 md:px-10 md:py-8">
-              <div className="sticky top-0 z-10 -mx-6 mb-6 flex items-center justify-between border-b border-riftapp-border/40 bg-riftapp-bg/95 px-6 pb-4 pt-1 backdrop-blur md:-mx-10 md:px-10 md:pb-5">
+              <div className="sticky top-0 z-10 -mx-6 mb-6 flex items-center justify-between border-b border-riftapp-border/40 bg-[#313338]/95 px-6 pb-4 pt-1 backdrop-blur md:-mx-10 md:px-10 md:pb-5">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-riftapp-text-dim">User Settings</p>
                   <h2 className="mt-2 text-[26px] font-black tracking-tight">
@@ -170,8 +149,8 @@ function SettingsModal() {
             </div>
           </div>
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </ModalOverlay>
   );
 }
 

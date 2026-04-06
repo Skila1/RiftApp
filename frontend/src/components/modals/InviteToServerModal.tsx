@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import { useFriendStore } from '../../stores/friendStore';
 import { api } from '../../api/client';
 import type { Hub, Friendship } from '../../types';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
+import ModalOverlay from '../shared/ModalOverlay';
 import StatusDot from '../shared/StatusDot';
 
 interface Props {
@@ -59,14 +59,14 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
   // ESC to close
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (showSettings) setShowSettings(false);
-        else onClose();
+      if (e.key === 'Escape' && showSettings) {
+        e.stopImmediatePropagation();
+        setShowSettings(false);
       }
     };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [onClose, showSettings]);
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
+  }, [showSettings]);
 
   useEffect(() => {
     loadFriends();
@@ -148,16 +148,12 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
   // Get first text channel name for subtitle
   const firstChannelName = 'general';
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-[2px]"
-      onClick={showSettings ? () => setShowSettings(false) : onClose}
-    >
+  return (
+    <ModalOverlay isOpen onClose={showSettings ? () => setShowSettings(false) : onClose} zIndex={300}>
       {/* ───── Invite Friends View ───── */}
       {!showSettings && (
       <div
-        className="bg-[#313338] rounded-xl w-[440px] max-h-[620px] flex flex-col shadow-modal animate-scale-in overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
+        className="bg-[#313338] rounded-xl w-[440px] max-h-[620px] flex flex-col shadow-modal overflow-hidden"
       >
         {/* ───── Header ───── */}
         <div className="px-5 pt-5 pb-0 flex-shrink-0">
@@ -328,8 +324,7 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
           onBack={() => setShowSettings(false)}
         />
       )}
-    </div>,
-    document.body,
+    </ModalOverlay>
   );
 }
 

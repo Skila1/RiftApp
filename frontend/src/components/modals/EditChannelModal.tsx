@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { useStreamStore } from '../../stores/streamStore';
+import ModalOverlay from '../shared/ModalOverlay';
 import type { Stream } from '../../types';
 
 interface Props {
@@ -13,16 +13,7 @@ export default function EditChannelModal({ stream, onClose }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const patchStream = useStreamStore((s) => s.patchStream);
-  const backdropRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [onClose]);
 
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 50);
@@ -46,15 +37,9 @@ export default function EditChannelModal({ stream, onClose }: Props) {
     }
   };
 
-  return createPortal(
-    <div
-      ref={backdropRef}
-      onClick={(e) => {
-        if (e.target === backdropRef.current) onClose();
-      }}
-      className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60"
-    >
-      <div className="bg-riftapp-panel rounded-xl shadow-modal w-full max-w-[440px] overflow-hidden animate-scale-in border border-riftapp-border/50">
+  return (
+    <ModalOverlay isOpen onClose={onClose} zIndex={300}>
+      <div className="bg-riftapp-panel rounded-xl shadow-modal w-full max-w-[440px] overflow-hidden border border-riftapp-border/50">
         <div className="px-6 pt-6 pb-4">
           <div className="flex items-center justify-between mb-1">
             <h2 className="text-xl font-bold">
@@ -98,7 +83,6 @@ export default function EditChannelModal({ stream, onClose }: Props) {
           </button>
         </div>
       </div>
-    </div>,
-    document.body,
+    </ModalOverlay>
   );
 }

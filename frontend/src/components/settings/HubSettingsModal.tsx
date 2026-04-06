@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
-import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useHubStore } from '../../stores/hubStore';
 import { useDMStore } from '../../stores/dmStore';
 import { useAuthStore } from '../../stores/auth';
 import { api } from '../../api/client';
 import ConfirmModal from '../modals/ConfirmModal';
+import ModalOverlay from '../shared/ModalOverlay';
 import StatusDot from '../shared/StatusDot';
 import type { Hub, User, HubEmoji, HubSticker, HubSound, HubRole } from '../../types';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
@@ -56,37 +56,10 @@ function HubSettingsModal({ hub, onClose }: { hub: Hub; onClose: () => void }) {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const modalRef = useRef<HTMLDivElement>(null);
 
+  // Auto-focus modal on mount
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-      // Trap focus inside modal
-      if (e.key === 'Tab' && modalRef.current) {
-        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        );
-        if (focusable.length === 0) return;
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
-    };
-    window.addEventListener('keydown', handler);
-    // Prevent background scroll
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    // Auto-focus modal
     requestAnimationFrame(() => modalRef.current?.focus());
-    return () => {
-      window.removeEventListener('keydown', handler);
-      document.body.style.overflow = prev;
-    };
-  }, [onClose]);
+  }, []);
 
   const currentUser = useAuthStore((s) => s.user);
   const isOwner = currentUser?.id === hub.owner_id;
@@ -119,19 +92,12 @@ function HubSettingsModal({ hub, onClose }: { hub: Hub; onClose: () => void }) {
     soundboard: 'Soundboard',
   };
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-[2px] animate-fade-in"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Server Settings"
-    >
+  return (
+    <ModalOverlay isOpen onClose={onClose} zIndex={300}>
       <div
         ref={modalRef}
         tabIndex={-1}
-        className="bg-[#313338] rounded-xl w-[940px] h-[660px] flex shadow-modal animate-scale-in overflow-hidden outline-none"
-        onClick={(e) => e.stopPropagation()}
+        className="bg-[#313338] rounded-xl w-[940px] h-[660px] flex shadow-modal overflow-hidden outline-none"
       >
         {/* ───── Left Sidebar ───── */}
         <nav className="w-[220px] bg-[#2b2d31] flex flex-col flex-shrink-0 overflow-y-auto">
@@ -212,8 +178,7 @@ function HubSettingsModal({ hub, onClose }: { hub: Hub; onClose: () => void }) {
           </div>
         </div>
       </div>
-    </div>,
-    document.body,
+    </ModalOverlay>
   );
 }
 
