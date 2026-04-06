@@ -229,11 +229,11 @@ export default function VoiceBottomBar() {
 
   return (
     <div className="flex-shrink-0 bg-[#232428]">
-      {/* ── Voice Connected Section ── */}
+      {/* ── Voice Connected Section (above user bar) ── */}
       {inVoice && (
         <>
           {/* Status row */}
-          <div className="flex items-center gap-2 px-3 pt-2 pb-1 border-t border-[#1a1b1e]">
+          <div className="flex items-center gap-2 px-3 pt-2 pb-1.5 border-t border-[#1a1b1e]">
             <div className="flex-1 min-w-0">
               <p className={`text-[13px] font-semibold leading-tight ${voiceStatus.className}`}>
                 {voiceStatus.label}
@@ -253,7 +253,7 @@ export default function VoiceBottomBar() {
           {/* Screen share notice */}
           {voiceScreenShareNotice && (
             <div
-              className={`mx-2 mt-1 flex items-center justify-between gap-2 rounded-lg border px-3 py-1.5 text-[12px] ${
+              className={`mx-2 mt-0.5 mb-1 flex items-center justify-between gap-2 rounded-lg border px-3 py-1.5 text-[12px] ${
                 voiceScreenShareNotice.tone === 'error'
                   ? 'border-[#f23f42]/30 bg-[#f23f42]/10 text-[#ffb3b5]'
                   : 'border-[#5865f2]/30 bg-[#5865f2]/10 text-[#cdd3ff]'
@@ -274,106 +274,46 @@ export default function VoiceBottomBar() {
             </div>
           )}
 
-          {/* 3-section control row */}
-          <div className="flex items-center px-2 py-1.5">
-            {/* LEFT: Avatar + Name + Status */}
-            <button
-              onClick={handleAvatarClick}
-              className="flex items-center gap-2 min-w-0 flex-shrink-0 px-1 py-1 rounded-md hover:bg-white/[0.06] transition-colors"
-              title="View Profile"
+          {/* Voice control buttons row */}
+          <div className="flex items-center justify-center gap-1 px-2 pb-2">
+            <VoiceControlBtn
+              title={voiceIsScreenSharing ? 'Stop Sharing' : 'Share Your Screen'}
+              onClick={voiceToggleScreenShare}
+              disabled={controlsDisabled || voiceScreenShareRequesting}
+              active={voiceIsScreenSharing}
             >
-              <div className="relative flex-shrink-0">
-                <div className="w-8 h-8 rounded-full bg-[#5865f2] flex items-center justify-center text-xs font-semibold text-white overflow-hidden">
-                  {user.avatar_url ? (
-                    <img src={publicAssetUrl(user.avatar_url)} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    user.display_name.slice(0, 2).toUpperCase()
-                  )}
-                </div>
-                <StatusDot
-                  userId={user.id}
-                  fallbackStatus={user.status}
-                  size="lg"
-                  className="absolute -bottom-0.5 -right-0.5 border-[2.5px] border-[#232428]"
-                />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[13px] font-semibold text-[#f2f3f5] truncate leading-tight max-w-[72px]">{user.display_name}</p>
-                <p className="text-[11px] text-[#b5bac1] truncate leading-tight">{statusLabel(currentStatus)}</p>
-              </div>
-            </button>
-
-            {/* CENTER: Mute, Deafen, Camera, Screenshare */}
-            <div className="flex items-center gap-1 mx-auto">
-              <VoiceControlBtn
-                title={voiceIsMuted ? 'Unmute' : 'Mute'}
-                onClick={voiceToggleMute}
-                danger={voiceIsMuted}
-              >
-                <MicIcon muted={voiceIsMuted} size={20} />
-              </VoiceControlBtn>
-              <VoiceControlBtn
-                title={voiceIsDeafened ? 'Undeafen' : 'Deafen'}
-                onClick={voiceToggleDeafen}
-                danger={voiceIsDeafened}
-              >
-                <HeadphonesIcon deafened={voiceIsDeafened} size={20} />
-              </VoiceControlBtn>
-              <VoiceControlBtn
-                title={voiceIsCameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
-                onClick={voiceToggleCamera}
-                disabled={controlsDisabled}
-                active={voiceIsCameraOn}
-              >
-                <CameraIcon enabled={voiceIsCameraOn} size={20} />
-              </VoiceControlBtn>
-              <VoiceControlBtn
-                title={voiceIsScreenSharing ? 'Stop Sharing' : 'Share Your Screen'}
-                onClick={voiceToggleScreenShare}
-                disabled={controlsDisabled || voiceScreenShareRequesting}
-                active={voiceIsScreenSharing}
-              >
-                {voiceScreenShareRequesting ? (
-                  <span className="h-5 w-5 rounded-full border-2 border-current/30 border-t-current animate-spin" />
-                ) : (
-                  <ScreenShareIcon active={voiceIsScreenSharing} size={20} />
-                )}
-              </VoiceControlBtn>
-            </div>
-
-            {/* RIGHT: Activities, Soundboard */}
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <VoiceControlBtn title="Activities" disabled>
-                <ActivitiesIcon size={20} />
-              </VoiceControlBtn>
-              <VoiceControlBtn
-                title="Soundboard"
-                onClick={() => setSoundboardOpen((v) => !v)}
-                disabled={controlsDisabled}
-                active={soundboardOpen}
-              >
-                <SoundboardControlIcon size={20} />
-              </VoiceControlBtn>
-            </div>
-          </div>
-
-          {/* Utility row: Noise suppression */}
-          <div className="flex items-center gap-2 px-2 pb-2">
-            <button
-              type="button"
+              {voiceScreenShareRequesting ? (
+                <span className="h-5 w-5 rounded-full border-2 border-current/30 border-t-current animate-spin" />
+              ) : (
+                <ScreenShareIcon active={voiceIsScreenSharing} size={20} />
+              )}
+            </VoiceControlBtn>
+            <VoiceControlBtn
+              title={voiceIsCameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
+              onClick={voiceToggleCamera}
+              disabled={controlsDisabled}
+              active={voiceIsCameraOn}
+            >
+              <CameraIcon enabled={voiceIsCameraOn} size={20} />
+            </VoiceControlBtn>
+            <VoiceControlBtn title="Activities" disabled>
+              <ActivitiesIcon size={20} />
+            </VoiceControlBtn>
+            <VoiceControlBtn
+              title="Soundboard"
+              onClick={() => setSoundboardOpen((v) => !v)}
+              disabled={controlsDisabled}
+              active={soundboardOpen}
+            >
+              <SoundboardControlIcon size={20} />
+            </VoiceControlBtn>
+            <VoiceControlBtn
+              title={voiceNoiseSuppressionEnabled ? 'Disable Noise Suppression' : 'Enable Noise Suppression'}
               onClick={() => void voiceToggleNoiseSuppression()}
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${
-                voiceNoiseSuppressionEnabled
-                  ? 'bg-[#5865f2]/15 text-[#cdd3ff] hover:bg-[#5865f2]/20'
-                  : 'bg-white/[0.04] text-[#949ba4] hover:bg-white/[0.08] hover:text-[#dbdee1]'
-              }`}
-              title="Noise suppression"
+              active={voiceNoiseSuppressionEnabled}
             >
-              <NoiseSuppressionIcon active={voiceNoiseSuppressionEnabled} size={14} />
-              <span className="truncate">
-                {voiceNoiseSuppressionEnabled ? 'Noise Suppression On' : 'Noise Suppression Off'}
-              </span>
-            </button>
+              <NoiseSuppressionIcon active={voiceNoiseSuppressionEnabled} size={20} />
+            </VoiceControlBtn>
           </div>
 
           {/* Soundboard panel */}
@@ -385,71 +325,69 @@ export default function VoiceBottomBar() {
         </>
       )}
 
-      {/* ── User Bar (when NOT in voice) ── */}
-      {!inVoice && (
-        <div className="h-[52px] flex items-center px-1.5 border-t border-[#1a1b1e]">
-          {/* Avatar + name */}
-          <button
-            onClick={handleAvatarClick}
-            className="flex items-center gap-2 flex-1 min-w-0 px-1 py-1 rounded-md hover:bg-white/[0.06] transition-all duration-150 group"
-            title="View Profile"
-          >
-            <div className="relative flex-shrink-0">
-              <div className="w-8 h-8 rounded-full bg-[#5865f2] flex items-center justify-center text-xs font-semibold text-white overflow-hidden">
-                {user.avatar_url ? (
-                  <img src={publicAssetUrl(user.avatar_url)} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  user.display_name.slice(0, 2).toUpperCase()
-                )}
-              </div>
-              <StatusDot
-                userId={user.id}
-                fallbackStatus={user.status}
-                size="lg"
-                className="absolute -bottom-0.5 -right-0.5 border-[2.5px] border-[#232428]"
-              />
+      {/* ── User Bar (always visible) ── */}
+      <div className="h-[52px] flex items-center px-1.5 border-t border-[#1a1b1e]">
+        {/* Avatar + name */}
+        <button
+          onClick={handleAvatarClick}
+          className="flex items-center gap-2 flex-1 min-w-0 px-1 py-1 rounded-md hover:bg-white/[0.06] transition-all duration-150 group"
+          title="View Profile"
+        >
+          <div className="relative flex-shrink-0">
+            <div className="w-8 h-8 rounded-full bg-[#5865f2] flex items-center justify-center text-xs font-semibold text-white overflow-hidden">
+              {user.avatar_url ? (
+                <img src={publicAssetUrl(user.avatar_url)} alt="" className="w-full h-full object-cover" />
+              ) : (
+                user.display_name.slice(0, 2).toUpperCase()
+              )}
             </div>
-            <div className="flex-1 min-w-0 text-left">
-              <p className="text-[13px] font-semibold truncate leading-tight">{user.display_name}</p>
-              <p className="text-[11px] text-[#b5bac1] truncate leading-tight">{statusLabel(currentStatus)}</p>
-            </div>
-          </button>
-
-          {/* Control buttons */}
-          <div className="flex items-center flex-shrink-0">
-            <button
-              onClick={voiceToggleMute}
-              title={voiceIsMuted ? 'Unmute' : 'Mute'}
-              className={`w-8 h-8 rounded-md flex items-center justify-center transition-all duration-150 active:scale-90 ${
-                voiceIsMuted
-                  ? 'text-[#ed4245] hover:bg-[#ed4245]/10'
-                  : 'text-[#b5bac1] hover:text-[#dbdee1] hover:bg-white/[0.06]'
-              }`}
-            >
-              <MicIcon muted={voiceIsMuted} size={18} />
-            </button>
-            <button
-              onClick={voiceToggleDeafen}
-              title={voiceIsDeafened ? 'Undeafen' : 'Deafen'}
-              className={`w-8 h-8 rounded-md flex items-center justify-center transition-all duration-150 active:scale-90 ${
-                voiceIsDeafened
-                  ? 'text-[#ed4245] hover:bg-[#ed4245]/10'
-                  : 'text-[#b5bac1] hover:text-[#dbdee1] hover:bg-white/[0.06]'
-              }`}
-            >
-              <HeadphonesIcon deafened={voiceIsDeafened} size={18} />
-            </button>
-            <button
-              onClick={() => openSettings('profile')}
-              title="User Settings"
-              className="w-8 h-8 rounded-md flex items-center justify-center text-[#b5bac1]
-                hover:text-[#dbdee1] hover:bg-white/[0.06] transition-all duration-150 active:scale-90"
-            >
-              <SettingsIcon size={18} />
-            </button>
+            <StatusDot
+              userId={user.id}
+              fallbackStatus={user.status}
+              size="lg"
+              className="absolute -bottom-0.5 -right-0.5 border-[2.5px] border-[#232428]"
+            />
           </div>
+          <div className="flex-1 min-w-0 text-left">
+            <p className="text-[13px] font-semibold truncate leading-tight">{user.display_name}</p>
+            <p className="text-[11px] text-[#b5bac1] truncate leading-tight">{statusLabel(currentStatus)}</p>
+          </div>
+        </button>
+
+        {/* Control buttons: Mute / Deafen / Settings */}
+        <div className="flex items-center flex-shrink-0">
+          <button
+            onClick={voiceToggleMute}
+            title={voiceIsMuted ? 'Unmute' : 'Mute'}
+            className={`w-8 h-8 rounded-md flex items-center justify-center transition-all duration-150 active:scale-90 ${
+              voiceIsMuted
+                ? 'text-[#ed4245] hover:bg-[#ed4245]/10'
+                : 'text-[#b5bac1] hover:text-[#dbdee1] hover:bg-white/[0.06]'
+            }`}
+          >
+            <MicIcon muted={voiceIsMuted} size={18} />
+          </button>
+          <button
+            onClick={voiceToggleDeafen}
+            title={voiceIsDeafened ? 'Undeafen' : 'Deafen'}
+            className={`w-8 h-8 rounded-md flex items-center justify-center transition-all duration-150 active:scale-90 ${
+              voiceIsDeafened
+                ? 'text-[#ed4245] hover:bg-[#ed4245]/10'
+                : 'text-[#b5bac1] hover:text-[#dbdee1] hover:bg-white/[0.06]'
+            }`}
+          >
+            <HeadphonesIcon deafened={voiceIsDeafened} size={18} />
+          </button>
+          <button
+            onClick={() => openSettings('profile')}
+            title="User Settings"
+            className="w-8 h-8 rounded-md flex items-center justify-center text-[#b5bac1]
+              hover:text-[#dbdee1] hover:bg-white/[0.06] transition-all duration-150 active:scale-90"
+          >
+            <SettingsIcon size={18} />
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }
