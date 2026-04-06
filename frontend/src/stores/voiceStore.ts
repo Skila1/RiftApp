@@ -4,6 +4,8 @@ import {
   RoomEvent,
   Track,
   VideoPresets,
+  AudioPresets,
+  ScreenSharePresets,
   type AudioCaptureOptions,
   type RemoteParticipant,
   type RemoteTrack,
@@ -280,6 +282,9 @@ function micAudioCaptureOptions(
     echoCancellation: true,
     autoGainControl: true,
     noiseSuppression: state.noiseSuppressionEnabled,
+    channelCount: 1,
+    sampleRate: 48000,
+    sampleSize: 16,
     deviceId: overrides?.includeDeviceId === false ? undefined : state.inputDeviceId ?? undefined,
     processor,
   };
@@ -301,7 +306,11 @@ function micAudioCaptureOptions(
 function cameraCaptureOptions(cameraDeviceId: string | null) {
   return {
     deviceId: cameraDeviceId ?? undefined,
-    resolution: VideoPresets.h1080.resolution,
+    resolution: {
+      width: 2560,
+      height: 1440,
+      frameRate: 60,
+    },
   };
 }
 
@@ -819,7 +828,7 @@ function inferSurfaceLabel(kind: ScreenShareKind): string {
 
 function buildScreenShareOptions(kind: ScreenShareKind) {
   const options: Record<string, unknown> = {
-    resolution: { width: 3840, height: 2160, frameRate: 60 },
+    resolution: { width: 1920, height: 1080, frameRate: 30 },
     contentHint: 'detail',
     surfaceSwitching: 'include',
   };
@@ -1077,9 +1086,20 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
       const room = new Room({
         adaptiveStream: true,
         dynacast: true,
-        webAudioMix: true,
         videoCaptureDefaults: cameraCaptureOptions(voiceState.cameraDeviceId),
         audioCaptureDefaults: micAudioCaptureOptions(voiceState),
+        publishDefaults: {
+          videoEncoding: {
+            maxBitrate: 8_000_000,
+            maxFramerate: 60,
+          },
+          screenShareEncoding: ScreenSharePresets.h1080fps30.encoding,
+          audioPreset: AudioPresets.musicHighQuality,
+          dtx: true,
+          red: true,
+          videoCodec: 'vp9',
+          backupCodec: { codec: 'vp8', encoding: VideoPresets.h720.encoding },
+        },
       });
       roomRef = room;
 

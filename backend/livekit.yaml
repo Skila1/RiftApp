@@ -7,6 +7,20 @@ rtc:
   use_external_ip: true
   stun_servers:
     - stun.l.google.com:19302
+  pli_throttle:
+    low_quality: 500ms
+    mid_quality: 1s
+    high_quality: 1s
+
+room:
+  empty_timeout: 300
+  max_participants: 100
+
+audio:
+  active_level: 30
+  min_percentile: 1
+  update_interval: 400
+  smooth_intervals: 2
 
 turn:
   enabled: true
