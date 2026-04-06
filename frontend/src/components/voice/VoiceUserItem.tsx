@@ -85,16 +85,15 @@ export default function VoiceUserItem({
         <span className={`text-[13px] truncate flex-1 ${participant.isSpeaking ? 'text-riftapp-success font-medium' : 'text-riftapp-text-muted'}`}>
           {hideName ? 'User' : name}
         </span>
+        {participant.isScreenSharing && (
+          <span className="flex-shrink-0 rounded bg-[#ed4245] px-1 py-[1px] text-[10px] font-extrabold leading-tight text-white uppercase tracking-wide">
+            Live
+          </span>
+        )}
         {participant.isMuted && (
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-riftapp-danger/70 flex-shrink-0">
             <line x1="1" y1="1" x2="23" y2="23" />
             <path d="M9 9v3a3 3 0 005.12 2.12M15 9.34V4a3 3 0 00-5.94-.6" />
-          </svg>
-        )}
-        {participant.isScreenSharing && (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-riftapp-accent flex-shrink-0">
-            <rect x="2" y="3" width="20" height="14" rx="2" />
-            <line x1="12" y1="17" x2="12" y2="21" />
           </svg>
         )}
       </button>

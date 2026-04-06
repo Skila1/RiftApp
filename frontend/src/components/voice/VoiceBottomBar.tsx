@@ -170,7 +170,6 @@ export default function VoiceBottomBar() {
   const voiceLeave = useVoiceStore((s) => s.leave);
   const voiceStreamId = useVoiceStore((s) => s.streamId);
   const voiceScreenShareRequesting = useVoiceStore((s) => s.screenShareRequesting);
-  const voiceScreenShareSurfaceLabel = useVoiceStore((s) => s.screenShareSurfaceLabel);
   const voiceScreenShareNotice = useVoiceStore((s) => s.screenShareNotice);
   const voiceDismissScreenShareNotice = useVoiceStore((s) => s.dismissScreenShareNotice);
   const voiceNoiseSuppressionEnabled = useVoiceStore((s) => s.noiseSuppressionEnabled);
@@ -272,16 +271,6 @@ export default function VoiceBottomBar() {
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
               </button>
-            </div>
-          )}
-
-          {/* Screen share live indicator */}
-          {voiceConnected && voiceIsScreenSharing && voiceScreenShareSurfaceLabel && (
-            <div className="mx-2 mt-1 rounded-lg border border-[#ed4245]/30 bg-[#ed4245]/10 px-3 py-1.5 text-[12px]">
-              <div className="flex items-center gap-2">
-                <span className="rounded bg-[#ed4245] px-1.5 py-0.5 text-[10px] font-bold text-white">LIVE</span>
-                <p className="min-w-0 truncate font-semibold text-white">Sharing {voiceScreenShareSurfaceLabel}</p>
-              </div>
             </div>
           )}
 
