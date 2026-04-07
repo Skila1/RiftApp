@@ -139,7 +139,7 @@ export default function HubSidebar() {
   };
 
   return (
-    <div className="w-[72px] flex-shrink-0 bg-riftapp-bg flex flex-col items-center py-3 gap-2 overflow-y-auto">
+    <div className="w-[72px] flex-shrink-0 bg-[#232428] flex flex-col items-center py-3 gap-2 overflow-y-auto">
       {/* DM Button */}
       <div
         className="relative flex items-center justify-center w-full"
@@ -165,7 +165,7 @@ export default function HubSidebar() {
           </svg>
           {dmTotalUnread > 0 && (
             <span
-              className="absolute -bottom-1 -right-1 z-20 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white border-2 border-riftapp-bg leading-none"
+              className="absolute -bottom-1 -right-1 z-20 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white border-2 border-[#232428] leading-none"
               aria-label={`${dmTotalUnread} unread direct messages`}
             >
               {formatMentionBadge(dmTotalUnread)}
@@ -233,7 +233,7 @@ export default function HubSidebar() {
               )}
               {mentions > 0 && (
                 <span
-                  className="absolute -bottom-1 -right-1 z-20 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white border-2 border-riftapp-bg leading-none"
+                  className="absolute -bottom-1 -right-1 z-20 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-600 text-[11px] font-bold text-white border-2 border-[#232428] leading-none"
                   aria-label={`${mentions} mentions`}
                 >
                   {formatMentionBadge(mentions)}

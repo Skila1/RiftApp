@@ -103,13 +103,13 @@ function TitleBar() {
       return activeHub?.name ? `Hub • ${activeHub.name}` : 'Hub';
     }
 
-    if (location.pathname === '/app') return 'Friends';
+    if (location.pathname === '/app') return null;
     if (location.pathname === '/login') return 'Login';
     if (location.pathname === '/register') return 'Register';
     if (location.pathname === '/discover') return 'Discover';
     if (location.pathname === '/support') return 'Support';
     if (location.pathname.startsWith('/invite/')) return 'Invite';
-    return 'Rift';
+    return null;
   }, [activeConversationId, activeHubId, conversations, hubs, location.pathname]);
 
   useEffect(() => {
@@ -209,7 +209,7 @@ function TitleBar() {
       style={
         {
           WebkitAppRegion: 'drag',
-          background: 'linear-gradient(180deg, rgba(28,29,34,0.98) 0%, rgba(24,25,28,0.98) 100%)',
+          background: '#232428',
           boxShadow: 'inset 0 -1px 0 rgba(255,255,255,0.03)',
         } as React.CSSProperties
       }
@@ -220,8 +220,12 @@ function TitleBar() {
           <span className="inline-flex h-2.5 w-2.5 rounded-full bg-[#5865f2] shadow-[0_0_12px_rgba(88,101,242,0.45)]" />
           <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#8b90a2]">Rift</span>
         </div>
-        <span className="h-4 w-px bg-white/[0.08]" />
-        <span className="truncate text-[12px] font-semibold text-[#d4d7de]">{windowLabel}</span>
+        {windowLabel && (
+          <>
+            <span className="h-4 w-px bg-white/[0.08]" />
+            <span className="truncate text-[12px] font-semibold text-[#d4d7de]">{windowLabel}</span>
+          </>
+        )}
       </div>
 
       <div
@@ -253,8 +257,8 @@ function TitleBar() {
           className="window-button flex h-full w-[44px] items-center justify-center text-[#aeb4c0] transition-colors hover:bg-white/[0.07] hover:text-white"
           aria-label="Minimize"
         >
-          <svg width="10" height="1" viewBox="0 0 10 1" fill="currentColor" aria-hidden>
-            <rect width="10" height="1" />
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden>
+            <line x1="1.75" y1="6.25" x2="8.25" y2="6.25" />
           </svg>
         </button>
 
