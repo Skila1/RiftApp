@@ -16,6 +16,7 @@ function getDesktop(): DesktopAPI | undefined {
         void d.close?.();
       },
       isMaximized: () => d.isMaximized?.() ?? Promise.resolve(false),
+      getVersion: () => d.getVersion?.() ?? Promise.resolve(''),
       isUpdateReady: () => d.isUpdateReady?.() ?? Promise.resolve(false),
       onMaximizedChange: (cb) => d.onMaximizedChange?.(cb) ?? (() => {}),
       onUpdateReady: (cb) => d.onUpdateReady?.(cb) ?? (() => {}),
@@ -38,6 +39,7 @@ function getDesktop(): DesktopAPI | undefined {
       void r.close();
     },
     isMaximized: () => r.isMaximized(),
+    getVersion: async () => '',
     isUpdateReady: async () => false,
     onMaximizedChange: r.onMaximizedChange,
     onUpdateReady: () => () => {},

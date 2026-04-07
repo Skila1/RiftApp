@@ -20,6 +20,27 @@ function SettingsModal() {
   const closeSettings = useAppSettingsStore((s) => s.closeSettings);
   const setSettingsTab = useAppSettingsStore((s) => s.setSettingsTab);
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const [appVersionLabel, setAppVersionLabel] = useState('Web App');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    if (window.desktop && typeof window.desktop.getVersion === 'function') {
+      void window.desktop
+        .getVersion()
+        .then((version) => {
+          setAppVersionLabel(version ? `Rift Desktop v${version}` : 'Rift Desktop');
+        })
+        .catch(() => {
+          setAppVersionLabel('Rift Desktop');
+        });
+      return;
+    }
+
+    if (window.desktop || window.riftDesktop) {
+      setAppVersionLabel('Rift Desktop');
+    }
+  }, []);
 
   if (!user) return null;
 
@@ -31,10 +52,9 @@ function SettingsModal() {
   ];
 
   return (
-    <ModalOverlay isOpen onClose={closeSettings} center={false} backdropClose zIndex={200}>
-      <div className="h-full w-full text-riftapp-text" onClick={(e) => { if (e.target === e.currentTarget) closeSettings(); }}>
-        <div className="mx-auto flex h-full w-full max-w-[1240px] flex-col overflow-hidden md:flex-row">
-            <nav className="w-full shrink-0 overflow-y-auto border-b border-riftapp-border/40 px-4 py-5 md:w-[272px] md:border-b-0 md:border-r md:px-5 md:py-8 bg-[#1e1f22]">
+    <ModalOverlay isOpen onClose={closeSettings} backdropClose zIndex={200} className="p-4 md:p-8">
+      <div className="flex h-[min(88vh,820px)] w-full max-w-[1120px] flex-col overflow-hidden rounded-[24px] border border-riftapp-border/40 bg-[#1e1f22] text-riftapp-text shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:flex-row">
+            <nav className="flex w-full shrink-0 flex-col overflow-y-auto border-b border-riftapp-border/40 bg-[#1e1f22] px-4 py-5 md:w-[280px] md:border-b-0 md:border-r md:px-5 md:py-7">
             <div className="mx-auto flex w-full max-w-[232px] flex-col gap-5">
               <div>
                 <h3 className="section-label px-2 mb-3">User Settings</h3>
@@ -101,12 +121,17 @@ function SettingsModal() {
                     Log Out
                   </button>
                 )}
+
+                <div className="mt-4 rounded-xl border border-riftapp-border/30 bg-riftapp-panel/25 px-3 py-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-riftapp-text-dim">App Version</p>
+                  <p className="mt-1 text-[12px] font-medium text-riftapp-text-muted">{appVersionLabel}</p>
+                </div>
               </div>
             </div>
           </nav>
 
-          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain [contain:content] bg-[#313338]">
-            <div className="mx-auto flex min-h-full w-full max-w-[960px] flex-col px-6 py-6 md:px-10 md:py-8">
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain bg-[#313338] [contain:content]">
+            <div className="mx-auto flex min-h-full w-full max-w-[920px] flex-col px-6 py-6 md:px-10 md:py-8">
               <div className="sticky top-0 z-10 -mx-6 mb-6 flex items-center justify-between border-b border-riftapp-border/40 bg-[#313338] px-6 pb-4 pt-1 md:-mx-10 md:px-10 md:pb-5">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-riftapp-accent">User Settings</p>
@@ -148,7 +173,6 @@ function SettingsModal() {
               </div>
             </div>
           </div>
-        </div>
       </div>
     </ModalOverlay>
   );

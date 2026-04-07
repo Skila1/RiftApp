@@ -239,6 +239,7 @@ function registerIpc(): void {
     return windowFromEvent(e.sender)?.isMaximized() ?? false;
   });
 
+  ipcMain.handle("app:get-version", () => appVersion);
   ipcMain.handle("app:is-update-ready", () => updateReady);
 
   ipcMain.on("app:restart-to-update", () => {
