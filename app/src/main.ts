@@ -16,6 +16,15 @@ const VITE_DEV_URL = "http://localhost:5173";
 const PRODUCTION_WEB_APP_URL = "https://riftapp.io/login";
 const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
+type DesktopUpdateState = "idle" | "checking" | "downloading" | "ready" | "up-to-date" | "error";
+
+type DesktopUpdateStatus = {
+  state: DesktopUpdateState;
+  version: string;
+  progress: number | null;
+  message: string;
+};
+
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 const appVersion = app.getVersion();
 
@@ -31,6 +40,13 @@ let updateReady = false;
 let updateDownloading = false;
 let updateCheckInFlight = false;
 let backgroundUpdateTimer: ReturnType<typeof setInterval> | null = null;
+let updateStatusResetTimer: ReturnType<typeof setTimeout> | null = null;
+let updateStatus: DesktopUpdateStatus = {
+  state: "idle",
+  version: "",
+  progress: null,
+  message: "",
+};
 
 // ── Paths ──────────────────────────────────────────────────
 
@@ -45,6 +61,42 @@ function getPreloadPath(): string {
 
 function getAppIcon(): Electron.NativeImage {
   return nativeImage.createFromPath(getAssetPath("icon.png"));
+}
+
+function clearUpdateStatusResetTimer(): void {
+  if (updateStatusResetTimer) {
+    clearTimeout(updateStatusResetTimer);
+    updateStatusResetTimer = null;
+  }
+}
+
+function broadcastUpdateStatus(): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("update-status", updateStatus);
+  }
+}
+
+function setUpdateStatus(
+  next: DesktopUpdateStatus,
+  options?: { resetToIdleMs?: number },
+): void {
+  clearUpdateStatusResetTimer();
+  updateStatus = next;
+  broadcastUpdateStatus();
+
+  if (options?.resetToIdleMs) {
+    updateStatusResetTimer = setTimeout(() => {
+      if (updateReady || updateDownloading || updateCheckInFlight) return;
+      updateStatus = {
+        state: "idle",
+        version: "",
+        progress: null,
+        message: "",
+      };
+      broadcastUpdateStatus();
+      updateStatusResetTimer = null;
+    }, options.resetToIdleMs);
+  }
 }
 
 // ── Splash / updater window ────────────────────────────────
@@ -256,7 +308,24 @@ function registerIpc(): void {
       ? `${os.version()} (${os.release()})`
       : os.release(),
   }));
+  ipcMain.handle("app:get-update-status", () => updateStatus);
   ipcMain.handle("app:is-update-ready", () => updateReady);
+  ipcMain.handle("app:check-for-updates", async () => {
+    if (isDev) {
+      setUpdateStatus(
+        {
+          state: "error",
+          version: "",
+          progress: null,
+          message: "Updates are unavailable in development builds.",
+        },
+        { resetToIdleMs: 5000 },
+      );
+      return updateStatus;
+    }
+
+    return runBackgroundUpdateCheck("manual");
+  });
 
   ipcMain.on("app:restart-to-update", () => {
     allowMainWindowClose = true;
@@ -279,17 +348,34 @@ function configureUpdaterFeed(): void {
   }
 }
 
-async function runBackgroundUpdateCheck(reason: string): Promise<void> {
-  if (updateReady || updateDownloading || updateCheckInFlight) return;
+async function runBackgroundUpdateCheck(reason: string): Promise<DesktopUpdateStatus> {
+  if (updateReady || updateDownloading || updateCheckInFlight) return updateStatus;
 
   updateCheckInFlight = true;
   configureUpdaterFeed();
-  console.log(`[Rift updater] Checking for update (${reason})…`);
+  setUpdateStatus({
+    state: "checking",
+    version: updateStatus.version,
+    progress: null,
+    message: reason === "manual" ? "Checking for updates..." : "",
+  });
+  console.log(`[Rift updater] Checking for update (${reason})...`);
 
   try {
     await autoUpdater.checkForUpdates();
+    return updateStatus;
   } catch (err) {
+    setUpdateStatus(
+      {
+        state: "error",
+        version: "",
+        progress: null,
+        message: err instanceof Error ? err.message : "Update check failed.",
+      },
+      { resetToIdleMs: 5000 },
+    );
     console.error(`[Rift updater] checkForUpdates failed (${reason}):`, err);
+    return updateStatus;
   } finally {
     updateCheckInFlight = false;
   }
@@ -337,22 +423,55 @@ function backgroundUpdateDownload(): void {
   configureUpdaterFeed();
 
   autoUpdater.on("checking-for-update", () => {
-    console.log("[Rift updater] Checking for update…");
+    setUpdateStatus({
+      state: "checking",
+      version: updateStatus.version,
+      progress: null,
+      message: "Checking for updates...",
+    });
+    console.log("[Rift updater] Checking for update...");
   });
   autoUpdater.on("update-available", (info) => {
     updateDownloading = true;
+    setUpdateStatus({
+      state: "downloading",
+      version: info.version,
+      progress: 0,
+      message: `Downloading v${info.version}...`,
+    });
     console.log(`[Rift updater] Update available: v${info.version}`);
   });
   autoUpdater.on("update-not-available", (info) => {
     updateDownloading = false;
+    setUpdateStatus(
+      {
+        state: "up-to-date",
+        version: info.version,
+        progress: null,
+        message: `You're on the latest version (${info.version}).`,
+      },
+      { resetToIdleMs: 4000 },
+    );
     console.log(`[Rift updater] Already up-to-date (v${info.version})`);
   });
   autoUpdater.on("download-progress", (info) => {
-    console.log(`[Rift updater] Downloading… ${Math.round(info.percent)}%`);
+    setUpdateStatus({
+      state: "downloading",
+      version: updateStatus.version,
+      progress: Math.round(info.percent),
+      message: `Downloading update... ${Math.round(info.percent)}%`,
+    });
+    console.log(`[Rift updater] Downloading... ${Math.round(info.percent)}%`);
   });
   autoUpdater.on("update-downloaded", (info) => {
     updateDownloading = false;
     updateReady = true;
+    setUpdateStatus({
+      state: "ready",
+      version: info.version,
+      progress: 100,
+      message: `Restart to install v${info.version}.`,
+    });
     console.log(`[Rift updater] Downloaded v${info.version} — notifying renderer`);
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("update-ready");
@@ -360,6 +479,15 @@ function backgroundUpdateDownload(): void {
   });
   autoUpdater.on("error", (err) => {
     updateDownloading = false;
+    setUpdateStatus(
+      {
+        state: "error",
+        version: updateStatus.version,
+        progress: null,
+        message: err instanceof Error ? err.message : "Update download failed.",
+      },
+      { resetToIdleMs: 5000 },
+    );
     console.error("[Rift updater] Error:", err?.message ?? err);
   });
 
@@ -435,6 +563,7 @@ if (!gotLock) {
 
   app.on("before-quit", () => {
     allowMainWindowClose = true;
+    clearUpdateStatusResetTimer();
     clearBackgroundUpdateTimer();
     tray?.destroy();
     tray = null;

@@ -6,6 +6,13 @@ export interface DesktopBuildInfo {
   osVersion: string;
 }
 
+export interface DesktopUpdateStatus {
+  state: 'idle' | 'checking' | 'downloading' | 'ready' | 'up-to-date' | 'error';
+  version: string;
+  progress: number | null;
+  message: string;
+}
+
 export interface DesktopAPI {
   minimize: () => void;
   maximize: () => void;
@@ -13,8 +20,11 @@ export interface DesktopAPI {
   isMaximized: () => Promise<boolean>;
   getVersion: () => Promise<string>;
   getBuildInfo: () => Promise<DesktopBuildInfo>;
+  getUpdateStatus: () => Promise<DesktopUpdateStatus>;
   isUpdateReady: () => Promise<boolean>;
+  checkForUpdates: () => Promise<DesktopUpdateStatus>;
   onMaximizedChange: (cb: (maximized: boolean) => void) => () => void;
+  onUpdateStatus: (cb: (status: DesktopUpdateStatus) => void) => () => void;
   onUpdateReady: (cb: () => void) => () => void;
   restartToUpdate: () => void;
 }

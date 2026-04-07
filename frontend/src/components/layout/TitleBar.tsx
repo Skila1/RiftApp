@@ -1,8 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import type { DesktopAPI, DesktopBuildInfo } from '@/types/desktop';
+import type { DesktopAPI, DesktopBuildInfo, DesktopUpdateStatus } from '@/types/desktop';
 import { useDMStore } from '../../stores/dmStore';
 import { useHubStore } from '../../stores/hubStore';
+
+const idleDesktopUpdateStatus: DesktopUpdateStatus = {
+  state: 'idle',
+  version: '',
+  progress: null,
+  message: '',
+};
+
+const unsupportedDesktopUpdateStatus: DesktopUpdateStatus = {
+  state: 'error',
+  version: '',
+  progress: null,
+  message: 'Install the latest desktop build to use in-app updates.',
+};
 
 function getDesktop(): DesktopAPI | undefined {
   if (typeof window === 'undefined') return undefined;
@@ -27,8 +41,11 @@ function getDesktop(): DesktopAPI | undefined {
         arch: '',
         osVersion: '',
       } satisfies DesktopBuildInfo),
+      getUpdateStatus: () => d.getUpdateStatus?.() ?? Promise.resolve(idleDesktopUpdateStatus),
       isUpdateReady: () => d.isUpdateReady?.() ?? Promise.resolve(false),
+      checkForUpdates: () => d.checkForUpdates?.() ?? Promise.resolve(unsupportedDesktopUpdateStatus),
       onMaximizedChange: (cb) => d.onMaximizedChange?.(cb) ?? (() => {}),
+      onUpdateStatus: (cb) => d.onUpdateStatus?.(cb) ?? (() => {}),
       onUpdateReady: (cb) => d.onUpdateReady?.(cb) ?? (() => {}),
       restartToUpdate: () => {
         d.restartToUpdate?.();
@@ -57,8 +74,11 @@ function getDesktop(): DesktopAPI | undefined {
       arch: '',
       osVersion: '',
     }),
+    getUpdateStatus: async () => idleDesktopUpdateStatus,
     isUpdateReady: async () => false,
+    checkForUpdates: async () => idleDesktopUpdateStatus,
     onMaximizedChange: r.onMaximizedChange,
+    onUpdateStatus: () => () => {},
     onUpdateReady: () => () => {},
     restartToUpdate: () => {},
   };
@@ -72,7 +92,7 @@ function TitleBar() {
   const location = useLocation();
   const [ready, setReady] = useState(false);
   const [maximized, setMaximized] = useState(false);
-  const [updateReady, setUpdateReady] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<DesktopUpdateStatus>(idleDesktopUpdateStatus);
   const hubs = useHubStore((s) => s.hubs);
   const activeHubId = useHubStore((s) => s.activeHubId);
   const conversations = useDMStore((s) => s.conversations);
@@ -124,27 +144,39 @@ function TitleBar() {
     if (!api) return;
     let cancelled = false;
     let unlistenMaximized: (() => void) | undefined;
+    let unlistenUpdateStatus: (() => void) | undefined;
     let unlistenUpdate: (() => void) | undefined;
     const run = async () => {
-      const [isMaximized, isUpdateReady] = await Promise.all([
+      const [isMaximized, currentUpdateStatus] = await Promise.all([
         api.isMaximized(),
-        api.isUpdateReady(),
+        api.getUpdateStatus(),
       ]);
       if (!cancelled) {
         setMaximized(isMaximized);
-        setUpdateReady(isUpdateReady);
+        setUpdateStatus(currentUpdateStatus);
       }
       unlistenMaximized = api.onMaximizedChange((v) => {
         if (!cancelled) setMaximized(v);
       });
+      unlistenUpdateStatus = api.onUpdateStatus((status) => {
+        if (!cancelled) setUpdateStatus(status);
+      });
       unlistenUpdate = api.onUpdateReady(() => {
-        if (!cancelled) setUpdateReady(true);
+        if (!cancelled) {
+          setUpdateStatus((current) => ({
+            ...current,
+            state: 'ready',
+            progress: 100,
+            message: current.message || 'Restart to install the update.',
+          }));
+        }
       });
     };
     void run();
     return () => {
       cancelled = true;
       unlistenMaximized?.();
+      unlistenUpdateStatus?.();
       unlistenUpdate?.();
     };
   }, [ready]);
@@ -153,10 +185,51 @@ function TitleBar() {
 
   const api = getDesktop()!;
 
+  const updateButtonLabel =
+    updateStatus.state === 'ready'
+      ? 'Restart'
+      : updateStatus.state === 'checking'
+        ? 'Checking'
+        : updateStatus.state === 'downloading'
+          ? updateStatus.progress != null
+            ? `${updateStatus.progress}%`
+            : 'Downloading'
+          : updateStatus.state === 'error'
+            ? 'Retry'
+            : updateStatus.state === 'up-to-date'
+              ? 'Latest'
+              : 'Update';
+
+  const updateButtonTitle =
+    updateStatus.state === 'ready'
+      ? updateStatus.message || 'Restart to install the downloaded update.'
+      : updateStatus.message || 'Check for updates';
+
+  const updateButtonBusy = updateStatus.state === 'checking' || updateStatus.state === 'downloading';
+
+  const updateButtonClassName =
+    updateStatus.state === 'ready'
+      ? 'my-auto flex h-6 items-center gap-1 rounded-full border border-[#43b581]/25 bg-[#1f3d2a] px-2 text-[#43b581] shadow-[inset_0_0_0_1px_rgba(67,181,129,0.12)] transition-colors hover:bg-[#285336] hover:text-[#6ee7a5]'
+      : updateStatus.state === 'checking' || updateStatus.state === 'downloading'
+        ? 'my-auto flex h-6 items-center gap-1 rounded-full border border-[#5865f2]/20 bg-[#23263a] px-2 text-[#c8cdfb] shadow-[inset_0_0_0_1px_rgba(88,101,242,0.08)]'
+        : updateStatus.state === 'error'
+          ? 'my-auto flex h-6 items-center gap-1 rounded-full border border-[#ed4245]/20 bg-[#3a2326] px-2 text-[#f5b7b8] shadow-[inset_0_0_0_1px_rgba(237,66,69,0.08)] transition-colors hover:bg-[#4a2a2e] hover:text-white'
+          : 'my-auto flex h-6 items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-2 text-[#cbd2dc] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)] transition-colors hover:bg-white/[0.08] hover:text-white';
+
   const handleUpdateClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    api.restartToUpdate();
+
+    if (updateButtonBusy) return;
+
+    if (updateStatus.state === 'ready') {
+      api.restartToUpdate();
+      return;
+    }
+
+    void api.checkForUpdates().then((status) => {
+      setUpdateStatus(status);
+    });
   };
 
   const handleMinimizeClick = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -202,23 +275,31 @@ function TitleBar() {
         className="flex h-full items-stretch gap-2 pr-1"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       >
-        {updateReady && (
-          <button
-            type="button"
-            onClick={handleUpdateClick}
-            onMouseDown={(event) => event.stopPropagation()}
-            className="my-auto flex h-6 items-center gap-1 rounded-full border border-[#43b581]/25 bg-[#1f3d2a] px-2 text-[#43b581] shadow-[inset_0_0_0_1px_rgba(67,181,129,0.12)] transition-colors hover:bg-[#285336] hover:text-[#6ee7a5]"
-            aria-label="Restart to install update"
-            title="Restart to install the downloaded update"
-          >
+        <button
+          type="button"
+          onClick={handleUpdateClick}
+          onMouseDown={(event) => event.stopPropagation()}
+          className={updateButtonClassName}
+          aria-label={updateStatus.state === 'ready' ? 'Restart and install update' : 'Check for updates'}
+          title={updateButtonTitle}
+          disabled={updateButtonBusy}
+        >
+          {updateButtonBusy ? (
+            <span className="h-3 w-3 rounded-full border border-current border-t-transparent animate-spin" aria-hidden />
+          ) : updateStatus.state === 'ready' ? (
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d="M6 1.75v5.25" />
               <path d="M3.75 5.75L6 8l2.25-2.25" />
               <path d="M2.5 10h7" />
             </svg>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.12em]">Update</span>
-          </button>
-        )}
+          ) : (
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M10 6A4 4 0 1 1 8.87 3.13" />
+              <path d="M10 2.5v2.75H7.25" />
+            </svg>
+          )}
+          <span className="text-[10px] font-semibold uppercase tracking-[0.12em]">{updateButtonLabel}</span>
+        </button>
 
         <div className="window-buttons flex h-full items-stretch">
         <button
