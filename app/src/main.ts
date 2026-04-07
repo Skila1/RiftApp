@@ -14,7 +14,7 @@ import { autoUpdater } from "electron-updater";
 
 const VITE_DEV_URL = "http://localhost:5173";
 const PRODUCTION_WEB_APP_URL = "https://riftapp.io/login";
-const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+const UPDATE_CHECK_INTERVAL_MS = 3 * 60 * 1000;
 
 type DesktopUpdateState = "idle" | "checking" | "downloading" | "ready" | "up-to-date" | "error";
 

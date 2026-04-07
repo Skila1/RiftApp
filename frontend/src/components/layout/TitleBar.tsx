@@ -11,13 +11,6 @@ const idleDesktopUpdateStatus: DesktopUpdateStatus = {
   message: '',
 };
 
-const unsupportedDesktopUpdateStatus: DesktopUpdateStatus = {
-  state: 'error',
-  version: '',
-  progress: null,
-  message: 'Install the latest desktop build to use in-app updates.',
-};
-
 function getDesktop(): DesktopAPI | undefined {
   if (typeof window === 'undefined') return undefined;
   const d = window.desktop as Partial<DesktopAPI> | undefined;
@@ -43,7 +36,7 @@ function getDesktop(): DesktopAPI | undefined {
       } satisfies DesktopBuildInfo),
       getUpdateStatus: () => d.getUpdateStatus?.() ?? Promise.resolve(idleDesktopUpdateStatus),
       isUpdateReady: () => d.isUpdateReady?.() ?? Promise.resolve(false),
-      checkForUpdates: () => d.checkForUpdates?.() ?? Promise.resolve(unsupportedDesktopUpdateStatus),
+      checkForUpdates: () => d.checkForUpdates?.() ?? Promise.resolve(idleDesktopUpdateStatus),
       onMaximizedChange: (cb) => d.onMaximizedChange?.(cb) ?? (() => {}),
       onUpdateStatus: (cb) => d.onUpdateStatus?.(cb) ?? (() => {}),
       onUpdateReady: (cb) => d.onUpdateReady?.(cb) ?? (() => {}),
@@ -184,52 +177,12 @@ function TitleBar() {
   if (!ready || !getDesktop()) return null;
 
   const api = getDesktop()!;
-
-  const updateButtonLabel =
-    updateStatus.state === 'ready'
-      ? 'Restart'
-      : updateStatus.state === 'checking'
-        ? 'Checking'
-        : updateStatus.state === 'downloading'
-          ? updateStatus.progress != null
-            ? `${updateStatus.progress}%`
-            : 'Downloading'
-          : updateStatus.state === 'error'
-            ? 'Retry'
-            : updateStatus.state === 'up-to-date'
-              ? 'Latest'
-              : 'Update';
-
-  const updateButtonTitle =
-    updateStatus.state === 'ready'
-      ? updateStatus.message || 'Restart to install the downloaded update.'
-      : updateStatus.message || 'Check for updates';
-
-  const updateButtonBusy = updateStatus.state === 'checking' || updateStatus.state === 'downloading';
-
-  const updateButtonClassName =
-    updateStatus.state === 'ready'
-      ? 'my-auto flex h-6 items-center gap-1 rounded-full border border-[#43b581]/25 bg-[#1f3d2a] px-2 text-[#43b581] shadow-[inset_0_0_0_1px_rgba(67,181,129,0.12)] transition-colors hover:bg-[#285336] hover:text-[#6ee7a5]'
-      : updateStatus.state === 'checking' || updateStatus.state === 'downloading'
-        ? 'my-auto flex h-6 items-center gap-1 rounded-full border border-[#5865f2]/20 bg-[#23263a] px-2 text-[#c8cdfb] shadow-[inset_0_0_0_1px_rgba(88,101,242,0.08)]'
-        : updateStatus.state === 'error'
-          ? 'my-auto flex h-6 items-center gap-1 rounded-full border border-[#ed4245]/20 bg-[#3a2326] px-2 text-[#f5b7b8] shadow-[inset_0_0_0_1px_rgba(237,66,69,0.08)] transition-colors hover:bg-[#4a2a2e] hover:text-white'
-          : 'my-auto flex h-6 items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-2 text-[#cbd2dc] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)] transition-colors hover:bg-white/[0.08] hover:text-white';
+  const showUpdateButton = updateStatus.state === 'ready';
 
   const handleUpdateClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-
-    if (updateButtonBusy) return;
-
-    if (updateStatus.state === 'ready') {
-      api.restartToUpdate();
-      return;
-    }
-
-    void api.checkForUpdates().then((status) => {
-      setUpdateStatus(status);
-    });
+    if (updateStatus.state === 'ready') api.restartToUpdate();
   };
 
   const handleMinimizeClick = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -275,31 +228,22 @@ function TitleBar() {
         className="flex h-full items-stretch gap-2 pr-1"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       >
-        <button
-          type="button"
-          onClick={handleUpdateClick}
-          onMouseDown={(event) => event.stopPropagation()}
-          className={updateButtonClassName}
-          aria-label={updateStatus.state === 'ready' ? 'Restart and install update' : 'Check for updates'}
-          title={updateButtonTitle}
-          disabled={updateButtonBusy}
-        >
-          {updateButtonBusy ? (
-            <span className="h-3 w-3 rounded-full border border-current border-t-transparent animate-spin" aria-hidden />
-          ) : updateStatus.state === 'ready' ? (
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M6 1.75v5.25" />
-              <path d="M3.75 5.75L6 8l2.25-2.25" />
-              <path d="M2.5 10h7" />
+        {showUpdateButton && (
+          <button
+            type="button"
+            onClick={handleUpdateClick}
+            onMouseDown={(event) => event.stopPropagation()}
+            className="my-auto flex h-7 w-7 items-center justify-center rounded-md text-[#43b581] transition-colors hover:bg-[#285336]/55 hover:text-[#6ee7a5]"
+            aria-label="Restart and install update"
+            title={updateStatus.message || 'Restart to install the downloaded update'}
+          >
+            <svg width="14" height="14" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M6 1.5v5" />
+              <path d="M3.75 4.75L6 7l2.25-2.25" />
+              <path d="M2.25 9.75h7.5" />
             </svg>
-          ) : (
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M10 6A4 4 0 1 1 8.87 3.13" />
-              <path d="M10 2.5v2.75H7.25" />
-            </svg>
-          )}
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em]">{updateButtonLabel}</span>
-        </button>
+          </button>
+        )}
 
         <div className="window-buttons flex h-full items-stretch">
         <button
