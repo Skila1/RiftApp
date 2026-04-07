@@ -3,7 +3,28 @@ import type { DesktopAPI } from '@/types/desktop';
 
 function getDesktop(): DesktopAPI | undefined {
   if (typeof window === 'undefined') return undefined;
-  if (window.desktop) return window.desktop;
+  const d = window.desktop as Partial<DesktopAPI> | undefined;
+  if (d && typeof d.minimize === 'function' && typeof d.maximize === 'function' && typeof d.close === 'function' && typeof d.isMaximized === 'function') {
+    return {
+      minimize: () => {
+        void d.minimize?.();
+      },
+      maximize: () => {
+        void d.maximize?.();
+      },
+      close: () => {
+        void d.close?.();
+      },
+      isMaximized: () => d.isMaximized?.() ?? Promise.resolve(false),
+      isUpdateReady: () => d.isUpdateReady?.() ?? Promise.resolve(false),
+      onMaximizedChange: (cb) => d.onMaximizedChange?.(cb) ?? (() => {}),
+      onUpdateReady: (cb) => d.onUpdateReady?.(cb) ?? (() => {}),
+      restartToUpdate: () => {
+        d.restartToUpdate?.();
+      },
+    };
+  }
+
   const r = window.riftDesktop;
   if (!r) return undefined;
   return {
@@ -87,6 +108,30 @@ function TitleBar() {
 
   const api = getDesktop()!;
 
+  const handleUpdateClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    api.restartToUpdate();
+  };
+
+  const handleMinimizeClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    api.minimize();
+  };
+
+  const handleMaximizeClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    api.maximize();
+  };
+
+  const handleCloseClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    api.close();
+  };
+
   return (
     <div
       className="titlebar h-8 flex items-center justify-between select-none shrink-0 border-b border-black/40 pl-3"
@@ -103,14 +148,15 @@ function TitleBar() {
       </span>
 
       <div
-        className="flex items-center gap-2 pr-1"
+        className="flex h-full items-stretch gap-2 pr-1"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       >
         {updateReady && (
           <button
             type="button"
-            onClick={() => api.restartToUpdate()}
-            className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1f3d2a] text-[#3ba55d] shadow-[inset_0_0_0_1px_rgba(59,165,93,0.35)] transition-colors hover:bg-[#285336] hover:text-[#43b581]"
+            onClick={handleUpdateClick}
+            onMouseDown={(event) => event.stopPropagation()}
+            className="my-auto flex h-6 w-6 items-center justify-center rounded-full bg-[#1f3d2a] text-[#3ba55d] shadow-[inset_0_0_0_1px_rgba(59,165,93,0.35)] transition-colors hover:bg-[#285336] hover:text-[#43b581]"
             aria-label="Restart to install update"
             title="Restart to install the downloaded update"
           >
@@ -122,10 +168,11 @@ function TitleBar() {
           </button>
         )}
 
-        <div className="window-buttons flex h-full">
+        <div className="window-buttons flex h-full items-stretch">
         <button
           type="button"
-          onClick={() => api.minimize()}
+          onClick={handleMinimizeClick}
+          onMouseDown={(event) => event.stopPropagation()}
           className="window-button w-[46px] h-full flex items-center justify-center text-[#b9bbbe] hover:bg-white/10 transition-colors"
           aria-label="Minimize"
         >
@@ -136,7 +183,8 @@ function TitleBar() {
 
         <button
           type="button"
-          onClick={() => api.maximize()}
+          onClick={handleMaximizeClick}
+          onMouseDown={(event) => event.stopPropagation()}
           className="window-button w-[46px] h-full flex items-center justify-center text-[#b9bbbe] hover:bg-white/10 transition-colors"
           aria-label={maximized ? 'Restore' : 'Maximize'}
         >
@@ -155,7 +203,8 @@ function TitleBar() {
 
         <button
           type="button"
-          onClick={() => api.close()}
+          onClick={handleCloseClick}
+          onMouseDown={(event) => event.stopPropagation()}
           className="window-button w-[46px] h-full flex items-center justify-center text-[#b9bbbe] hover:bg-[#ed4245] hover:text-white transition-colors"
           aria-label="Close"
         >
