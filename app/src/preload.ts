@@ -11,6 +11,7 @@ const desktop = {
     ipcRenderer.send("window:close");
   },
   isMaximized: () => ipcRenderer.invoke("window:is-maximized") as Promise<boolean>,
+  isUpdateReady: () => ipcRenderer.invoke("app:is-update-ready") as Promise<boolean>,
   onMaximizedChange: (cb: (maximized: boolean) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, v: boolean) => cb(v);
     ipcRenderer.on("window-maximized", handler);

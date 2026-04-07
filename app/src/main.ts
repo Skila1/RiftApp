@@ -13,6 +13,7 @@ import { autoUpdater } from "electron-updater";
 
 const VITE_DEV_URL = "http://localhost:5173";
 const PRODUCTION_WEB_APP_URL = "https://riftapp.io/login";
+const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 const appVersion = app.getVersion();
@@ -25,6 +26,10 @@ let mainWindow: BrowserWindow | null = null;
 let splashWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let allowMainWindowClose = false;
+let updateReady = false;
+let updateDownloading = false;
+let updateCheckInFlight = false;
+let backgroundUpdateTimer: ReturnType<typeof setInterval> | null = null;
 
 // ── Paths ──────────────────────────────────────────────────
 
@@ -160,6 +165,12 @@ function createWindow(show: boolean): void {
     e.preventDefault();
     mainWindow?.hide();
   });
+
+  mainWindow.on("focus", () => {
+    if (!isDev) {
+      void runBackgroundUpdateCheck("focus");
+    }
+  });
 }
 
 // ── Tray ───────────────────────────────────────────────────
@@ -228,6 +239,8 @@ function registerIpc(): void {
     return windowFromEvent(e.sender)?.isMaximized() ?? false;
   });
 
+  ipcMain.handle("app:is-update-ready", () => updateReady);
+
   ipcMain.on("app:restart-to-update", () => {
     allowMainWindowClose = true;
     autoUpdater.quitAndInstall(false, true);
@@ -246,6 +259,29 @@ function configureUpdaterFeed(): void {
     } catch {
       /* ignore */
     }
+  }
+}
+
+async function runBackgroundUpdateCheck(reason: string): Promise<void> {
+  if (updateReady || updateDownloading || updateCheckInFlight) return;
+
+  updateCheckInFlight = true;
+  configureUpdaterFeed();
+  console.log(`[Rift updater] Checking for update (${reason})…`);
+
+  try {
+    await autoUpdater.checkForUpdates();
+  } catch (err) {
+    console.error(`[Rift updater] checkForUpdates failed (${reason}):`, err);
+  } finally {
+    updateCheckInFlight = false;
+  }
+}
+
+function clearBackgroundUpdateTimer(): void {
+  if (backgroundUpdateTimer) {
+    clearInterval(backgroundUpdateTimer);
+    backgroundUpdateTimer = null;
   }
 }
 
@@ -281,32 +317,40 @@ function backgroundUpdateDownload(): void {
   autoUpdater.removeAllListeners();
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+  configureUpdaterFeed();
 
   autoUpdater.on("checking-for-update", () => {
     console.log("[Rift updater] Checking for update…");
   });
   autoUpdater.on("update-available", (info) => {
+    updateDownloading = true;
     console.log(`[Rift updater] Update available: v${info.version}`);
   });
   autoUpdater.on("update-not-available", (info) => {
+    updateDownloading = false;
     console.log(`[Rift updater] Already up-to-date (v${info.version})`);
   });
   autoUpdater.on("download-progress", (info) => {
     console.log(`[Rift updater] Downloading… ${Math.round(info.percent)}%`);
   });
   autoUpdater.on("update-downloaded", (info) => {
+    updateDownloading = false;
+    updateReady = true;
     console.log(`[Rift updater] Downloaded v${info.version} — notifying renderer`);
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send("update-ready");
     }
   });
   autoUpdater.on("error", (err) => {
+    updateDownloading = false;
     console.error("[Rift updater] Error:", err?.message ?? err);
   });
 
-  autoUpdater.checkForUpdatesAndNotify().catch((err) => {
-    console.error("[Rift updater] checkForUpdatesAndNotify failed:", err);
-  });
+  void runBackgroundUpdateCheck("startup");
+  clearBackgroundUpdateTimer();
+  backgroundUpdateTimer = setInterval(() => {
+    void runBackgroundUpdateCheck("interval");
+  }, UPDATE_CHECK_INTERVAL_MS);
 }
 
 // ── Bootstrap ──────────────────────────────────────────────
@@ -374,6 +418,7 @@ if (!gotLock) {
 
   app.on("before-quit", () => {
     allowMainWindowClose = true;
+    clearBackgroundUpdateTimer();
     tray?.destroy();
     tray = null;
   });

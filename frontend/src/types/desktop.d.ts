@@ -3,6 +3,7 @@ export interface DesktopAPI {
   maximize: () => void;
   close: () => void;
   isMaximized: () => Promise<boolean>;
+  isUpdateReady: () => Promise<boolean>;
   onMaximizedChange: (cb: (maximized: boolean) => void) => () => void;
   onUpdateReady: (cb: () => void) => () => void;
   restartToUpdate: () => void;

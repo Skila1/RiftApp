@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/auth';
 import { useAppSettingsStore } from './stores/appSettingsStore';
 import TitleBar from './components/layout/TitleBar';
-import UpdateBar from './components/layout/UpdateBar';
 
 const AuthPage = lazy(() => import('./components/auth/AuthPage'));
 const AppLayout = lazy(() => import('./components/layout/AppLayout'));
@@ -78,7 +77,6 @@ export default function App() {
     <BrowserRouter>
       <div className="flex flex-col h-screen">
         <TitleBar />
-        <UpdateBar />
         <div className="flex-1 min-h-0 overflow-y-auto">
           <Suspense fallback={
             <div className="h-full flex items-center justify-center bg-riftapp-bg">

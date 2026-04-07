@@ -17,6 +17,7 @@ function getDesktop(): DesktopAPI | undefined {
       void r.close();
     },
     isMaximized: () => r.isMaximized(),
+    isUpdateReady: async () => false,
     onMaximizedChange: r.onMaximizedChange,
     onUpdateReady: () => () => {},
     restartToUpdate: () => {},
@@ -30,6 +31,7 @@ function getDesktop(): DesktopAPI | undefined {
 function TitleBar() {
   const [ready, setReady] = useState(false);
   const [maximized, setMaximized] = useState(false);
+  const [updateReady, setUpdateReady] = useState(false);
 
   useEffect(() => {
     const d = getDesktop();
@@ -55,18 +57,29 @@ function TitleBar() {
     const api = getDesktop();
     if (!api) return;
     let cancelled = false;
-    let unlisten: (() => void) | undefined;
+    let unlistenMaximized: (() => void) | undefined;
+    let unlistenUpdate: (() => void) | undefined;
     const run = async () => {
-      const m = await api.isMaximized();
-      if (!cancelled) setMaximized(m);
-      unlisten = api.onMaximizedChange((v) => {
+      const [isMaximized, isUpdateReady] = await Promise.all([
+        api.isMaximized(),
+        api.isUpdateReady(),
+      ]);
+      if (!cancelled) {
+        setMaximized(isMaximized);
+        setUpdateReady(isUpdateReady);
+      }
+      unlistenMaximized = api.onMaximizedChange((v) => {
         if (!cancelled) setMaximized(v);
+      });
+      unlistenUpdate = api.onUpdateReady(() => {
+        if (!cancelled) setUpdateReady(true);
       });
     };
     void run();
     return () => {
       cancelled = true;
-      unlisten?.();
+      unlistenMaximized?.();
+      unlistenUpdate?.();
     };
   }, [ready]);
 
@@ -90,9 +103,26 @@ function TitleBar() {
       </span>
 
       <div
-        className="window-buttons flex h-full"
+        className="flex items-center gap-2 pr-1"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       >
+        {updateReady && (
+          <button
+            type="button"
+            onClick={() => api.restartToUpdate()}
+            className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1f3d2a] text-[#3ba55d] shadow-[inset_0_0_0_1px_rgba(59,165,93,0.35)] transition-colors hover:bg-[#285336] hover:text-[#43b581]"
+            aria-label="Restart to install update"
+            title="Restart to install the downloaded update"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M6 1.75v5.25" />
+              <path d="M3.75 5.75L6 8l2.25-2.25" />
+              <path d="M2.5 10h7" />
+            </svg>
+          </button>
+        )}
+
+        <div className="window-buttons flex h-full">
         <button
           type="button"
           onClick={() => api.minimize()}
@@ -134,6 +164,7 @@ function TitleBar() {
             <line x1="10" y1="0" x2="0" y2="10" />
           </svg>
         </button>
+        </div>
       </div>
     </div>
   );
