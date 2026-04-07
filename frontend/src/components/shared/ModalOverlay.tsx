@@ -14,6 +14,8 @@ interface ModalOverlayProps {
   zIndex?: number;
   /** Extra classes on the backdrop element. */
   className?: string;
+  /** Extra classes on the animated content wrapper. */
+  contentClassName?: string;
 }
 
 /**
@@ -32,6 +34,7 @@ export default function ModalOverlay({
   backdropClose = true,
   zIndex = 200,
   className,
+  contentClassName,
 }: ModalOverlayProps) {
   const backdropRef = useRef<HTMLDivElement>(null);
 
@@ -93,7 +96,7 @@ export default function ModalOverlay({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 8 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className={center ? '' : 'h-full w-full'}
+            className={`${center ? '' : 'h-full w-full'} ${contentClassName ?? ''}`.trim()}
           >
             {children}
           </motion.div>

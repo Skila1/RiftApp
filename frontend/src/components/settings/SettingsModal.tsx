@@ -75,9 +75,16 @@ function SettingsModal() {
   ];
 
   return (
-    <ModalOverlay isOpen onClose={closeSettings} backdropClose zIndex={200} className="p-4 md:p-8">
-      <div className="flex h-[min(92vh,880px)] w-full max-w-[min(1320px,calc(100vw-2rem))] flex-col overflow-hidden rounded-[28px] border border-riftapp-border/40 bg-[#1e1f22] text-riftapp-text shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:h-[min(90vh,900px)] md:flex-row">
-            <nav className="flex w-full shrink-0 flex-col overflow-y-auto border-b border-riftapp-border/40 bg-[#1e1f22] px-4 py-5 md:w-[280px] md:border-b-0 md:border-r md:px-5 md:py-7">
+    <ModalOverlay
+      isOpen
+      onClose={closeSettings}
+      backdropClose
+      zIndex={200}
+      className="p-3 md:p-5"
+      contentClassName="w-full max-w-[1400px]"
+    >
+      <div className="flex h-[min(94vh,920px)] w-full flex-col overflow-hidden rounded-[28px] border border-riftapp-border/40 bg-[#1e1f22] text-riftapp-text shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:h-[min(92vh,940px)] md:flex-row">
+            <nav className="flex w-full shrink-0 flex-col overflow-y-auto border-b border-riftapp-border/40 bg-[#1e1f22] px-5 py-5 md:w-[320px] md:border-b-0 md:border-r md:px-6 md:py-7">
             <div className="mx-auto flex w-full max-w-[232px] flex-col gap-5">
               <div>
                 <h3 className="section-label px-2 mb-3">User Settings</h3>
@@ -161,7 +168,7 @@ function SettingsModal() {
           </nav>
 
           <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain bg-[#313338] [contain:content]">
-            <div className="mx-auto flex min-h-full w-full max-w-[1040px] flex-col px-6 py-6 md:px-10 md:py-8 lg:px-12">
+            <div className="mx-auto flex min-h-full w-full max-w-[1180px] flex-col px-6 py-6 md:px-10 md:py-8 lg:px-14">
               <div className="sticky top-0 z-10 -mx-6 mb-6 flex items-center justify-between border-b border-riftapp-border/40 bg-[#313338] px-6 pb-4 pt-1 md:-mx-10 md:px-10 md:pb-5">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-riftapp-accent">User Settings</p>

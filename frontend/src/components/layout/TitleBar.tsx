@@ -1,5 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import type { DesktopAPI, DesktopBuildInfo } from '@/types/desktop';
+import { useDMStore } from '../../stores/dmStore';
+import { useHubStore } from '../../stores/hubStore';
 
 function getDesktop(): DesktopAPI | undefined {
   if (typeof window === 'undefined') return undefined;
@@ -66,9 +69,35 @@ function getDesktop(): DesktopAPI | undefined {
  * CSS: strip uses `-webkit-app-region: drag`; controls use `no-drag` (see Electron docs).
  */
 function TitleBar() {
+  const location = useLocation();
   const [ready, setReady] = useState(false);
   const [maximized, setMaximized] = useState(false);
   const [updateReady, setUpdateReady] = useState(false);
+  const hubs = useHubStore((s) => s.hubs);
+  const activeHubId = useHubStore((s) => s.activeHubId);
+  const conversations = useDMStore((s) => s.conversations);
+  const activeConversationId = useDMStore((s) => s.activeConversationId);
+
+  const windowLabel = useMemo(() => {
+    if (location.pathname.startsWith('/app/dms')) {
+      const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId);
+      const recipientName = activeConversation?.recipient.display_name || activeConversation?.recipient.username;
+      return recipientName ? `Direct Messages • ${recipientName}` : 'Direct Messages';
+    }
+
+    if (location.pathname.startsWith('/app/hubs')) {
+      const activeHub = hubs.find((hub) => hub.id === activeHubId);
+      return activeHub?.name ? `Hub • ${activeHub.name}` : 'Hub';
+    }
+
+    if (location.pathname === '/app') return 'Friends';
+    if (location.pathname === '/login') return 'Login';
+    if (location.pathname === '/register') return 'Register';
+    if (location.pathname === '/discover') return 'Discover';
+    if (location.pathname === '/support') return 'Support';
+    if (location.pathname.startsWith('/invite/')) return 'Invite';
+    return 'Rift';
+  }, [activeConversationId, activeHubId, conversations, hubs, location.pathname]);
 
   useEffect(() => {
     const d = getDesktop();
@@ -150,18 +179,24 @@ function TitleBar() {
 
   return (
     <div
-      className="titlebar h-8 flex items-center justify-between select-none shrink-0 border-b border-black/40 pl-3"
+      className="titlebar flex h-9 items-center justify-between select-none shrink-0 border-b border-white/[0.06] pl-2.5"
       style={
         {
           WebkitAppRegion: 'drag',
-          backgroundColor: '#232428',
+          background: 'linear-gradient(180deg, rgba(28,29,34,0.98) 0%, rgba(24,25,28,0.98) 100%)',
+          boxShadow: 'inset 0 -1px 0 rgba(255,255,255,0.03)',
         } as React.CSSProperties
       }
       onDoubleClick={() => api.maximize()}
     >
-      <span className="text-xs font-semibold text-[#b9bbbe] tracking-wide pointer-events-none">
-        Rift
-      </span>
+      <div className="pointer-events-none flex min-w-0 items-center gap-2.5">
+        <div className="flex h-6 items-center gap-2 rounded-full border border-white/[0.05] bg-white/[0.04] px-2.5 text-[#d7dae0] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+          <span className="inline-flex h-2.5 w-2.5 rounded-full bg-[#5865f2] shadow-[0_0_12px_rgba(88,101,242,0.45)]" />
+          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#8b90a2]">Rift</span>
+        </div>
+        <span className="h-4 w-px bg-white/[0.08]" />
+        <span className="truncate text-[12px] font-semibold text-[#d4d7de]">{windowLabel}</span>
+      </div>
 
       <div
         className="flex h-full items-stretch gap-2 pr-1"
@@ -172,7 +207,7 @@ function TitleBar() {
             type="button"
             onClick={handleUpdateClick}
             onMouseDown={(event) => event.stopPropagation()}
-            className="my-auto flex h-6 w-6 items-center justify-center rounded-full bg-[#1f3d2a] text-[#3ba55d] shadow-[inset_0_0_0_1px_rgba(59,165,93,0.35)] transition-colors hover:bg-[#285336] hover:text-[#43b581]"
+            className="my-auto flex h-6 items-center gap-1 rounded-full border border-[#43b581]/25 bg-[#1f3d2a] px-2 text-[#43b581] shadow-[inset_0_0_0_1px_rgba(67,181,129,0.12)] transition-colors hover:bg-[#285336] hover:text-[#6ee7a5]"
             aria-label="Restart to install update"
             title="Restart to install the downloaded update"
           >
@@ -181,6 +216,7 @@ function TitleBar() {
               <path d="M3.75 5.75L6 8l2.25-2.25" />
               <path d="M2.5 10h7" />
             </svg>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em]">Update</span>
           </button>
         )}
 
@@ -189,7 +225,7 @@ function TitleBar() {
           type="button"
           onClick={handleMinimizeClick}
           onMouseDown={(event) => event.stopPropagation()}
-          className="window-button w-[46px] h-full flex items-center justify-center text-[#b9bbbe] hover:bg-white/10 transition-colors"
+          className="window-button flex h-full w-[44px] items-center justify-center text-[#aeb4c0] transition-colors hover:bg-white/[0.07] hover:text-white"
           aria-label="Minimize"
         >
           <svg width="10" height="1" viewBox="0 0 10 1" fill="currentColor" aria-hidden>
@@ -201,7 +237,7 @@ function TitleBar() {
           type="button"
           onClick={handleMaximizeClick}
           onMouseDown={(event) => event.stopPropagation()}
-          className="window-button w-[46px] h-full flex items-center justify-center text-[#b9bbbe] hover:bg-white/10 transition-colors"
+          className="window-button flex h-full w-[44px] items-center justify-center text-[#aeb4c0] transition-colors hover:bg-white/[0.07] hover:text-white"
           aria-label={maximized ? 'Restore' : 'Maximize'}
         >
           {maximized ? (
@@ -221,7 +257,7 @@ function TitleBar() {
           type="button"
           onClick={handleCloseClick}
           onMouseDown={(event) => event.stopPropagation()}
-          className="window-button w-[46px] h-full flex items-center justify-center text-[#b9bbbe] hover:bg-[#ed4245] hover:text-white transition-colors"
+          className="window-button flex h-full w-[44px] items-center justify-center text-[#aeb4c0] transition-colors hover:bg-[#ed4245] hover:text-white"
           aria-label="Close"
         >
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden>
