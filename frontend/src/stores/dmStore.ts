@@ -2,6 +2,9 @@ import { create } from 'zustand';
 import type { Message, Conversation, User } from '../types';
 import { api } from '../api/client';
 import { normalizeConversation, normalizeMessage, normalizeMessages, normalizeUser } from '../utils/entityAssets';
+import { useHubStore } from './hubStore';
+import { useMessageStore } from './messageStore';
+import { useStreamStore } from './streamStore';
 import { useVoiceChannelUiStore } from './voiceChannelUiStore';
 
 const sumDmUnreads = (conversations: Conversation[]) =>
@@ -68,10 +71,6 @@ export const useDMStore = create<DMState>((set, get) => ({
   },
 
   setActiveConversation: async (convId) => {
-    const { useHubStore } = await import('./hubStore');
-    const { useStreamStore } = await import('./streamStore');
-    const { useMessageStore } = await import('./messageStore');
-
     useHubStore.getState().clearActive();
     useStreamStore.getState().clearStreams();
     useMessageStore.getState().clearMessages();

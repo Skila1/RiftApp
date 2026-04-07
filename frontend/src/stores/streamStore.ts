@@ -1,7 +1,11 @@
 import { create } from 'zustand';
 import type { Stream, Category } from '../types';
 import { api } from '../api/client';
+import { useHubStore } from './hubStore';
+import { useMessageStore } from './messageStore';
+import { useNotificationStore } from './notificationStore';
 import { useVoiceChannelUiStore } from './voiceChannelUiStore';
+import { useVoiceStore } from './voiceStore';
 
 /** Monotonic id so an older in-flight `loadStreams` cannot apply after a newer hub switch. */
 let loadStreamsRequestId = 0;
@@ -108,7 +112,6 @@ export const useStreamStore = create<StreamState>((set, get) => ({
 
   loadStreams: async (hubId) => {
     const myId = ++loadStreamsRequestId;
-    const { useHubStore } = await import('./hubStore');
 
     const cached = get().hubLayoutCache[hubId];
     // Session cache: once a hub layout is loaded, reuse it until logout or explicit invalidation.
@@ -186,9 +189,6 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   },
 
   setActiveStream: async (streamId) => {
-    const { useMessageStore } = await import('./messageStore');
-    const { useNotificationStore } = await import('./notificationStore');
-
     useVoiceChannelUiStore.getState().closeVoiceView();
     set({ activeStreamId: streamId });
     await useMessageStore.getState().loadMessages(streamId);
@@ -237,8 +237,6 @@ export const useStreamStore = create<StreamState>((set, get) => ({
     const st = get().streams.find((x) => x.id === streamId);
     const hubId = st?.hub_id;
     await api.deleteStream(streamId);
-    const { useMessageStore } = await import('./messageStore');
-    const { useVoiceChannelUiStore } = await import('./voiceChannelUiStore');
     useMessageStore.getState().removeStreamCache(streamId);
     set((s) => {
       const streams = s.streams.filter((x) => x.id !== streamId);
@@ -289,8 +287,6 @@ export const useStreamStore = create<StreamState>((set, get) => ({
     if (useVoiceChannelUiStore.getState().activeChannelId === streamId) {
       useVoiceChannelUiStore.getState().resetVoiceView();
     }
-    const { useHubStore } = await import('./hubStore');
-    const { useVoiceStore } = await import('./voiceStore');
     if (useVoiceStore.getState().streamId === streamId) {
       useVoiceStore.getState().leave();
     }
@@ -440,7 +436,6 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   loadReadStates: async (hubId) => {
     try {
       const states = await api.getReadStates(hubId);
-      const { useHubStore } = await import('./hubStore');
       if (useHubStore.getState().activeHubId !== hubId) return;
       set((s) => {
         const streamUnreads = { ...s.streamUnreads };
@@ -475,7 +470,6 @@ export const useStreamStore = create<StreamState>((set, get) => ({
 
   ackStream: async (streamId) => {
     if (get().activeStreamId !== streamId) return;
-    const { useMessageStore } = await import('./messageStore');
     const msgs = useMessageStore.getState().messages;
     if (msgs.length === 0) return;
     const lastMsg = msgs[msgs.length - 1];
@@ -594,7 +588,6 @@ export const useStreamStore = create<StreamState>((set, get) => ({
     set({
       streams: [],
       categories: [],
-      activeStreamId: null,
       streamUnreads: {},
       lastReadMessageIds: {},
       streamHubMap: {},

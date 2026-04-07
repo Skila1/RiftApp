@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,18 +22,12 @@ var testPool *pgxpool.Pool
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 
-	pgContainer, err := postgres.Run(ctx,
-		"postgres:16-alpine",
-		postgres.WithDatabase("riftapp_test"),
-		postgres.WithUsername("test"),
-		postgres.WithPassword("test"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(60*time.Second),
-		),
-	)
+	pgContainer, err := runPostgresContainer(ctx)
 	if err != nil {
+		if shouldSkipIntegration(err) {
+			fmt.Printf("skipping integration tests: %v\n", err)
+			os.Exit(0)
+		}
 		fmt.Printf("failed to start postgres container: %v\n", err)
 		os.Exit(1)
 	}
@@ -58,6 +54,38 @@ func TestMain(m *testing.M) {
 	testPool.Close()
 	pgContainer.Terminate(ctx)
 	os.Exit(code)
+}
+
+func runPostgresContainer(ctx context.Context) (_ *postgres.PostgresContainer, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("%v", recovered)
+		}
+	}()
+
+	return postgres.Run(ctx,
+		"postgres:16-alpine",
+		postgres.WithDatabase("riftapp_test"),
+		postgres.WithUsername("test"),
+		postgres.WithPassword("test"),
+		testcontainers.WithWaitStrategy(
+			wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2).
+				WithStartupTimeout(60*time.Second),
+		),
+	)
+}
+
+func shouldSkipIntegration(err error) bool {
+	if err == nil {
+		return false
+	}
+	if runtime.GOOS != "windows" {
+		return false
+	}
+	message := err.Error()
+	return strings.Contains(message, "rootless Docker is not supported on Windows") ||
+		strings.Contains(message, "not supported on Windows")
 }
 
 func cleanTables(t *testing.T) {

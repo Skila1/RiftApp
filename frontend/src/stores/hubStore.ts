@@ -2,7 +2,13 @@ import { create } from 'zustand';
 import type { Hub } from '../types';
 import { api } from '../api/client';
 import { normalizeHub, normalizeHubs } from '../utils/entityAssets';
+import { useDMStore } from './dmStore';
+import { useEmojiStore } from './emojiStore';
+import { useMessageStore } from './messageStore';
+import { usePresenceStore } from './presenceStore';
+import { useStreamStore } from './streamStore';
 import { useVoiceChannelUiStore } from './voiceChannelUiStore';
+import { useVoiceStore } from './voiceStore';
 
 /** Session-scoped hub list for instant paint after refresh (revalidated against API). */
 export const HUBS_SESSION_STORAGE_KEY = 'riftapp.session.hubs.v1';
@@ -66,11 +72,6 @@ export const useHubStore = create<HubState>((set, get) => ({
   },
 
   setActiveHub: async (hubId) => {
-    const { useStreamStore } = await import('./streamStore');
-    const { useDMStore } = await import('./dmStore');
-    const { usePresenceStore } = await import('./presenceStore');
-    const { useEmojiStore } = await import('./emojiStore');
-
     set({ activeHubId: hubId });
     useDMStore.getState().clearActive();
 
@@ -137,11 +138,6 @@ export const useHubStore = create<HubState>((set, get) => ({
   },
 
   deleteHub: async (hubId) => {
-    const { useStreamStore } = await import('./streamStore');
-    const { useMessageStore } = await import('./messageStore');
-    const { usePresenceStore } = await import('./presenceStore');
-    const { useVoiceStore } = await import('./voiceStore');
-
     const streamState = useStreamStore.getState();
     const streamIds = Object.entries(streamState.streamHubMap)
       .filter(([, h]) => h === hubId)
@@ -201,11 +197,6 @@ export const useHubStore = create<HubState>((set, get) => ({
   },
 
   leaveHub: async (hubId) => {
-    const { useStreamStore } = await import('./streamStore');
-    const { useMessageStore } = await import('./messageStore');
-    const { usePresenceStore } = await import('./presenceStore');
-    const { useVoiceStore } = await import('./voiceStore');
-
     const streamState = useStreamStore.getState();
     const streamIds = Object.entries(streamState.streamHubMap)
       .filter(([, h]) => h === hubId)

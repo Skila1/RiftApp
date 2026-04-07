@@ -1,5 +1,40 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
+
+const voiceChannelUiFallbackStorage = new Map<string, string>();
+
+const voiceChannelUiStorage: StateStorage = {
+  getItem: (name) => {
+    if (typeof window !== 'undefined' && typeof window.localStorage?.getItem === 'function') {
+      try {
+        return window.localStorage.getItem(name);
+      } catch {
+        /* fall back to memory */
+      }
+    }
+    return voiceChannelUiFallbackStorage.get(name) ?? null;
+  },
+  setItem: (name, value) => {
+    voiceChannelUiFallbackStorage.set(name, value);
+    if (typeof window !== 'undefined' && typeof window.localStorage?.setItem === 'function') {
+      try {
+        window.localStorage.setItem(name, value);
+      } catch {
+        /* keep in-memory copy only */
+      }
+    }
+  },
+  removeItem: (name) => {
+    voiceChannelUiFallbackStorage.delete(name);
+    if (typeof window !== 'undefined' && typeof window.localStorage?.removeItem === 'function') {
+      try {
+        window.localStorage.removeItem(name);
+      } catch {
+        /* fallback storage already cleared */
+      }
+    }
+  },
+};
 
 interface VoiceChannelUiState {
   isOpen: boolean;
@@ -45,6 +80,7 @@ export const useVoiceChannelUiStore = create<VoiceChannelUiState>()(
     }),
     {
       name: 'riftapp-vc-ui',
+      storage: createJSONStorage(() => voiceChannelUiStorage),
       partialize: (state) => ({ hideNamesByStream: state.hideNamesByStream }),
     },
   ),
