@@ -1,6 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
-import fs from 'node:fs';
+import { execSync } from 'node:child_process';
 import path from 'path';
 
 const vendorChunks: Record<string, string[]> = {
@@ -12,16 +12,34 @@ const vendorChunks: Record<string, string[]> = {
 
 const electronEmbed = process.env.VITE_ELECTRON_EMBED === '1';
 const deployedAt = new Date().toISOString();
-const frontendPackage = JSON.parse(
-  fs.readFileSync(path.resolve(__dirname, './package.json'), 'utf8'),
-) as { version?: string };
-const frontendVersion = typeof frontendPackage.version === 'string' ? frontendPackage.version : '0.0.0';
+
+function resolveFrontendCommitSha() {
+  const commitSha = [
+    process.env.CF_PAGES_COMMIT_SHA,
+    process.env.GITHUB_SHA,
+  ].find((value) => typeof value === 'string' && value.trim().length > 0)?.trim();
+
+  if (commitSha) {
+    return commitSha;
+  }
+
+  try {
+    return execSync('git rev-parse HEAD', {
+      cwd: __dirname,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    throw new Error('Unable to resolve frontend commit SHA for this build.');
+  }
+}
+
+const frontendCommitSha = resolveFrontendCommitSha();
 
 export default defineConfig({
   base: electronEmbed ? './' : '/',
   define: {
-    __RIFT_DEPLOYED_AT__: JSON.stringify(deployedAt),
-    __RIFT_FRONTEND_VERSION__: JSON.stringify(frontendVersion),
+    __RIFT_FRONTEND_COMMIT_SHA__: JSON.stringify(frontendCommitSha),
     __RIFT_FRONTEND_BUILD_ID__: JSON.stringify(deployedAt),
   },
   plugins: [react()],

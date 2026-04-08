@@ -56,22 +56,8 @@ async function loadSettingsTrackProcessorsModule() {
   return settingsTrackProcessorsModulePromise;
 }
 
-function formatDeployAge(deployedAt: string, now: number) {
-  const deployedAtMs = Date.parse(deployedAt);
-  if (Number.isNaN(deployedAtMs)) return '';
-
-  const elapsedMs = Math.max(0, now - deployedAtMs);
-  const elapsedHours = elapsedMs / (60 * 60 * 1000);
-
-  if (elapsedHours >= 24) {
-    return `${Math.max(1, Math.floor(elapsedHours / 24))}D`;
-  }
-
-  if (elapsedHours >= 1) {
-    return `${Math.floor(elapsedHours)}h`;
-  }
-
-  return '<1h';
+function formatFrontendCommitSha(commitSha: string) {
+  return commitSha.trim().slice(0, 7);
 }
 
 function formatFrontendBuildTimestamp(buildId: string) {
@@ -114,26 +100,12 @@ function SettingsModal() {
   const activeTab = useAppSettingsStore((s) => s.settingsTab);
   const closeSettings = useAppSettingsStore((s) => s.closeSettings);
   const setSettingsTab = useAppSettingsStore((s) => s.setSettingsTab);
-  const frontendVersion = useFrontendUpdateStore((s) => s.currentVersion);
+  const frontendCommitSha = useFrontendUpdateStore((s) => s.currentCommitSha);
   const frontendBuildId = useFrontendUpdateStore((s) => s.currentBuildId);
   const frontendUpdateReady = useFrontendUpdateStore((s) => s.updateReady);
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [desktopBuildInfo, setDesktopBuildInfo] = useState<DesktopBuildInfo>(emptyDesktopBuildInfo);
   const [appVersionLabel, setAppVersionLabel] = useState('Web App');
-  const [deployAgeLabel, setDeployAgeLabel] = useState(() => formatDeployAge(__RIFT_DEPLOYED_AT__, Date.now()));
-
-  useEffect(() => {
-    const updateDeployAge = () => {
-      setDeployAgeLabel(formatDeployAge(__RIFT_DEPLOYED_AT__, Date.now()));
-    };
-
-    updateDeployAge();
-    const intervalId = window.setInterval(updateDeployAge, 60 * 1000);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -169,6 +141,7 @@ function SettingsModal() {
   }, []);
 
   const desktopOsLabel = formatDesktopOsLabel(desktopBuildInfo);
+  const frontendCommitLabel = formatFrontendCommitSha(frontendCommitSha);
   const frontendBuildLabel = formatFrontendBuildTimestamp(frontendBuildId);
 
   if (!user) return null;
@@ -262,9 +235,8 @@ function SettingsModal() {
                   <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-riftapp-text-dim">App Version</p>
                   <p className="mt-1 text-[12px] font-semibold text-riftapp-text">{appVersionLabel}</p>
                   <div className="mt-2 space-y-1 text-[11px] leading-5 text-riftapp-text-muted">
-                    <p>{frontendVersion ? `Frontend v${frontendVersion}` : 'Frontend build'}</p>
-                    {frontendBuildLabel && <p>Build {frontendBuildLabel}</p>}
-                    {deployAgeLabel && <p>Deployed {deployAgeLabel}</p>}
+                    <p>{`Frontend • ${frontendCommitLabel}`}</p>
+                    {frontendBuildLabel && <p>{`Build: ${frontendBuildLabel}`}</p>}
                     {desktopBuildInfo.electronVersion ? <p>Electron {desktopBuildInfo.electronVersion}</p> : null}
                     {desktopOsLabel && <p>{desktopOsLabel}</p>}
                     {frontendUpdateReady ? <p className="font-semibold text-[#3ba55d]">Frontend update ready. Use the green refresh button to apply it.</p> : null}

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { reloadOnceForFrontendUpdate } from '../utils/frontendUpdate';
 
 interface FrontendUpdateState {
-  currentVersion: string;
+  currentCommitSha: string;
   currentBuildId: string;
   currentSignature: string | null;
   latestSignature: string | null;
@@ -13,7 +13,7 @@ interface FrontendUpdateState {
 }
 
 export const useFrontendUpdateStore = create<FrontendUpdateState>((set, get) => ({
-  currentVersion: __RIFT_FRONTEND_VERSION__,
+  currentCommitSha: __RIFT_FRONTEND_COMMIT_SHA__,
   currentBuildId: __RIFT_FRONTEND_BUILD_ID__,
   currentSignature: null,
   latestSignature: null,
