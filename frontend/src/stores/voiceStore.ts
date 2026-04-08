@@ -24,6 +24,7 @@ import type {
 import { api } from '../api/client';
 import { wsSend } from '../hooks/useWebSocket';
 import { useStreamStore } from './streamStore';
+import { useActiveSpeakerStore } from './activeSpeakerStore';
 import { publicAssetUrl } from '../utils/publicAssetUrl';
 import {
   DEFAULT_MANUAL_MIC_THRESHOLD,
@@ -1274,6 +1275,7 @@ function syncParticipants() {
       ? useVoiceStore.getState().screenShareSurfaceLabel ?? requestedSurfaceLabel(useVoiceStore.getState().screenShareKind)
       : null,
   });
+  useActiveSpeakerStore.getState().syncFromParticipants(participants);
   reapplyAllRemoteVoiceVolumes();
 }
 
@@ -1315,6 +1317,7 @@ function resetState() {
   clearTransientSpeaking();
   stopConnectionStatsMonitor();
   stopMicProcessing({ broadcast: false, identity: roomRef?.localParticipant.identity });
+  useActiveSpeakerStore.getState().clearActiveSpeaker();
   useVoiceStore.setState({
     connected: false,
     connecting: false,
@@ -1398,6 +1401,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   join: async (sid) => {
     if (joiningLock) return;
     joiningLock = true;
+    useActiveSpeakerStore.getState().clearActiveSpeaker();
 
     if (roomRef) {
       const old = roomRef;
@@ -1507,6 +1511,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
         streamAttenuationEnabled: false,
         streamAttenuationStrength: 40,
       });
+      useActiveSpeakerStore.getState().syncFromParticipants(buildParticipants(room));
       startConnectionStatsMonitor(room);
       wsSend('voice_state_update', { stream_id: sid, action: 'join' });
       playJoinSound();

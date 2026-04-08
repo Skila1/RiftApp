@@ -13,6 +13,7 @@ import SelfProfilePopover from '../shared/SelfProfilePopover';
 import UserContextMenu from '../shared/UserContextMenu';
 import ScreenShareModal from '../voice/ScreenShareModal';
 import VoiceBottomBar from '../voice/VoiceBottomBar';
+import FloatingActiveSpeakerMedia from '../voice/FloatingActiveSpeakerMedia';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { useHubStore } from '../../stores/hubStore';
 import { useStreamStore } from '../../stores/streamStore';
@@ -125,6 +126,7 @@ export default function AppLayout() {
       <SelfProfilePopover />
       <UserContextMenu />
       <ScreenShareModal />
+      <FloatingActiveSpeakerMedia />
     </div>
   );
 }
