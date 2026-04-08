@@ -1127,8 +1127,6 @@ function VoiceSensitivitySetting({
 const TENOR_PUBLIC_KEY = 'LIVDSRZULELA';
 const MAX_BACKGROUND_UPLOAD_BYTES = 10 * 1024 * 1024;
 
-type BackgroundPickerTab = 'upload' | 'presets';
-
 type VoiceInputProfile = 'voice-isolation' | 'studio' | 'custom';
 
 type TenorMediaVariant = {
@@ -1252,92 +1250,98 @@ function mapTenorResultToBackgroundAsset(result: TenorResult): CameraBackgroundA
   };
 }
 
-function BackgroundPickerTabButton({
-  active,
-  onClick,
-  children,
+async function fetchTenorBackgroundAssets(nextQuery: string, limit = 24) {
+  const trimmedQuery = nextQuery.trim();
+  const endpoint = trimmedQuery ? 'search' : 'trending';
+  const params = new URLSearchParams({
+    key: TENOR_PUBLIC_KEY,
+    limit: String(limit),
+    contentfilter: 'medium',
+    media_filter: 'minimal',
+  });
+
+  if (trimmedQuery) {
+    params.set('q', trimmedQuery);
+  }
+
+  const response = await fetch(`https://g.tenor.com/v1/${endpoint}?${params.toString()}`);
+  if (!response.ok) {
+    throw new Error('Tenor results are temporarily unavailable.');
+  }
+
+  const payload = (await response.json()) as { results?: TenorResult[] };
+  return (payload.results ?? [])
+    .map(mapTenorResultToBackgroundAsset)
+    .filter((asset): asset is CameraBackgroundAsset => asset !== null);
+}
+
+function BackgroundAssetMedia({
+  asset,
+  alt,
+  className,
+  autoPlay = false,
+  loading = 'lazy',
 }: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
+  asset: CameraBackgroundAsset;
+  alt: string;
+  className: string;
+  autoPlay?: boolean;
+  loading?: 'eager' | 'lazy';
 }) {
+  if (asset.kind === 'video') {
+    return (
+      <video
+        src={backgroundPreviewUrl(asset)}
+        className={className}
+        muted
+        loop
+        playsInline
+        autoPlay={autoPlay}
+      />
+    );
+  }
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-md px-3 py-2 text-[13px] font-semibold transition-colors ${
-        active
-          ? 'bg-riftapp-content-elevated text-white'
-          : 'text-riftapp-text-muted hover:bg-riftapp-content-elevated/70 hover:text-riftapp-text'
-      }`}
-    >
-      {children}
-    </button>
+    <img
+      src={backgroundPreviewUrl(asset)}
+      alt={alt}
+      className={className}
+      loading={loading}
+    />
   );
 }
 
-function BackgroundPickerModal({
+function BackgroundGifPickerModal({
   isOpen,
   currentAsset,
   onClose,
   onSelectAsset,
-  onClearAsset,
 }: {
   isOpen: boolean;
   currentAsset: CameraBackgroundAsset | null;
   onClose: () => void;
   onSelectAsset: (asset: CameraBackgroundAsset) => void;
-  onClearAsset: () => void;
 }) {
-  const [activeTab, setActiveTab] = useState<BackgroundPickerTab>('upload');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<CameraBackgroundAsset[]>([]);
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const uploadInputRef = useRef<HTMLInputElement>(null);
-
-  const uploadedAsset = currentAsset?.source === 'upload' ? currentAsset : null;
-  const currentAssetPreviewUrl = currentAsset ? backgroundPreviewUrl(currentAsset) : '';
 
   useEffect(() => {
     if (!isOpen) {
       return;
     }
 
+    setQuery('');
     setError(null);
-    setDragActive(false);
-    setActiveTab(currentAsset?.source === 'tenor' ? 'presets' : 'upload');
-  }, [currentAsset?.source, isOpen]);
+  }, [isOpen]);
 
   const loadTenorResults = useCallback(async (nextQuery: string) => {
     setLoading(true);
     setError(null);
 
     try {
-      const trimmedQuery = nextQuery.trim();
-      const endpoint = trimmedQuery ? 'search' : 'trending';
-      const params = new URLSearchParams({
-        key: TENOR_PUBLIC_KEY,
-        limit: '24',
-        contentfilter: 'medium',
-        media_filter: 'minimal',
-      });
-      if (trimmedQuery) {
-        params.set('q', trimmedQuery);
-      }
-
-      const response = await fetch(`https://g.tenor.com/v1/${endpoint}?${params.toString()}`);
-      if (!response.ok) {
-        throw new Error('Tenor results are temporarily unavailable.');
-      }
-
-      const payload = (await response.json()) as { results?: TenorResult[] };
-      const mapped = (payload.results ?? [])
-        .map(mapTenorResultToBackgroundAsset)
-        .filter((asset): asset is CameraBackgroundAsset => asset !== null);
-      setResults(mapped);
+      setResults(await fetchTenorBackgroundAssets(nextQuery, 24));
     } catch (loadError) {
       setResults([]);
       setError(loadError instanceof Error ? loadError.message : 'Could not load GIF backgrounds.');
@@ -1347,7 +1351,7 @@ function BackgroundPickerModal({
   }, []);
 
   useEffect(() => {
-    if (!isOpen || activeTab !== 'presets') {
+    if (!isOpen) {
       return undefined;
     }
 
@@ -1355,7 +1359,122 @@ function BackgroundPickerModal({
       void loadTenorResults(query);
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [activeTab, isOpen, loadTenorResults, query]);
+  }, [isOpen, loadTenorResults, query]);
+
+  return (
+    <ModalOverlay isOpen={isOpen} onClose={onClose} zIndex={345} className="p-4 sm:p-6">
+      <div className="mx-auto flex h-[min(82vh,720px)] w-full max-w-[420px] min-h-0 flex-col overflow-hidden rounded-2xl border border-riftapp-border/60 bg-riftapp-bg shadow-[0_24px_80px_rgba(0,0,0,0.5)]">
+        <div className="flex items-center justify-between border-b border-riftapp-border/60 px-5 py-4">
+          <h3 className="text-[15px] font-semibold text-white">Choose GIF</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-riftapp-text-dim transition-colors hover:bg-riftapp-content-elevated hover:text-riftapp-text"
+            aria-label="Close GIF picker"
+            title="Close GIF picker"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 px-5 py-4">
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search Tenor"
+            className="w-full rounded-lg border border-riftapp-border/60 bg-riftapp-content-elevated px-3 py-2.5 text-[13px] text-white outline-none transition-colors placeholder:text-riftapp-text-dim focus:border-[#5865f2]"
+          />
+
+          {error ? <p className="mt-4 text-[13px] text-[#f87171]">{error}</p> : null}
+          {loading ? <p className="mt-4 text-[13px] text-riftapp-text-muted">Loading GIF backgrounds…</p> : null}
+
+          <div className="mt-4 min-h-0 h-[calc(100%-52px)] overflow-y-auto pr-1 overscroll-contain">
+            {results.length > 0 ? (
+              <div className="grid content-start gap-3 sm:grid-cols-2">
+                {results.map((asset) => {
+                  const selected = currentAsset?.source === asset.source && currentAsset.url === asset.url;
+                  return (
+                    <button
+                      key={`${asset.source}-${asset.url}`}
+                      type="button"
+                      onClick={() => {
+                        onSelectAsset(asset);
+                        onClose();
+                      }}
+                      className={`overflow-hidden rounded-xl border text-left transition-all ${
+                        selected
+                          ? 'border-[#5865f2] bg-riftapp-panel shadow-[0_0_0_1px_rgba(88,101,242,0.2)]'
+                          : 'border-riftapp-border/60 bg-riftapp-panel/70 hover:border-riftapp-border-light hover:bg-riftapp-panel-hover'
+                      }`}
+                    >
+                      <BackgroundAssetMedia
+                        asset={asset}
+                        alt={asset.label ?? 'GIF background'}
+                        className="aspect-[4/3] w-full object-cover"
+                      />
+                      <div className="px-3 py-2.5">
+                        <p className="truncate text-sm font-medium text-white">{asset.label ?? 'Tenor GIF'}</p>
+                        <p className="mt-1 text-[12px] text-riftapp-text-muted">Use this GIF as your background</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            {!loading && !error && results.length === 0 ? (
+              <div className="flex min-h-full items-center justify-center">
+                <div className="w-full rounded-xl border border-dashed border-riftapp-border/60 bg-riftapp-content-elevated px-4 py-8 text-center text-[13px] text-riftapp-text-muted">
+                  No GIFs matched that search.
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </ModalOverlay>
+  );
+}
+
+function BackgroundPickerModal({
+  isOpen,
+  currentAsset,
+  onClose,
+  onSelectAsset,
+}: {
+  isOpen: boolean;
+  currentAsset: CameraBackgroundAsset | null;
+  onClose: () => void;
+  onSelectAsset: (asset: CameraBackgroundAsset) => void;
+}) {
+  const [gifPreviewAssets, setGifPreviewAssets] = useState<CameraBackgroundAsset[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [gifPickerOpen, setGifPickerOpen] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadedAsset = currentAsset?.source === 'upload' ? currentAsset : null;
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    setError(null);
+    setDragActive(false);
+
+    void fetchTenorBackgroundAssets('', 4)
+      .then((assets) => {
+        setGifPreviewAssets(assets.slice(0, 4));
+      })
+      .catch(() => {
+        setGifPreviewAssets([]);
+      });
+  }, [isOpen]);
 
   const openUploadPicker = useCallback(() => {
     uploadInputRef.current?.click();
@@ -1363,6 +1482,7 @@ function BackgroundPickerModal({
 
   const handleUpload = useCallback(async (file: File) => {
     const lowerName = file.name.toLowerCase();
+    const isMp4 = file.type === 'video/mp4' || lowerName.endsWith('.mp4');
     const isGif = file.type === 'image/gif' || lowerName.endsWith('.gif');
     const isImage = isGif
       || file.type === 'image/png'
@@ -1372,15 +1492,10 @@ function BackgroundPickerModal({
       || lowerName.endsWith('.jpg')
       || lowerName.endsWith('.jpeg')
       || lowerName.endsWith('.webp');
+    const isSupported = isMp4 || isImage;
 
-    if (file.type.startsWith('video/')) {
-      setError('Video backgrounds are not supported on the outgoing camera track. Upload an image or GIF instead.');
-      if (uploadInputRef.current) uploadInputRef.current.value = '';
-      return;
-    }
-
-    if (!isImage) {
-      setError('Unsupported format. Upload a PNG, JPG, WEBP, or GIF background.');
+    if (!isSupported) {
+      setError('Unsupported format. Upload a PNG, JPG, WEBP, GIF, or MP4 background.');
       if (uploadInputRef.current) uploadInputRef.current.value = '';
       return;
     }
@@ -1396,9 +1511,7 @@ function BackgroundPickerModal({
 
     try {
       const upload = await api.uploadFile(file);
-      const kind = isGif
-        ? 'gif'
-        : 'image';
+      const kind = isMp4 ? 'video' : isGif ? 'gif' : 'image';
 
       onSelectAsset({
         kind,
@@ -1407,7 +1520,6 @@ function BackgroundPickerModal({
         label: file.name,
         source: 'upload',
       });
-      setActiveTab('upload');
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'Upload failed.');
     } finally {
@@ -1427,203 +1539,143 @@ function BackgroundPickerModal({
 
   return (
     <ModalOverlay isOpen={isOpen} onClose={onClose} zIndex={340} className="p-4 sm:p-6">
-      <div className="mx-auto flex h-[min(84vh,720px)] w-full max-w-[560px] min-h-0 flex-col overflow-hidden rounded-2xl border border-riftapp-border/60 bg-riftapp-bg shadow-[0_24px_80px_rgba(0,0,0,0.5)]">
-        <div className="flex items-start justify-between gap-4 border-b border-riftapp-border/60 px-5 py-4">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-riftapp-text-dim">Video Background</p>
-            <h3 className="mt-1 text-lg font-semibold text-white">Choose a custom background</h3>
-            <p className="mt-1 text-[13px] leading-snug text-riftapp-text-muted">
-              Upload your own image or GIF, or browse GIF presets separately.
-            </p>
-          </div>
-          <ModalCloseButton onClick={onClose} title="Close background picker" ariaLabel="Close background picker" />
+      <div className="mx-auto w-full max-w-[460px] overflow-hidden rounded-2xl border border-white/10 bg-[#2b2d31] shadow-[0_24px_80px_rgba(0,0,0,0.52)]">
+        <div className="flex items-center justify-between px-6 pb-4 pt-5">
+          <h3 className="text-[15px] font-semibold text-[#f2f3f5]">Upload Background</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#b5bac1] transition-colors hover:bg-white/6 hover:text-white"
+            aria-label="Close background picker"
+            title="Close background picker"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
         </div>
 
-        <div className="border-b border-riftapp-border/50 px-5 pt-3">
-          <div className="flex items-center gap-1">
-            <BackgroundPickerTabButton active={activeTab === 'upload'} onClick={() => setActiveTab('upload')}>
-              Upload
-            </BackgroundPickerTabButton>
-            <BackgroundPickerTabButton active={activeTab === 'presets'} onClick={() => setActiveTab('presets')}>
-              Presets
-            </BackgroundPickerTabButton>
-          </div>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-          {activeTab === 'upload' ? (
-            <div className="space-y-4">
-              <div>
-                <p className="text-sm font-semibold text-white">Upload Background</p>
-                <p className="mt-1 text-[13px] leading-snug text-riftapp-text-muted">
-                  Drag and drop or click to upload a PNG, JPG, WEBP, or GIF background. Uploaded videos are not supported.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={openUploadPicker}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  if (!dragActive) {
-                    setDragActive(true);
-                  }
-                }}
-                onDragLeave={(event) => {
-                  event.preventDefault();
-                  if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                    return;
-                  }
-                  setDragActive(false);
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  setDragActive(false);
-                  handleDroppedFile(event.dataTransfer.files);
-                }}
-                disabled={uploading}
-                className={`flex min-h-[220px] w-full flex-col items-center justify-center rounded-2xl border border-dashed px-6 py-8 text-center transition-colors ${
-                  dragActive
-                    ? 'border-[#5865f2] bg-[#5865f2]/10'
-                    : 'border-riftapp-border/60 bg-riftapp-panel/50 hover:border-riftapp-border-light hover:bg-riftapp-panel/65'
-                } disabled:cursor-not-allowed disabled:opacity-70`}
-              >
-                <span className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-riftapp-content-elevated text-riftapp-text-muted shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+        <div className="px-6 pb-5">
+          <div className="grid grid-cols-[1.45fr_1fr] gap-3">
+            <button
+              type="button"
+              onClick={openUploadPicker}
+              onDragOver={(event) => {
+                event.preventDefault();
+                if (!dragActive) {
+                  setDragActive(true);
+                }
+              }}
+              onDragLeave={(event) => {
+                event.preventDefault();
+                if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                  return;
+                }
+                setDragActive(false);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                setDragActive(false);
+                handleDroppedFile(event.dataTransfer.files);
+              }}
+              disabled={uploading}
+              className={`relative flex min-h-[196px] items-center justify-center overflow-hidden rounded-xl border px-4 text-center transition-colors ${
+                dragActive
+                  ? 'border-[#5865f2] bg-[#4f545c]'
+                  : 'border-white/6 bg-[#3a3c46] hover:bg-[#454754]'
+              } disabled:cursor-not-allowed disabled:opacity-80`}
+            >
+              {uploadedAsset ? (
+                <>
+                  <BackgroundAssetMedia
+                    asset={uploadedAsset}
+                    alt={uploadedAsset.label ?? 'Uploaded background'}
+                    className="absolute inset-0 h-full w-full object-cover"
+                    autoPlay
+                    loading="eager"
+                  />
+                  <div className="absolute inset-0 bg-black/38" />
+                </>
+              ) : null}
+              <div className="relative z-10 flex flex-col items-center justify-center gap-3 text-white">
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-black/12 text-white/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
                   {uploading ? (
-                    <span className="h-5 w-5 rounded-full border-2 border-current/30 border-t-current animate-spin" />
+                    <span className="h-4 w-4 rounded-full border-2 border-current/35 border-t-current animate-spin" />
                   ) : (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                      <path d="M12 17V7" />
-                      <path d="m7 12 5-5 5 5" />
-                      <path d="M20 17.5a3.5 3.5 0 0 0-3.5-3.5h-1.1a5.4 5.4 0 0 0-10.52 1.43A3 3 0 0 0 5 21h11.5A3.5 3.5 0 0 0 20 17.5Z" />
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M14 4h-4a2 2 0 0 0-2 2v2H6a2 2 0 0 0-2 2v4" />
+                      <path d="M14 10V4l6 6h-6Z" />
+                      <path d="M12 20v-7" />
+                      <path d="m8.5 16.5 3.5-3.5 3.5 3.5" />
                     </svg>
                   )}
                 </span>
-                <span className="text-[15px] font-semibold text-white">
-                  {uploading ? 'Uploading…' : 'Upload Background'}
+                <span className="text-[15px] font-semibold leading-tight text-white">
+                  {uploading ? 'Uploading…' : 'Upload Image or Video'}
                 </span>
-                <span className="mt-2 text-[13px] text-riftapp-text-muted">
-                  Drag and drop or click to upload
-                </span>
-                <span className="mt-1 text-[12px] text-riftapp-text-dim">
-                  PNG, JPG, WEBP, or GIF up to 10 MB
-                </span>
-              </button>
-
-              <input
-                ref={uploadInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif"
-                className="hidden"
-                onChange={(event) => handleDroppedFile(event.target.files)}
-              />
-
-              {error ? <p className="text-[13px] text-[#f87171]">{error}</p> : null}
-
-              {uploadedAsset ? (
-                <div className="rounded-2xl border border-riftapp-border/60 bg-riftapp-panel/60 p-4">
-                  <div className="overflow-hidden rounded-xl border border-riftapp-border/60 bg-riftapp-bg">
-                    <img
-                      src={backgroundPreviewUrl(uploadedAsset)}
-                      alt={uploadedAsset.label ?? 'Uploaded background'}
-                      className="aspect-[16/10] w-full object-cover"
-                    />
-                  </div>
-                  <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-white">{uploadedAsset.label ?? 'Uploaded background'}</p>
-                      <p className="mt-1 text-[12px] text-riftapp-text-muted">
-                        {uploadedAsset.kind === 'gif' ? 'Animated GIF background' : 'Static image background'}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={openUploadPicker}
-                        className="rounded-md border border-riftapp-border/60 bg-riftapp-content-elevated px-3 py-2 text-[13px] font-medium text-riftapp-text transition-colors hover:bg-riftapp-content-elevated/85"
-                      >
-                        Replace
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onClearAsset}
-                        className="rounded-md px-3 py-2 text-[13px] font-medium text-riftapp-text-muted transition-colors hover:bg-riftapp-content-elevated/65 hover:text-riftapp-text"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : currentAssetPreviewUrl ? (
-                <div className="rounded-2xl border border-riftapp-border/60 bg-riftapp-panel/40 px-4 py-3 text-[12px] leading-snug text-riftapp-text-muted">
-                  Uploading a file will replace your current custom background immediately.
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="flex min-h-0 flex-1 flex-col">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-white">Browse GIF backgrounds</p>
-                  <p className="mt-1 text-[13px] text-riftapp-text-muted">Search Tenor or leave the box empty for trending picks.</p>
-                </div>
-                <div className="w-full sm:max-w-sm">
-                  <input
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Search Tenor"
-                    className="w-full rounded-lg border border-riftapp-border/60 bg-riftapp-content-elevated px-3 py-2.5 text-[13px] text-white outline-none transition-colors placeholder:text-riftapp-text-dim focus:border-[#5865f2]"
-                  />
-                </div>
               </div>
+            </button>
 
-              {error ? <p className="mt-4 text-[13px] text-[#f87171]">{error}</p> : null}
-              {loading ? <p className="mt-4 text-[13px] text-riftapp-text-muted">Loading GIF backgrounds…</p> : null}
-
-              <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1 overscroll-contain">
-                {results.length > 0 ? (
-                  <div className="grid content-start gap-3 sm:grid-cols-2">
-                    {results.map((asset) => {
-                      const selected = currentAsset?.source === asset.source && currentAsset.url === asset.url;
-                      return (
-                        <button
-                          key={`${asset.source}-${asset.url}`}
-                          type="button"
-                          onClick={() => onSelectAsset(asset)}
-                          className={`overflow-hidden rounded-xl border text-left transition-all ${
-                            selected
-                              ? 'border-[#5865f2] bg-riftapp-panel shadow-[0_0_0_1px_rgba(88,101,242,0.2)]'
-                              : 'border-riftapp-border/60 bg-riftapp-panel/70 hover:border-riftapp-border-light hover:bg-riftapp-panel-hover'
-                          }`}
-                        >
-                          <img
-                            src={backgroundPreviewUrl(asset)}
-                            alt={asset.label ?? 'GIF background'}
-                            className="aspect-[4/3] w-full object-cover"
-                            loading="lazy"
-                          />
-                          <div className="px-3 py-2.5">
-                            <p className="truncate text-sm font-medium text-white">{asset.label ?? 'Tenor GIF'}</p>
-                            <p className="mt-1 text-[12px] text-riftapp-text-muted">Use this GIF as your background</p>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-
-                {!loading && !error && results.length === 0 ? (
-                  <div className="flex min-h-full items-center justify-center">
-                    <div className="w-full rounded-xl border border-dashed border-riftapp-border/60 bg-riftapp-content-elevated px-4 py-8 text-center text-[13px] text-riftapp-text-muted">
-                      No GIFs matched that search.
+            <button
+              type="button"
+              onClick={() => setGifPickerOpen(true)}
+              className={`group relative min-h-[196px] overflow-hidden rounded-xl border transition-colors ${
+                currentAsset?.source === 'tenor'
+                  ? 'border-[#5865f2] bg-[#2f3136]'
+                  : 'border-white/6 bg-[#2f3136] hover:bg-[#36393f]'
+              }`}
+            >
+              <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 gap-1 p-1">
+                {Array.from({ length: 4 }, (_, index) => {
+                  const asset = gifPreviewAssets[index];
+                  return asset ? (
+                    <div key={asset.url} className="overflow-hidden rounded-md bg-[#24262b]">
+                      <BackgroundAssetMedia
+                        asset={asset}
+                        alt={asset.label ?? 'GIF preview'}
+                        className="h-full w-full object-cover"
+                        autoPlay
+                        loading="eager"
+                      />
                     </div>
-                  </div>
-                ) : null}
+                  ) : (
+                    <div key={index} className="rounded-md bg-[#3a3c46]" />
+                  );
+                })}
               </div>
-            </div>
-          )}
+              <div className="absolute inset-0 bg-black/38 transition-colors group-hover:bg-black/28" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-[15px] font-semibold text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)]">Choose GIF</span>
+              </div>
+            </button>
+          </div>
+
+          <input
+            ref={uploadInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,.png,.jpg,.jpeg,.webp,.gif,.mp4"
+            className="hidden"
+            onChange={(event) => handleDroppedFile(event.target.files)}
+          />
+
+          <p className="mt-3 text-[11px] leading-4 text-[#949ba4]">
+            Files should be PNG, JPG, GIF, or MP4 (10 MB max)
+          </p>
+          {error ? <p className="mt-2 text-[12px] text-[#f87171]">{error}</p> : null}
         </div>
       </div>
+
+      <BackgroundGifPickerModal
+        isOpen={gifPickerOpen}
+        currentAsset={currentAsset}
+        onClose={() => setGifPickerOpen(false)}
+        onSelectAsset={(asset) => {
+          onSelectAsset(asset);
+          setGifPickerOpen(false);
+          onClose();
+        }}
+      />
     </ModalOverlay>
   );
 }
@@ -2330,11 +2382,15 @@ function VoiceVideoSettingsTab() {
               >
                 {customBackgroundPreview ? (
                   <div className="relative h-full w-full">
-                    <img
-                      src={customBackgroundPreview}
-                      alt={cameraBackgroundAsset?.label ?? 'Custom background'}
-                      className="h-full w-full object-cover"
-                    />
+                    {cameraBackgroundAsset ? (
+                      <BackgroundAssetMedia
+                        asset={cameraBackgroundAsset}
+                        alt={cameraBackgroundAsset.label ?? 'Custom background'}
+                        className="h-full w-full object-cover"
+                        autoPlay
+                        loading="eager"
+                      />
+                    ) : null}
                     <div className="absolute inset-0 bg-black/20" />
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2385,7 +2441,6 @@ function VoiceVideoSettingsTab() {
           currentAsset={cameraBackgroundAsset}
           onClose={() => setBackgroundPickerOpen(false)}
           onSelectAsset={(asset) => setCameraBackgroundAsset(asset)}
-          onClearAsset={() => setCameraBackgroundAsset(null)}
         />
       </section>
     </div>
