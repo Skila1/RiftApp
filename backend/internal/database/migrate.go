@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"log"
@@ -17,6 +18,15 @@ func Migrate(pool *pgxpool.Pool) error {
 	connConfig := pool.Config().ConnConfig
 	db := stdlib.OpenDB(*connConfig)
 	defer db.Close()
+
+	// Goose uses database/sql, not the pool — its connections do not run pgxpool.AfterConnect.
+	// Neon can leave search_path empty → "no schema has been selected to create in" for goose_db_version.
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, "SET search_path TO public"); err != nil {
+		return fmt.Errorf("set search_path for migrations: %w", err)
+	}
 
 	goose.SetBaseFS(embedMigrations)
 	if err := goose.SetDialect("postgres"); err != nil {
