@@ -19,13 +19,13 @@ function isInlineMediaOnly(content: string) {
 }
 
 export function getReplyAuthorLabel(message?: Message) {
-  return message?.author?.display_name || message?.author?.username || 'Original message';
+  return message?.author?.display_name || message?.author?.username || 'unknown';
 }
 
 export function getReplyPreviewMeta(message?: Message): ReplyPreviewMeta {
   if (!message) {
     return {
-      text: 'Original message unavailable',
+      text: 'message unavailable',
       tone: 'missing',
     };
   }
@@ -40,13 +40,13 @@ export function getReplyPreviewMeta(message?: Message): ReplyPreviewMeta {
 
   if (message.attachments?.length || isInlineMediaOnly(content)) {
     return {
-      text: 'Message contains attached media',
+      text: 'sent an attachment',
       tone: 'attachment',
     };
   }
 
   return {
-    text: 'Original message unavailable',
+    text: 'message unavailable',
     tone: 'missing',
   };
 }

@@ -560,33 +560,16 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
             type="button"
             onClick={handleReplyPreviewClick}
             disabled={!message.reply_to?.id && !message.reply_to_message_id}
-            className="group/reply relative mb-1.5 flex max-w-[520px] min-w-0 items-center gap-1.5 pr-2 text-left text-[12px] transition-colors hover:text-riftapp-text disabled:cursor-default disabled:opacity-80"
+            className="group/reply mb-1.5 flex max-w-[560px] min-w-0 items-center gap-1.5 pr-2 text-left text-[12px] leading-4 text-riftapp-text-dim/85 transition-colors hover:text-riftapp-text disabled:cursor-default disabled:opacity-80"
           >
-            <span
-              className="pointer-events-none absolute -left-7 top-[7px] h-[18px] w-6 rounded-tl-xl border-l-2 border-t-2 border-riftapp-border/70"
-              aria-hidden
-            />
-            <span className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-riftapp-content-elevated ring-1 ring-white/10">
-              {message.reply_to?.author?.avatar_url ? (
-                <img
-                  src={publicAssetUrl(message.reply_to.author.avatar_url)}
-                  alt=""
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <span className="text-[8px] font-bold uppercase text-riftapp-text-dim">
-                  {replyAuthorLabel.slice(0, 1)}
-                </span>
-              )}
-            </span>
-            <span className={`shrink-0 truncate font-medium ${replyAuthorColor}`}>
-              {replyAuthorLabel}
+            <span className={`max-w-[48%] shrink-0 truncate font-semibold ${replyAuthorColor} underline-offset-2 group-hover/reply:underline`}>
+              @{replyAuthorLabel}
             </span>
             <span
               className={`min-w-0 truncate transition-colors ${
                 replyPreview.tone === 'default'
                   ? 'text-riftapp-text-dim group-hover/reply:text-riftapp-text-muted'
-                  : 'italic text-riftapp-text-dim/80 group-hover/reply:text-riftapp-text-dim'
+                  : 'text-riftapp-text-dim/75 group-hover/reply:text-riftapp-text-dim'
               }`}
             >
               {replyPreview.text}
