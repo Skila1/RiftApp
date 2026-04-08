@@ -83,6 +83,7 @@ function setUpdateStatus(
   clearUpdateStatusResetTimer();
   updateStatus = next;
   broadcastUpdateStatus();
+  refreshTrayMenu();
 
   if (options?.resetToIdleMs) {
     updateStatusResetTimer = setTimeout(() => {
@@ -94,6 +95,7 @@ function setUpdateStatus(
         message: "",
       };
       broadcastUpdateStatus();
+      refreshTrayMenu();
       updateStatusResetTimer = null;
     }, options.resetToIdleMs);
   }
@@ -228,12 +230,42 @@ function createWindow(show: boolean): void {
 
 // ── Tray ───────────────────────────────────────────────────
 
-function createTray(): void {
-  const iconPath = getAssetPath("tray.png");
-  const icon = nativeImage.createFromPath(iconPath);
-  tray = new Tray(icon);
+function restartToApplyUpdate(): void {
+  allowMainWindowClose = true;
+  autoUpdater.quitAndInstall(false, true);
+}
 
-  const menu = Menu.buildFromTemplate([
+function buildTrayMenu(): Electron.Menu {
+  const updateMenuItem: Electron.MenuItemConstructorOptions = updateReady
+    ? {
+        label: updateStatus.version
+          ? `Restart to Update (v${updateStatus.version})`
+          : "Restart to Update",
+        click: () => {
+          restartToApplyUpdate();
+        },
+      }
+    : updateDownloading
+      ? {
+          label: updateStatus.progress !== null
+            ? `Downloading Update... ${Math.round(updateStatus.progress)}%`
+            : "Downloading Update...",
+          enabled: false,
+        }
+      : updateCheckInFlight || updateStatus.state === "checking"
+        ? {
+            label: "Checking for Updates...",
+            enabled: false,
+          }
+        : {
+            label: isDev ? "Check for Updates (Unavailable in Dev)" : "Check for Updates...",
+            enabled: !isDev,
+            click: () => {
+              void runBackgroundUpdateCheck("tray");
+            },
+          };
+
+  return Menu.buildFromTemplate([
     {
       label: "Show Rift",
       click: () => {
@@ -243,6 +275,7 @@ function createTray(): void {
         }
       },
     },
+    updateMenuItem,
     { type: "separator" },
     {
       label: "Quit Rift",
@@ -252,9 +285,20 @@ function createTray(): void {
       },
     },
   ]);
+}
+
+function refreshTrayMenu(): void {
+  if (!tray) return;
+  tray.setContextMenu(buildTrayMenu());
+}
+
+function createTray(): void {
+  const iconPath = getAssetPath("tray.png");
+  const icon = nativeImage.createFromPath(iconPath);
+  tray = new Tray(icon);
 
   tray.setToolTip("Rift");
-  tray.setContextMenu(menu);
+  refreshTrayMenu();
 
   tray.on("double-click", () => {
     if (mainWindow) {
@@ -328,8 +372,7 @@ function registerIpc(): void {
   });
 
   ipcMain.on("app:restart-to-update", () => {
-    allowMainWindowClose = true;
-    autoUpdater.quitAndInstall(false, true);
+    restartToApplyUpdate();
   });
 }
 

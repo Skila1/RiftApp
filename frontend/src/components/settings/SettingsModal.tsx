@@ -139,8 +139,8 @@ function SettingsModal() {
       contentClassName="w-full max-w-[1400px]"
     >
       <div className="flex h-[min(94vh,920px)] w-full flex-col overflow-hidden rounded-[28px] border border-riftapp-border/40 bg-[#1e1f22] text-riftapp-text shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:h-[min(92vh,940px)] md:flex-row">
-            <nav className="flex w-full shrink-0 flex-col overflow-y-auto border-b border-riftapp-border/40 bg-[#1e1f22] px-5 py-5 md:w-[320px] md:border-b-0 md:border-r md:px-6 md:py-7">
-            <div className="mx-auto flex w-full max-w-[232px] flex-col gap-5">
+        <nav className="flex w-full shrink-0 flex-col overflow-y-auto border-b border-riftapp-border/40 bg-[#1e1f22] px-5 py-5 md:w-[320px] md:border-b-0 md:border-r md:px-6 md:py-7">
+          <div className="mx-auto flex w-full max-w-[232px] flex-col gap-5">
               <div>
                 <h3 className="section-label px-2 mb-3">User Settings</h3>
                 <div className="space-y-1">
