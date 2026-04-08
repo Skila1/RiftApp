@@ -54,9 +54,8 @@
     },
     "afterPack": "./scripts/afterPack.cjs",
     "publish": {
-      "provider": "github",
-      "owner": "Skila1",
-      "repo": "RiftApp"
+      "provider": "generic",
+      "url": "https://updates.riftapp.io"
     }
   },
   "dependencies": {

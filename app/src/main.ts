@@ -16,6 +16,7 @@ import { autoUpdater } from "electron-updater";
 
 const VITE_DEV_URL = "http://localhost:5173";
 const PRODUCTION_WEB_APP_URL = "https://riftapp.io/login";
+const DEFAULT_UPDATE_FEED_URL = "https://updates.riftapp.io";
 const UPDATE_CHECK_INTERVAL_MS = 3 * 60 * 1000;
 const TRUSTED_RENDERER_ORIGINS = new Set<string>([
   new URL(VITE_DEV_URL).origin,
@@ -578,12 +579,14 @@ function registerIpc(): void {
 
 function configureUpdaterFeed(): void {
   const customUrl = process.env.RIFT_UPDATE_URL?.trim();
-  if (customUrl) {
-    try {
-      autoUpdater.setFeedURL({ provider: "generic", url: customUrl });
-    } catch {
-      /* ignore */
-    }
+  const updateUrl = customUrl && customUrl.length > 0
+    ? customUrl
+    : DEFAULT_UPDATE_FEED_URL;
+
+  try {
+    autoUpdater.setFeedURL({ provider: "generic", url: updateUrl });
+  } catch {
+    /* ignore */
   }
 }
 

@@ -17,7 +17,7 @@ import { useFrontendUpdateStore } from '../../stores/frontendUpdateStore';
 import { useAppSettingsStore, type SettingsOverlayTab } from '../../stores/appSettingsStore';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { stripAssetVersion } from '../../utils/entityAssets';
-import { getDesktop } from '../../utils/desktop';
+import { getDesktop, idleDesktopUpdateStatus } from '../../utils/desktop';
 import {
   AUTO_THRESHOLD_MIN,
   AUTO_THRESHOLD_MAX,
@@ -27,7 +27,7 @@ import {
   MicNoiseGateProcessor,
   normalizeMicMeterLevel,
 } from '../../utils/audio/micNoiseGate';
-import type { DesktopBuildInfo } from '../../types/desktop';
+import type { DesktopBuildInfo, DesktopUpdateStatus } from '../../types/desktop';
 import ModalCloseButton from '@/components/shared/ModalCloseButton';
 import { CameraIcon } from '../voice/VoiceIcons';
 
@@ -94,6 +94,54 @@ function formatDesktopOsLabel(info: DesktopBuildInfo) {
   return archLabel ? `${platformLabel} (${archLabel})` : platformLabel;
 }
 
+function formatDesktopUpdateSummary(status: DesktopUpdateStatus) {
+  if (status.state === 'checking') {
+    return 'Checking for desktop updates...';
+  }
+
+  if (status.state === 'downloading') {
+    return status.progress !== null
+      ? `Downloading desktop update... ${Math.round(status.progress)}%`
+      : 'Downloading desktop update...';
+  }
+
+  if (status.state === 'ready') {
+    return status.version
+      ? `Desktop update ready • v${status.version}`
+      : 'Desktop update ready';
+  }
+
+  if (status.state === 'up-to-date') {
+    return status.version
+      ? `Desktop app is up to date • v${status.version}`
+      : 'Desktop app is up to date';
+  }
+
+  if (status.state === 'error') {
+    return 'Desktop update check failed';
+  }
+
+  return 'Desktop updates check in the background when the packaged app is running.';
+}
+
+function desktopUpdateActionLabel(status: DesktopUpdateStatus) {
+  if (status.state === 'ready') {
+    return 'Restart to Update';
+  }
+
+  if (status.state === 'checking') {
+    return 'Checking...';
+  }
+
+  if (status.state === 'downloading') {
+    return status.progress !== null
+      ? `Downloading... ${Math.round(status.progress)}%`
+      : 'Downloading...';
+  }
+
+  return 'Check for Updates';
+}
+
 function SettingsModal() {
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
@@ -107,7 +155,9 @@ function SettingsModal() {
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [desktopBuildInfo, setDesktopBuildInfo] = useState<DesktopBuildInfo>(emptyDesktopBuildInfo);
   const [appVersionLabel, setAppVersionLabel] = useState('Web App');
-  const isDesktopApp = useMemo(() => Boolean(getDesktop()), []);
+  const desktop = useMemo(() => getDesktop(), []);
+  const isDesktopApp = Boolean(desktop);
+  const [desktopUpdateStatus, setDesktopUpdateStatus] = useState<DesktopUpdateStatus>(idleDesktopUpdateStatus);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -142,9 +192,57 @@ function SettingsModal() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!desktop) return;
+
+    let cancelled = false;
+    void desktop.getUpdateStatus().then((status) => {
+      if (!cancelled) {
+        setDesktopUpdateStatus(status);
+      }
+    });
+
+    const disposeStatus = desktop.onUpdateStatus((status) => {
+      setDesktopUpdateStatus(status);
+    });
+    const disposeReady = desktop.onUpdateReady(() => {
+      setDesktopUpdateStatus((current) => ({
+        ...current,
+        state: 'ready',
+        message: current.message || 'Restart to install the downloaded desktop update.',
+      }));
+    });
+
+    return () => {
+      cancelled = true;
+      disposeStatus();
+      disposeReady();
+    };
+  }, [desktop]);
+
+  const handleDesktopUpdateAction = useCallback(() => {
+    if (!desktop) return;
+
+    if (desktopUpdateStatus.state === 'ready') {
+      desktop.restartToUpdate();
+      return;
+    }
+
+    if (desktopUpdateStatus.state === 'checking' || desktopUpdateStatus.state === 'downloading') {
+      return;
+    }
+
+    void desktop.checkForUpdates().then((status) => {
+      setDesktopUpdateStatus(status);
+    });
+  }, [desktop, desktopUpdateStatus.state]);
+
   const desktopOsLabel = formatDesktopOsLabel(desktopBuildInfo);
   const frontendCommitLabel = formatFrontendCommitSha(frontendCommitSha);
   const frontendBuildLabel = formatFrontendBuildTimestamp(frontendBuildId);
+  const desktopUpdateSummary = formatDesktopUpdateSummary(desktopUpdateStatus);
+  const desktopUpdateButtonText = desktopUpdateActionLabel(desktopUpdateStatus);
+  const desktopUpdateBusy = desktopUpdateStatus.state === 'checking' || desktopUpdateStatus.state === 'downloading';
 
   if (!user) return null;
 
@@ -241,6 +339,29 @@ function SettingsModal() {
                     {frontendBuildLabel && <p>{`Build: ${frontendBuildLabel}`}</p>}
                     {desktopBuildInfo.electronVersion ? <p>Electron {desktopBuildInfo.electronVersion}</p> : null}
                     {desktopOsLabel && <p>{desktopOsLabel}</p>}
+                    {isDesktopApp ? (
+                      <div className="mt-2 rounded-lg border border-riftapp-border/40 bg-riftapp-bg/35 px-2.5 py-2">
+                        <p className={`font-semibold ${desktopUpdateStatus.state === 'error' ? 'text-riftapp-danger' : desktopUpdateStatus.state === 'ready' ? 'text-[#3ba55d]' : 'text-riftapp-text'}`}>
+                          {desktopUpdateSummary}
+                        </p>
+                        {desktopUpdateStatus.message ? (
+                          <p className="mt-1 text-riftapp-text-muted">{desktopUpdateStatus.message}</p>
+                        ) : null}
+                        <div className="mt-2 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleDesktopUpdateAction}
+                            disabled={desktopUpdateBusy}
+                            className={`inline-flex h-7 items-center rounded-md px-2.5 text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${desktopUpdateStatus.state === 'ready' ? 'bg-[#248046] text-white hover:bg-[#2d9d58]' : 'border border-riftapp-border/60 bg-riftapp-content-elevated text-riftapp-text hover:bg-riftapp-content'}`}
+                          >
+                            {desktopUpdateButtonText}
+                          </button>
+                          {desktopUpdateStatus.version && desktopUpdateStatus.state !== 'up-to-date' ? (
+                            <span className="text-riftapp-text-dim">{`Target ${desktopUpdateStatus.version}`}</span>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
                     {frontendUpdateReady ? (
                       <p className="font-semibold text-[#3ba55d]">
                         {isDesktopApp
