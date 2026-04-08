@@ -11,6 +11,7 @@ import MiniProfilePopover from '../shared/MiniProfilePopover';
 import FullProfileModal from '../shared/FullProfileModal';
 import SelfProfilePopover from '../shared/SelfProfilePopover';
 import UserContextMenu from '../shared/UserContextMenu';
+import DesktopScreenSharePickerModal from '../voice/DesktopScreenSharePickerModal';
 import ScreenShareModal from '../voice/ScreenShareModal';
 import VoiceBottomBar from '../voice/VoiceBottomBar';
 import FloatingActiveSpeakerMedia from '../voice/FloatingActiveSpeakerMedia';
@@ -125,6 +126,7 @@ export default function AppLayout() {
       <FullProfileModal />
       <SelfProfilePopover />
       <UserContextMenu />
+      <DesktopScreenSharePickerModal />
       <ScreenShareModal />
       <FloatingActiveSpeakerMedia />
     </div>

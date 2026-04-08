@@ -13,6 +13,14 @@ export interface DesktopUpdateStatus {
   message: string;
 }
 
+export interface DesktopDisplaySource {
+  id: string;
+  name: string;
+  kind: 'screen' | 'window';
+  thumbnailDataUrl: string | null;
+  appIconDataUrl: string | null;
+}
+
 export interface DesktopAPI {
   minimize: () => void;
   maximize: () => void;
@@ -23,6 +31,8 @@ export interface DesktopAPI {
   getUpdateStatus: () => Promise<DesktopUpdateStatus>;
   isUpdateReady: () => Promise<boolean>;
   checkForUpdates: () => Promise<DesktopUpdateStatus>;
+  listDisplaySources: () => Promise<DesktopDisplaySource[]>;
+  selectDisplaySource: (sourceId: string) => Promise<boolean>;
   onMaximizedChange: (cb: (maximized: boolean) => void) => () => void;
   onUpdateStatus: (cb: (status: DesktopUpdateStatus) => void) => () => void;
   onUpdateReady: (cb: () => void) => () => void;

@@ -21,11 +21,13 @@ import type {
   BackgroundProcessorWrapper,
   SwitchBackgroundProcessorOptions,
 } from '@livekit/track-processors';
+import type { DesktopDisplaySource } from '../types/desktop';
 import { api } from '../api/client';
 import { wsSend } from '../hooks/useWebSocket';
 import { useStreamStore } from './streamStore';
 import { useActiveSpeakerStore } from './activeSpeakerStore';
 import { publicAssetUrl } from '../utils/publicAssetUrl';
+import { getDesktop } from '../utils/desktop';
 import {
   DEFAULT_MANUAL_MIC_THRESHOLD,
   DEFAULT_MIC_GATE_RELEASE_MS,
@@ -50,6 +52,10 @@ type VoiceDeviceKind = 'audioinput' | 'audiooutput' | 'videoinput';
 export type ScreenShareNotice = {
   tone: 'info' | 'error';
   message: string;
+};
+
+type StartScreenShareOptions = {
+  surfaceLabel?: string | null;
 };
 
 type TrackProcessorsModule = typeof import('@livekit/track-processors');
@@ -349,6 +355,9 @@ interface VoiceStore {
   screenShareResolution: ScreenShareResolution;
   screenShareSurfaceLabel: string | null;
   screenShareNotice: ScreenShareNotice | null;
+  desktopScreenSharePickerOpen: boolean;
+  desktopScreenSharePickerLoading: boolean;
+  desktopScreenShareSources: DesktopDisplaySource[];
 
   join: (streamId: string) => Promise<void>;
   leave: () => void;
@@ -359,6 +368,9 @@ interface VoiceStore {
   changeScreenShare: () => Promise<void>;
   setScreenShareQuality: (fps: ScreenShareFps, resolution: ScreenShareResolution) => Promise<void>;
   dismissScreenShareNotice: () => void;
+  openDesktopScreenSharePicker: () => Promise<void>;
+  closeDesktopScreenSharePicker: () => void;
+  chooseDesktopScreenShareSource: (sourceId: string) => Promise<void>;
   togglePTT: () => void;
   setParticipantVolume: (identity: string, volume: number) => void;
   toggleVoiceOutputMute: () => void;
@@ -1177,7 +1189,86 @@ function buildScreenShareOptions(kind: ScreenShareKind, fps: ScreenShareFps = 30
   return options;
 }
 
-async function startScreenShare(room: Room, state: Pick<VoiceStore, 'screenShareKind' | 'screenShareFps' | 'screenShareResolution'>, streamId: string | null) {
+function hasDesktopDisplaySourceApi() {
+  return typeof window !== 'undefined'
+    && typeof window.desktop?.listDisplaySources === 'function'
+    && typeof window.desktop?.selectDisplaySource === 'function';
+}
+
+function preferredDesktopScreenShareKind(kind: ScreenShareKind): DesktopDisplaySource['kind'] {
+  return kind === 'screen' ? 'screen' : 'window';
+}
+
+function filterDesktopScreenShareSources(sources: DesktopDisplaySource[], kind: ScreenShareKind) {
+  const preferredKind = preferredDesktopScreenShareKind(kind);
+  const preferredSources = sources.filter((source) => source.kind === preferredKind);
+  const visibleSources = preferredSources.length > 0 ? preferredSources : sources;
+
+  return [...visibleSources].sort((left, right) => {
+    if (left.kind !== right.kind) {
+      return left.kind === preferredKind ? -1 : 1;
+    }
+
+    return left.name.localeCompare(right.name);
+  });
+}
+
+function closeDesktopScreenSharePicker() {
+  useVoiceStore.setState({
+    desktopScreenSharePickerOpen: false,
+    desktopScreenSharePickerLoading: false,
+    desktopScreenShareSources: [],
+  });
+}
+
+async function requestDesktopScreenSharePicker(kind: ScreenShareKind): Promise<boolean> {
+  if (!hasDesktopDisplaySourceApi()) {
+    return false;
+  }
+
+  const desktop = getDesktop();
+  if (!desktop) {
+    return false;
+  }
+
+  useVoiceStore.setState({
+    desktopScreenSharePickerOpen: false,
+    desktopScreenSharePickerLoading: true,
+    desktopScreenShareSources: [],
+  });
+  setScreenShareNotice(null);
+
+  try {
+    const sources = filterDesktopScreenShareSources(await desktop.listDisplaySources(), kind);
+    if (!sources.length) {
+      closeDesktopScreenSharePicker();
+      setScreenShareNotice({
+        tone: 'error',
+        message: kind === 'screen' ? 'No screen available to share' : 'No window available to share',
+      });
+      return true;
+    }
+
+    useVoiceStore.setState({
+      desktopScreenSharePickerOpen: true,
+      desktopScreenSharePickerLoading: false,
+      desktopScreenShareSources: sources,
+    });
+  } catch (err) {
+    console.error('Failed to load desktop screen share sources:', err);
+    closeDesktopScreenSharePicker();
+    setScreenShareNotice({ tone: 'error', message: 'Unable to open screen share picker' });
+  }
+
+  return true;
+}
+
+async function startScreenShare(
+  room: Room,
+  state: Pick<VoiceStore, 'screenShareKind' | 'screenShareFps' | 'screenShareResolution'>,
+  streamId: string | null,
+  options?: StartScreenShareOptions,
+) {
   // Go directly to browser's native picker — no intermediate modal
   useVoiceStore.setState({ screenShareRequesting: true });
   setScreenShareNotice(null);
@@ -1190,7 +1281,7 @@ async function startScreenShare(room: Room, state: Pick<VoiceStore, 'screenShare
     useVoiceStore.setState({
       isScreenSharing: true,
       screenShareRequesting: false,
-      screenShareSurfaceLabel: inferSurfaceLabel(state.screenShareKind),
+      screenShareSurfaceLabel: options?.surfaceLabel ?? inferSurfaceLabel(state.screenShareKind),
       screenShareModalOpen: true,
     });
     if (streamId) wsSend('voice_screen_share_update', { stream_id: streamId, sharing: true });
@@ -1203,7 +1294,12 @@ async function startScreenShare(room: Room, state: Pick<VoiceStore, 'screenShare
     } else if (name === 'NotFoundError' || message.includes('available')) {
       setScreenShareNotice({ tone: 'error', message: 'No screen available to share' });
     } else if (name === 'NotAllowedError') {
-      setScreenShareNotice({ tone: 'error', message: 'Screen share permission denied — check browser settings' });
+      setScreenShareNotice({
+        tone: 'error',
+        message: hasDesktopDisplaySourceApi()
+          ? 'Screen share cancelled or blocked by the desktop app'
+          : 'Screen share permission denied — check browser settings',
+      });
     } else {
       setScreenShareNotice({ tone: 'error', message: 'Unable to start screen share' });
     }
@@ -1397,6 +1493,9 @@ function resetState() {
     screenShareResolution: '1080p',
     screenShareSurfaceLabel: null,
     screenShareNotice: null,
+    desktopScreenSharePickerOpen: false,
+    desktopScreenSharePickerLoading: false,
+    desktopScreenShareSources: [],
   });
 }
 
@@ -1451,6 +1550,9 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   screenShareResolution: '1080p',
   screenShareSurfaceLabel: null,
   screenShareNotice: null,
+  desktopScreenSharePickerOpen: false,
+  desktopScreenSharePickerLoading: false,
+  desktopScreenShareSources: [],
 
   join: async (sid) => {
     if (joiningLock) return;
@@ -1648,6 +1750,9 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
       await stopScreenShare(roomRef);
       if (streamId) wsSend('voice_screen_share_update', { stream_id: streamId, sharing: false });
     } else {
+      if (await requestDesktopScreenSharePicker(get().screenShareKind)) {
+        return;
+      }
       await startScreenShare(roomRef, get(), streamId);
     }
     syncParticipants();
@@ -1660,6 +1765,9 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
       await stopScreenShare(roomRef);
       if (streamId) wsSend('voice_screen_share_update', { stream_id: streamId, sharing: false });
       syncParticipants();
+    }
+    if (await requestDesktopScreenSharePicker(get().screenShareKind)) {
+      return;
     }
     await startScreenShare(roomRef, get(), streamId);
     syncParticipants();
@@ -1705,6 +1813,39 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
 
   dismissScreenShareNotice: () => {
     setScreenShareNotice(null);
+  },
+
+  openDesktopScreenSharePicker: async () => {
+    if (!roomRef || roomRef.state !== ConnectionState.Connected) return;
+    await requestDesktopScreenSharePicker(get().screenShareKind);
+  },
+
+  closeDesktopScreenSharePicker: () => {
+    closeDesktopScreenSharePicker();
+  },
+
+  chooseDesktopScreenShareSource: async (sourceId: string) => {
+    if (!roomRef || roomRef.state !== ConnectionState.Connected) return;
+
+    const desktop = getDesktop();
+    if (!hasDesktopDisplaySourceApi() || !desktop) return;
+
+    const source = get().desktopScreenShareSources.find((item) => item.id === sourceId) ?? null;
+    closeDesktopScreenSharePicker();
+
+    if (!source) {
+      setScreenShareNotice({ tone: 'error', message: 'Selected screen is no longer available' });
+      return;
+    }
+
+    const accepted = await desktop.selectDisplaySource(sourceId);
+    if (!accepted) {
+      setScreenShareNotice({ tone: 'error', message: 'Selected screen is no longer available' });
+      return;
+    }
+
+    await startScreenShare(roomRef, get(), get().streamId, { surfaceLabel: source.name });
+    syncParticipants();
   },
 
   toggleDeafen: async () => {

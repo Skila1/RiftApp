@@ -1,4 +1,4 @@
-import type { DesktopAPI, DesktopBuildInfo, DesktopUpdateStatus } from '@/types/desktop';
+import type { DesktopAPI, DesktopBuildInfo, DesktopDisplaySource, DesktopUpdateStatus } from '@/types/desktop';
 
 export const idleDesktopUpdateStatus: DesktopUpdateStatus = {
   state: 'idle',
@@ -34,6 +34,8 @@ export function getDesktop(): DesktopAPI | undefined {
       getUpdateStatus: () => d.getUpdateStatus?.() ?? Promise.resolve(idleDesktopUpdateStatus),
       isUpdateReady: () => d.isUpdateReady?.() ?? Promise.resolve(false),
       checkForUpdates: () => d.checkForUpdates?.() ?? Promise.resolve(idleDesktopUpdateStatus),
+      listDisplaySources: () => d.listDisplaySources?.() ?? Promise.resolve([] satisfies DesktopDisplaySource[]),
+      selectDisplaySource: (sourceId) => d.selectDisplaySource?.(sourceId) ?? Promise.resolve(false),
       onMaximizedChange: (cb) => d.onMaximizedChange?.(cb) ?? (() => {}),
       onUpdateStatus: (cb) => d.onUpdateStatus?.(cb) ?? (() => {}),
       onUpdateReady: (cb) => d.onUpdateReady?.(cb) ?? (() => {}),
@@ -68,6 +70,8 @@ export function getDesktop(): DesktopAPI | undefined {
     getUpdateStatus: async () => idleDesktopUpdateStatus,
     isUpdateReady: async () => false,
     checkForUpdates: async () => idleDesktopUpdateStatus,
+    listDisplaySources: async () => [],
+    selectDisplaySource: async () => false,
     onMaximizedChange: r.onMaximizedChange,
     onUpdateStatus: () => () => {},
     onUpdateReady: () => () => {},

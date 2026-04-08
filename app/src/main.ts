@@ -7,6 +7,7 @@ import {
   ipcMain,
   shell,
   session,
+  desktopCapturer,
 } from "electron";
 import os from "os";
 import path from "path";
@@ -38,6 +39,14 @@ type DesktopUpdateStatus = {
   message: string;
 };
 
+type DesktopDisplaySource = {
+  id: string;
+  name: string;
+  kind: "screen" | "window";
+  thumbnailDataUrl: string | null;
+  appIconDataUrl: string | null;
+};
+
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 const appVersion = app.getVersion();
 
@@ -60,6 +69,7 @@ let updateStatus: DesktopUpdateStatus = {
   progress: null,
   message: "",
 };
+let pendingDisplaySourceId: string | null = null;
 
 // ── Paths ──────────────────────────────────────────────────
 
@@ -106,6 +116,50 @@ function getPermissionRequestOrigin(
   return details?.requestingUrl ?? details?.securityOrigin;
 }
 
+function serializeNativeImage(image: Electron.NativeImage | null | undefined): string | null {
+  if (!image || image.isEmpty()) {
+    return null;
+  }
+
+  try {
+    return image.toDataURL();
+  } catch {
+    return null;
+  }
+}
+
+function mapDesktopDisplaySource(source: Electron.DesktopCapturerSource): DesktopDisplaySource {
+  return {
+    id: source.id,
+    name: source.name,
+    kind: source.id.startsWith("window:") ? "window" : "screen",
+    thumbnailDataUrl: serializeNativeImage(source.thumbnail),
+    appIconDataUrl: serializeNativeImage(source.appIcon),
+  };
+}
+
+async function getDesktopDisplaySources(thumbnailSize: Electron.Size): Promise<DesktopDisplaySource[]> {
+  const sources = await desktopCapturer.getSources({
+    types: ["screen", "window"],
+    fetchWindowIcons: true,
+    thumbnailSize,
+  });
+
+  return sources
+    .filter((source) => source.id.startsWith("screen:") || source.name.trim().length > 0)
+    .map(mapDesktopDisplaySource);
+}
+
+async function findDesktopDisplaySourceById(sourceId: string): Promise<Electron.DesktopCapturerSource | null> {
+  const sources = await desktopCapturer.getSources({
+    types: ["screen", "window"],
+    fetchWindowIcons: false,
+    thumbnailSize: { width: 0, height: 0 },
+  });
+
+  return sources.find((source) => source.id === sourceId) ?? null;
+}
+
 function configureRendererPermissions(): void {
   const ses = session.defaultSession;
 
@@ -132,6 +186,48 @@ function configureRendererPermissions(): void {
     }
 
     callback(allowed);
+  });
+}
+
+function configureDisplayMediaHandling(): void {
+  const ses = session.defaultSession;
+
+  ses.setDisplayMediaRequestHandler((request, callback) => {
+    void (async () => {
+      if (!shouldAllowRendererPermission("display-capture", request.securityOrigin)) {
+        console.warn(`[Rift permissions] Denied display media request for ${request.securityOrigin}`);
+        callback({});
+        return;
+      }
+
+      const sourceId = pendingDisplaySourceId;
+      pendingDisplaySourceId = null;
+
+      if (!sourceId) {
+        console.warn(`[Rift permissions] Missing pending display source for ${request.securityOrigin}`);
+        callback({});
+        return;
+      }
+
+      try {
+        const source = await findDesktopDisplaySourceById(sourceId);
+        if (!source) {
+          console.warn(`[Rift permissions] Display source ${sourceId} is no longer available.`);
+          callback({});
+          return;
+        }
+
+        if (request.audioRequested && process.platform === "win32" && source.id.startsWith("screen:")) {
+          callback({ video: source, audio: "loopback" });
+          return;
+        }
+
+        callback({ video: source });
+      } catch (error) {
+        console.warn("[Rift permissions] Failed to resolve display media request:", error);
+        callback({});
+      }
+    })();
   });
 }
 
@@ -446,6 +542,34 @@ function registerIpc(): void {
   ipcMain.on("app:restart-to-update", () => {
     restartToApplyUpdate();
   });
+
+  ipcMain.handle("desktop:list-display-sources", async (event) => {
+    if (!isTrustedRendererOrigin(event.sender.getURL())) {
+      return [];
+    }
+
+    return getDesktopDisplaySources({ width: 320, height: 180 });
+  });
+
+  ipcMain.handle("desktop:select-display-source", async (event, sourceId: string) => {
+    if (!isTrustedRendererOrigin(event.sender.getURL())) {
+      return false;
+    }
+
+    if (typeof sourceId !== "string" || sourceId.trim().length === 0) {
+      pendingDisplaySourceId = null;
+      return false;
+    }
+
+    const source = await findDesktopDisplaySourceById(sourceId);
+    if (!source) {
+      pendingDisplaySourceId = null;
+      return false;
+    }
+
+    pendingDisplaySourceId = source.id;
+    return true;
+  });
 }
 
 // ── Auto-updater ───────────────────────────────────────────
@@ -649,7 +773,8 @@ if (!gotLock) {
       Menu.setApplicationMenu(null);
     }
 
-  configureRendererPermissions();
+    configureRendererPermissions();
+    configureDisplayMediaHandling();
     registerIpc();
 
     if (isDev) {
@@ -679,6 +804,7 @@ if (!gotLock) {
 
   app.on("before-quit", () => {
     allowMainWindowClose = true;
+    pendingDisplaySourceId = null;
     clearUpdateStatusResetTimer();
     clearBackgroundUpdateTimer();
     tray?.destroy();

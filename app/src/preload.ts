@@ -1,5 +1,13 @@
 import { contextBridge, ipcRenderer } from "electron";
 
+type DesktopDisplaySource = {
+  id: string;
+  name: string;
+  kind: "screen" | "window";
+  thumbnailDataUrl: string | null;
+  appIconDataUrl: string | null;
+};
+
 const desktop = {
   minimize: () => {
     ipcRenderer.send("window:minimize");
@@ -35,6 +43,10 @@ const desktop = {
       progress: number | null;
       message: string;
     }>,
+  listDisplaySources: () =>
+    ipcRenderer.invoke("desktop:list-display-sources") as Promise<DesktopDisplaySource[]>,
+  selectDisplaySource: (sourceId: string) =>
+    ipcRenderer.invoke("desktop:select-display-source", sourceId) as Promise<boolean>,
   onMaximizedChange: (cb: (maximized: boolean) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, v: boolean) => cb(v);
     ipcRenderer.on("window-maximized", handler);
