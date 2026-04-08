@@ -20,6 +20,7 @@ import { usePresenceStore } from '../../stores/presenceStore';
 import { useWsSend } from '../../hooks/useWebSocket';
 import MessageInput from './MessageInput';
 import MessageItem from './MessageItem';
+import PinSystemMessage from './PinSystemMessage';
 import TypingIndicator from './TypingIndicator';
 import UpdateActionButton from '../shared/UpdateActionButton';
 import type {
@@ -29,9 +30,12 @@ import type {
   StreamNotificationSettings,
   User,
 } from '../../types';
+import type { ChatTimelineItem } from '../../utils/chatTimeline';
+import { buildChatTimeline } from '../../utils/chatTimeline';
 import { normalizeMessages } from '../../utils/entityAssets';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { subscribeToChatSearchRequests } from '../../utils/chatSearchBridge';
+import { jumpToMessageId } from '../../utils/messageJump';
 
 type HeaderPanel = 'notifications' | 'pins' | 'search' | 'inbox' | null;
 type StreamNotificationToggleKey =
@@ -526,6 +530,7 @@ export default function ChatPanel({
   const messages = useMessageStore((s) => s.messages);
   const messagesLoading = useMessageStore((s) => s.messagesLoading);
   const pinMutationVersion = useMessageStore((s) => s.pinMutationVersion);
+  const pinSystemEventsByStream = useMessageStore((s) => s.pinSystemEventsByStream);
   const activeStreamId = useStreamStore((s) => s.activeStreamId);
   const streams = useStreamStore((s) => s.streams);
   const user = useAuthStore((s) => s.user);
@@ -589,6 +594,23 @@ export default function ChatPanel({
 
   const displayMessages = isDMMode ? dmMessages : messages;
   const isLoading = isDMMode ? dmMessagesLoading : messagesLoading;
+  const pinSystemEvents = useMemo(
+    () => (!isDMMode && activeStreamId ? pinSystemEventsByStream[activeStreamId] ?? [] : []),
+    [activeStreamId, isDMMode, pinSystemEventsByStream],
+  );
+  const timelineItems = useMemo<ChatTimelineItem[]>(
+    () => (
+      isDMMode
+        ? displayMessages.map((message) => ({
+            kind: 'message' as const,
+            id: message.id,
+            timestamp: message.created_at,
+            message,
+          }))
+        : buildChatTimeline(displayMessages, pinSystemEvents)
+    ),
+    [displayMessages, isDMMode, pinSystemEvents],
+  );
 
   const [activePanel, setActivePanel] = useState<HeaderPanel>(null);
   const [pinnedMessages, setPinnedMessages] = useState<Message[]>([]);
@@ -792,17 +814,17 @@ export default function ChatPanel({
       el.scrollTop = saved.scrollTop + delta;
       const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
       wasNearBottomRef.current = dist < NEAR_BOTTOM_THRESHOLD;
-      prevMessageCountRef.current = displayMessages.length;
+      prevMessageCountRef.current = timelineItems.length;
       hasScrolledToUnread.current = true;
       return;
     }
 
     // 2) First-time channel visit — scroll to bottom
-    if (needsScrollToBottomRef.current && bottomEl && displayMessages.length > 0) {
+    if (needsScrollToBottomRef.current && bottomEl && timelineItems.length > 0) {
       needsScrollToBottomRef.current = false;
       bottomEl.scrollIntoView({ behavior: 'auto' });
       wasNearBottomRef.current = true;
-      prevMessageCountRef.current = displayMessages.length;
+      prevMessageCountRef.current = timelineItems.length;
       hasScrolledToUnread.current = true;
       return;
     }
@@ -811,7 +833,7 @@ export default function ChatPanel({
     if (!hasScrolledToUnread.current && unreadRef.current) {
       unreadRef.current.scrollIntoView({ behavior: 'auto', block: 'center' });
       hasScrolledToUnread.current = true;
-      prevMessageCountRef.current = displayMessages.length;
+      prevMessageCountRef.current = timelineItems.length;
       if (el) {
         const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
         wasNearBottomRef.current = dist < NEAR_BOTTOM_THRESHOLD;
@@ -820,20 +842,20 @@ export default function ChatPanel({
     }
 
     if (!el || !bottomEl) {
-      prevMessageCountRef.current = displayMessages.length;
+      prevMessageCountRef.current = timelineItems.length;
       return;
     }
 
     // 4) New messages while viewing a channel
-    const grew = displayMessages.length > prevMessageCountRef.current;
-    prevMessageCountRef.current = displayMessages.length;
+    const grew = timelineItems.length > prevMessageCountRef.current;
+    prevMessageCountRef.current = timelineItems.length;
 
     if (grew && wasNearBottomRef.current) {
       bottomEl.scrollIntoView({ behavior: 'auto' });
     } else if (grew) {
       setShowNewMsgBanner(true);
     }
-  }, [activeStreamId, activeConversationId, displayMessages.length, isLoading, firstUnreadIndex]);
+  }, [activeStreamId, activeConversationId, timelineItems.length, isLoading, firstUnreadIndex]);
 
   // Ack DM conversation when it becomes active and messages have loaded
   useEffect(() => {
@@ -845,10 +867,7 @@ export default function ChatPanel({
   const showWelcome = !activeStreamId && !activeConversationId;
 
   const focusMessage = useCallback((messageId: string) => {
-    const target = document.getElementById(`message-${messageId}`);
-    if (!target) return false;
-    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    return true;
+    return jumpToMessageId(messageId);
   }, []);
 
   const closePanel = useCallback(() => setActivePanel(null), []);
@@ -870,6 +889,23 @@ export default function ChatPanel({
       setPinnedLoading(false);
     }
   }, [activeStreamId, isDMMode]);
+
+  const openPinnedMessageFromTimeline = useCallback(
+    async (messageId: string) => {
+      if (!activeStreamId) return;
+      if (focusMessage(messageId)) return;
+      await useMessageStore.getState().ensureMessageLoaded(activeStreamId, messageId);
+      requestAnimationFrame(() => {
+        focusMessage(messageId);
+      });
+    },
+    [activeStreamId, focusMessage],
+  );
+
+  const openPinnedMessagesPanel = useCallback(() => {
+    setActivePanel('pins');
+    void refreshPinnedMessages();
+  }, [refreshPinnedMessages]);
 
   const refreshStreamNotificationSettings = useCallback(async () => {
     if (!activeStreamId || isDMMode) return;
@@ -1695,7 +1731,7 @@ export default function ChatPanel({
               </div>
             ))}
           </div>
-        ) : displayMessages.length === 0 ? (
+        ) : timelineItems.length === 0 ? (
           <div className="flex items-center justify-center h-full animate-fade-in">
             <div className="text-center px-8">
               <div className="w-16 h-16 rounded-full bg-riftapp-content-elevated flex items-center justify-center mx-auto mb-4">
@@ -1720,26 +1756,23 @@ export default function ChatPanel({
           </div>
         ) : (
           <div className="px-4 py-4">
-            {displayMessages.map((msg, i) => {
-              const prev = displayMessages[i - 1];
-              const msgDate = new Date(msg.created_at).toDateString();
-              const prevDate = prev ? new Date(prev.created_at).toDateString() : null;
-              const showDateSeparator = !prev || msgDate !== prevDate;
-              const showHeader =
-                !prev ||
-                prev.author_id !== msg.author_id ||
-                new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime() > 300000 ||
-                showDateSeparator;
-
-              const showUnreadDivider = i === firstUnreadIndex;
+            {timelineItems.map((item, index) => {
+              const prevItem = timelineItems[index - 1];
+              const itemDate = new Date(item.timestamp).toDateString();
+              const prevDate = prevItem ? new Date(prevItem.timestamp).toDateString() : null;
+              const showDateSeparator = !prevItem || itemDate !== prevDate;
+              const showUnreadDivider =
+                item.kind === 'message' &&
+                firstUnreadIndex >= 0 &&
+                displayMessages[firstUnreadIndex]?.id === item.message.id;
 
               return (
-                <div key={msg.id}>
+                <div key={item.id}>
                   {showDateSeparator && (
                     <div className="flex items-center gap-4 my-4 first:mt-0 px-2">
                       <div className="flex-1 h-px bg-riftapp-border/40" />
                       <span className="text-[11px] font-semibold text-riftapp-text-dim select-none flex-shrink-0">
-                        {formatDateSeparator(msg.created_at)}
+                        {formatDateSeparator(item.timestamp)}
                       </span>
                       <div className="flex-1 h-px bg-riftapp-border/40" />
                     </div>
@@ -1753,13 +1786,41 @@ export default function ChatPanel({
                       <div className="flex-1 h-px bg-riftapp-danger/60" />
                     </div>
                   )}
-                  <MessageItem
-                    message={msg}
-                    showHeader={showHeader}
-                    isOwn={msg.author_id === user?.id}
-                    isDM={isDMMode}
-                    hubId={activeHubId}
-                  />
+                  {item.kind === 'message' ? (() => {
+                    const prevMessage = prevItem?.kind === 'message' ? prevItem.message : undefined;
+                    const showHeader =
+                      !prevMessage ||
+                      prevItem?.kind !== 'message' ||
+                      prevMessage.author_id !== item.message.author_id ||
+                      new Date(item.message.created_at).getTime() - new Date(prevMessage.created_at).getTime() > 300000 ||
+                      showDateSeparator;
+
+                    return (
+                      <MessageItem
+                        message={item.message}
+                        showHeader={showHeader}
+                        isOwn={item.message.author_id === user?.id}
+                        isDM={isDMMode}
+                        hubId={activeHubId}
+                      />
+                    );
+                  })() : (
+                    <PinSystemMessage
+                      timestamp={item.event.pinnedAt}
+                      user={item.event.pinnedById ? (hubMembers[item.event.pinnedById] ?? item.event.pinnedBy) : item.event.pinnedBy}
+                      username={
+                        (item.event.pinnedById
+                          ? hubMembers[item.event.pinnedById]?.display_name || hubMembers[item.event.pinnedById]?.username
+                          : undefined) ||
+                        item.event.pinnedBy?.display_name ||
+                        item.event.pinnedBy?.username ||
+                        'Someone'
+                      }
+                      messageAvailable={!item.event.targetDeleted}
+                      onOpenMessage={() => void openPinnedMessageFromTimeline(item.event.originalMessageId)}
+                      onOpenPinnedMessages={openPinnedMessagesPanel}
+                    />
+                  )}
                 </div>
               );
             })}

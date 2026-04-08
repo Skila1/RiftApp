@@ -17,6 +17,7 @@ import ModalCloseButton from '../shared/ModalCloseButton';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { hasPermission, PermManageMessages } from '../../utils/permissions';
 import { getReplyAuthorLabel, getReplyPreviewMeta } from '../../utils/replyPreview';
+import { jumpToMessageId } from '../../utils/messageJump';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return bytes + ' B';
@@ -362,25 +363,7 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
   const handleReplyPreviewClick = useCallback(() => {
     const replyId = message.reply_to?.id ?? message.reply_to_message_id;
     if (!replyId) return;
-    const target = document.getElementById(`message-${replyId}`) as HTMLElement | null;
-    if (!target) return;
-
-    const previousTimer = Number(target.dataset.replyJumpTimer ?? '0');
-    if (!Number.isNaN(previousTimer) && previousTimer > 0) {
-      window.clearTimeout(previousTimer);
-    }
-
-    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    target.classList.remove('rift-message-jump-highlight');
-    void target.offsetWidth;
-    target.classList.add('rift-message-jump-highlight');
-
-    const timer = window.setTimeout(() => {
-      target.classList.remove('rift-message-jump-highlight');
-      delete target.dataset.replyJumpTimer;
-    }, 1800);
-
-    target.dataset.replyJumpTimer = String(timer);
+    jumpToMessageId(replyId);
   }, [message.reply_to?.id, message.reply_to_message_id]);
 
   const handleProfileClick = useCallback((e: React.MouseEvent) => {
@@ -650,16 +633,6 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
               />
             </div>
           )}
-        </div>
-      )}
-
-      {Boolean(message.pinned || message.pinned_at) && (
-        <div className={`mb-1 flex items-center gap-1.5 text-[11px] font-medium text-riftapp-text-dim ${showHeader ? 'pl-[52px]' : 'pl-[52px]'}`}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-            <path d="M14 4v5l3 3v1H7v-1l3-3V4" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M12 13v8" strokeLinecap="round" />
-          </svg>
-          <span>Pinned message</span>
         </div>
       )}
 

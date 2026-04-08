@@ -46,10 +46,125 @@ function pruneStreamCaches(
   return next;
 }
 
+export interface PinSystemEvent {
+  id: string;
+  streamId: string;
+  originalMessageId: string;
+  pinnedAt: string;
+  pinnedById: string | null;
+  pinnedBy?: User;
+  targetDeleted: boolean;
+}
+
+function pinSystemEventId(messageId: string, pinnedAt: string) {
+  return `pin:${messageId}:${pinnedAt}`;
+}
+
+function buildPinSystemEvent(message: Message, existing?: PinSystemEvent): PinSystemEvent | null {
+  if (!message.stream_id || !message.pinned_at) {
+    return null;
+  }
+
+  return {
+    id: pinSystemEventId(message.id, message.pinned_at),
+    streamId: message.stream_id,
+    originalMessageId: message.id,
+    pinnedAt: message.pinned_at,
+    pinnedById: message.pinned_by?.id ?? message.pinned_by_id ?? existing?.pinnedById ?? null,
+    pinnedBy: message.pinned_by ? normalizeUser(message.pinned_by) : existing?.pinnedBy,
+    targetDeleted: false,
+  };
+}
+
+function mergePinSystemEvents(existing: PinSystemEvent[] | undefined, messages: Message[]): PinSystemEvent[] {
+  const map = new Map<string, PinSystemEvent>();
+
+  for (const event of existing ?? []) {
+    map.set(event.id, event);
+  }
+
+  for (const message of messages) {
+    if (!message.pinned_at) {
+      continue;
+    }
+
+    const existingEvent = map.get(pinSystemEventId(message.id, message.pinned_at));
+    const nextEvent = buildPinSystemEvent(message, existingEvent);
+    if (!nextEvent) {
+      continue;
+    }
+
+    map.set(nextEvent.id, nextEvent);
+  }
+
+  return [...map.values()].sort(
+    (left, right) => new Date(left.pinnedAt).getTime() - new Date(right.pinnedAt).getTime(),
+  );
+}
+
+function markPinEventsTargetDeleted(
+  pinSystemEventsByStream: Record<string, PinSystemEvent[]>,
+  originalMessageId: string,
+) {
+  let changed = false;
+  const next: Record<string, PinSystemEvent[]> = {};
+
+  for (const [streamId, events] of Object.entries(pinSystemEventsByStream)) {
+    let streamChanged = false;
+    const patched = events.map((event) => {
+      if (event.originalMessageId !== originalMessageId || event.targetDeleted) {
+        return event;
+      }
+
+      streamChanged = true;
+      return {
+        ...event,
+        targetDeleted: true,
+      };
+    });
+
+    next[streamId] = streamChanged ? patched : events;
+    changed = changed || streamChanged;
+  }
+
+  return changed ? next : pinSystemEventsByStream;
+}
+
+function patchPinSystemEventUser(
+  pinSystemEventsByStream: Record<string, PinSystemEvent[]>,
+  user: User,
+) {
+  let changed = false;
+  const nextUser = normalizeUser(user);
+
+  const next = Object.fromEntries(
+    Object.entries(pinSystemEventsByStream).map(([streamId, events]) => {
+      let streamChanged = false;
+      const patched = events.map((event) => {
+        if (event.pinnedById !== nextUser.id) {
+          return event;
+        }
+
+        streamChanged = true;
+        return {
+          ...event,
+          pinnedBy: event.pinnedBy ? { ...event.pinnedBy, ...nextUser } : nextUser,
+        };
+      });
+
+      changed = changed || streamChanged;
+      return [streamId, streamChanged ? patched : events];
+    }),
+  ) as Record<string, PinSystemEvent[]>;
+
+  return changed ? next : pinSystemEventsByStream;
+}
+
 interface MessageState {
   messages: Message[];
   messagesLoading: boolean;
   pinMutationVersion: number;
+  pinSystemEventsByStream: Record<string, PinSystemEvent[]>;
   /** Per-stream message history for the session (instant hub/channel switching). */
   streamMessagesCache: Record<string, { messages: Message[]; updatedAt: number }>;
 
@@ -116,6 +231,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
   messages: [],
   messagesLoading: false,
   pinMutationVersion: 0,
+  pinSystemEventsByStream: {},
   streamMessagesCache: {},
 
   loadMessages: async (streamId, opts) => {
@@ -145,6 +261,10 @@ export const useMessageStore = create<MessageState>((set, get) => ({
       set((s) => ({
         messages: merged,
         messagesLoading: false,
+        pinSystemEventsByStream: {
+          ...s.pinSystemEventsByStream,
+          [streamId]: mergePinSystemEvents(s.pinSystemEventsByStream[streamId], merged),
+        },
         streamMessagesCache: pruneStreamCaches({
           ...s.streamMessagesCache,
           [streamId]: { messages: merged, updatedAt: Date.now() },
@@ -194,10 +314,20 @@ export const useMessageStore = create<MessageState>((set, get) => ({
           return {
             messages: loaded,
             messagesLoading: false,
+            pinSystemEventsByStream: {
+              ...s.pinSystemEventsByStream,
+              [streamId]: mergePinSystemEvents(s.pinSystemEventsByStream[streamId], loaded),
+            },
             streamMessagesCache,
           };
         }
-        return { streamMessagesCache };
+        return {
+          pinSystemEventsByStream: {
+            ...s.pinSystemEventsByStream,
+            [streamId]: mergePinSystemEvents(s.pinSystemEventsByStream[streamId], loaded),
+          },
+          streamMessagesCache,
+        };
       });
       return found;
     } catch {
@@ -236,6 +366,10 @@ export const useMessageStore = create<MessageState>((set, get) => ({
 
     set((s) => {
       const merged = shouldTrim ? trimMessages([...prev, nextMessage]) : sortMessagesAsc([...prev, nextMessage]);
+      const pinSystemEventsByStream = {
+        ...s.pinSystemEventsByStream,
+        [sid]: mergePinSystemEvents(s.pinSystemEventsByStream[sid], merged),
+      };
       const streamMessagesCache = pruneStreamCaches({
         ...s.streamMessagesCache,
         [sid]: { messages: merged, updatedAt: Date.now() },
@@ -245,10 +379,11 @@ export const useMessageStore = create<MessageState>((set, get) => ({
           messages: shouldTrim
             ? sortMessagesAsc([...s.messages, nextMessage]).slice(-MAX_MESSAGES_PER_STREAM)
             : sortMessagesAsc([...s.messages, nextMessage]),
+          pinSystemEventsByStream,
           streamMessagesCache,
         };
       }
-      return { streamMessagesCache };
+      return { pinSystemEventsByStream, streamMessagesCache };
     });
 
     if (sid !== activeStreamId) {
@@ -260,8 +395,15 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     const nextMessage = normalizeMessage(message);
     set((s) => {
       const streamMessagesCache = patchCachedMessage(s.streamMessagesCache, nextMessage.id, () => nextMessage);
+      const pinSystemEventsByStream = nextMessage.stream_id
+        ? {
+            ...s.pinSystemEventsByStream,
+            [nextMessage.stream_id]: mergePinSystemEvents(s.pinSystemEventsByStream[nextMessage.stream_id], [nextMessage]),
+          }
+        : s.pinSystemEventsByStream;
       return {
         messages: s.messages.map((m) => (m.id === nextMessage.id ? nextMessage : m)),
+        pinSystemEventsByStream,
         streamMessagesCache,
       };
     });
@@ -270,6 +412,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
   removeMessage: (messageId) => {
     set((s) => ({
       messages: s.messages.filter((m) => m.id !== messageId),
+      pinSystemEventsByStream: markPinEventsTargetDeleted(s.pinSystemEventsByStream, messageId),
       streamMessagesCache: removeFromAllCaches(s.streamMessagesCache, messageId),
     }));
   },
@@ -290,11 +433,13 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     const active = useStreamStore.getState().activeStreamId;
     set((s) => {
       const streamMessagesCache = { ...s.streamMessagesCache };
+      const pinSystemEventsByStream = { ...s.pinSystemEventsByStream };
       delete streamMessagesCache[streamId];
+      delete pinSystemEventsByStream[streamId];
       if (active === streamId) {
-        return { messages: [], messagesLoading: false, streamMessagesCache };
+        return { messages: [], messagesLoading: false, pinSystemEventsByStream, streamMessagesCache };
       }
-      return { streamMessagesCache };
+      return { pinSystemEventsByStream, streamMessagesCache };
     });
   },
 
@@ -302,6 +447,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     set({
       messages: [],
       messagesLoading: false,
+      pinSystemEventsByStream: {},
       streamMessagesCache: {},
     }),
 
@@ -332,6 +478,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     };
     set((s) => ({
       messages: s.messages.map(patchAuthor),
+      pinSystemEventsByStream: patchPinSystemEventUser(s.pinSystemEventsByStream, nextUser),
       streamMessagesCache: Object.fromEntries(
         Object.entries(s.streamMessagesCache).map(([streamId, entry]) => [
           streamId,

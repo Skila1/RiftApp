@@ -21,7 +21,7 @@ import { useMessageStore } from '../messageStore';
 
 describe('messageStore', () => {
   beforeEach(() => {
-    useMessageStore.setState({ messages: [], messagesLoading: false });
+    useMessageStore.setState({ messages: [], messagesLoading: false, pinSystemEventsByStream: {} });
     vi.clearAllMocks();
   });
 
@@ -59,6 +59,53 @@ describe('messageStore', () => {
 
     useMessageStore.getState().removeMessage('m1');
     expect(useMessageStore.getState().messages).toHaveLength(0);
+  });
+
+  it('updateMessage stores a pin system event when a message becomes pinned', () => {
+    const msg = {
+      id: 'm1',
+      content: 'Hello',
+      stream_id: 'stream-1',
+      author_id: 'u1',
+      created_at: '2026-04-06T14:43:00.000Z',
+      pinned_at: '2026-04-08T16:06:00.000Z',
+      pinned_by_id: 'u2',
+      pinned_by: { id: 'u2', username: 'lovely', display_name: 'lovely', status: 1, created_at: '', updated_at: '' },
+    } as any;
+
+    useMessageStore.setState({ messages: [msg] });
+    useMessageStore.getState().updateMessage(msg);
+
+    expect(useMessageStore.getState().pinSystemEventsByStream['stream-1']).toMatchObject([
+      {
+        originalMessageId: 'm1',
+        pinnedAt: '2026-04-08T16:06:00.000Z',
+        pinnedById: 'u2',
+        targetDeleted: false,
+      },
+    ]);
+  });
+
+  it('keeps the pin system event and marks it unavailable when the source message is deleted', () => {
+    useMessageStore.setState({
+      messages: [],
+      pinSystemEventsByStream: {
+        'stream-1': [
+          {
+            id: 'pin:m1:2026-04-08T16:06:00.000Z',
+            streamId: 'stream-1',
+            originalMessageId: 'm1',
+            pinnedAt: '2026-04-08T16:06:00.000Z',
+            pinnedById: 'u2',
+            targetDeleted: false,
+          },
+        ],
+      },
+    });
+
+    useMessageStore.getState().removeMessage('m1');
+
+    expect(useMessageStore.getState().pinSystemEventsByStream['stream-1'][0].targetDeleted).toBe(true);
   });
 
   it('clearMessages resets state', () => {
