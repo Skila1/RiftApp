@@ -58,6 +58,7 @@ const CONNECTION_STATS_POLL_INTERVAL_MS = 1000;
 const MANUAL_INPUT_SENSITIVITY_MIN = 0;
 const MANUAL_INPUT_SENSITIVITY_MAX = 0.08;
 const CAMERA_BACKGROUND_BLUR_RADIUS = 12;
+const MAX_SAVED_CAMERA_BACKGROUNDS = 30;
 
 type VoiceConnectionTone = 'good' | 'medium' | 'bad' | 'neutral';
 type VoiceConnectionSource = 'webrtc' | 'livekit' | 'unknown';
@@ -82,6 +83,7 @@ type VoiceSettingsSnapshot = {
   pttMode: boolean;
   cameraBackgroundMode: CameraBackgroundMode;
   cameraBackgroundAsset: CameraBackgroundAsset | null;
+  savedCameraBackgroundAssets: CameraBackgroundAsset[];
 };
 
 const DEFAULT_VOICE_SETTINGS: VoiceSettingsSnapshot = {
@@ -97,6 +99,7 @@ const DEFAULT_VOICE_SETTINGS: VoiceSettingsSnapshot = {
   pttMode: false,
   cameraBackgroundMode: 'none',
   cameraBackgroundAsset: null,
+  savedCameraBackgroundAssets: [],
 };
 
 type MicCaptureOptionsOverrides = {
@@ -139,6 +142,43 @@ function normalizeSelectedDeviceId(deviceId: string | null | undefined) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function normalizeCameraBackgroundAsset(
+  asset: Partial<CameraBackgroundAsset> | null | undefined,
+): CameraBackgroundAsset | null {
+  if (!asset || typeof asset !== 'object' || typeof asset.url !== 'string' || typeof asset.kind !== 'string') {
+    return null;
+  }
+
+  return {
+    kind:
+      asset.kind === 'video'
+        ? 'video'
+        : asset.kind === 'gif'
+          ? 'gif'
+          : 'image',
+    url: asset.url,
+    previewUrl: typeof asset.previewUrl === 'string' ? asset.previewUrl : undefined,
+    label: typeof asset.label === 'string' ? asset.label : undefined,
+    source: asset.source === 'tenor' ? 'tenor' : 'upload',
+  };
+}
+
+function upsertSavedCameraBackgroundAssets(
+  existingAssets: CameraBackgroundAsset[],
+  nextAsset: CameraBackgroundAsset | null,
+) {
+  const normalizedAsset = normalizeCameraBackgroundAsset(nextAsset);
+  if (!normalizedAsset || normalizedAsset.kind === 'video') {
+    return existingAssets;
+  }
+
+  const deduped = existingAssets.filter(
+    (asset) => !(asset.source === normalizedAsset.source && asset.url === normalizedAsset.url),
+  );
+
+  return [normalizedAsset, ...deduped].slice(0, MAX_SAVED_CAMERA_BACKGROUNDS);
+}
+
 function loadVoiceSettings(): VoiceSettingsSnapshot {
   try {
     const raw = localStorage.getItem(VOICE_SETTINGS_STORAGE_KEY);
@@ -147,6 +187,17 @@ function loadVoiceSettings(): VoiceSettingsSnapshot {
     }
 
     const parsed = JSON.parse(raw) as Partial<VoiceSettingsSnapshot>;
+    const cameraBackgroundAsset = normalizeCameraBackgroundAsset(parsed.cameraBackgroundAsset);
+    let savedCameraBackgroundAssets = Array.isArray(parsed.savedCameraBackgroundAssets)
+      ? parsed.savedCameraBackgroundAssets
+        .map((asset) => normalizeCameraBackgroundAsset(asset))
+        .filter((asset): asset is CameraBackgroundAsset => asset !== null && asset.kind !== 'video')
+      : [];
+
+    if (cameraBackgroundAsset) {
+      savedCameraBackgroundAssets = upsertSavedCameraBackgroundAssets(savedCameraBackgroundAssets, cameraBackgroundAsset);
+    }
+
     return {
       inputDeviceId: normalizeSelectedDeviceId(parsed.inputDeviceId),
       outputDeviceId: normalizeSelectedDeviceId(parsed.outputDeviceId),
@@ -170,30 +221,8 @@ function loadVoiceSettings(): VoiceSettingsSnapshot {
         parsed.cameraBackgroundMode === 'blur' || parsed.cameraBackgroundMode === 'custom'
           ? parsed.cameraBackgroundMode
           : 'none',
-      cameraBackgroundAsset:
-        parsed.cameraBackgroundAsset
-        && typeof parsed.cameraBackgroundAsset === 'object'
-        && typeof parsed.cameraBackgroundAsset.url === 'string'
-        && typeof parsed.cameraBackgroundAsset.kind === 'string'
-          ? {
-              kind:
-                parsed.cameraBackgroundAsset.kind === 'video'
-                  ? 'video'
-                  : parsed.cameraBackgroundAsset.kind === 'gif'
-                    ? 'gif'
-                    : 'image',
-              url: parsed.cameraBackgroundAsset.url,
-              previewUrl:
-                typeof parsed.cameraBackgroundAsset.previewUrl === 'string'
-                  ? parsed.cameraBackgroundAsset.previewUrl
-                  : undefined,
-              label:
-                typeof parsed.cameraBackgroundAsset.label === 'string'
-                  ? parsed.cameraBackgroundAsset.label
-                  : undefined,
-              source: parsed.cameraBackgroundAsset.source === 'tenor' ? 'tenor' : 'upload',
-            }
-          : null,
+      cameraBackgroundAsset,
+      savedCameraBackgroundAssets,
     };
   } catch {
     return DEFAULT_VOICE_SETTINGS;
@@ -294,6 +323,7 @@ interface VoiceStore {
   pttMode: boolean;
   cameraBackgroundMode: CameraBackgroundMode;
   cameraBackgroundAsset: CameraBackgroundAsset | null;
+  savedCameraBackgroundAssets: CameraBackgroundAsset[];
   /** 0–1 per remote identity; used for HTML audio elements tagged with data-riftapp-voice-id */
   participantVolumes: Record<string, number>;
   /** Mutes all remote voice output without changing per-user slider values */
@@ -772,6 +802,7 @@ function voiceSettingsSnapshot(
     | 'pttMode'
     | 'cameraBackgroundMode'
     | 'cameraBackgroundAsset'
+    | 'savedCameraBackgroundAssets'
   >,
 ): VoiceSettingsSnapshot {
   return {
@@ -787,6 +818,7 @@ function voiceSettingsSnapshot(
     pttMode: state.pttMode,
     cameraBackgroundMode: state.cameraBackgroundMode,
     cameraBackgroundAsset: state.cameraBackgroundAsset,
+    savedCameraBackgroundAssets: state.savedCameraBackgroundAssets,
   };
 }
 
@@ -805,6 +837,7 @@ function persistVoiceSettingsFromStore(
     | 'pttMode'
     | 'cameraBackgroundMode'
     | 'cameraBackgroundAsset'
+    | 'savedCameraBackgroundAssets'
   >,
 ) {
   persistVoiceSettings(voiceSettingsSnapshot(state));
@@ -1325,6 +1358,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   pttMode: initialVoiceSettings.pttMode,
   cameraBackgroundMode: initialVoiceSettings.cameraBackgroundMode,
   cameraBackgroundAsset: initialVoiceSettings.cameraBackgroundAsset,
+  savedCameraBackgroundAssets: initialVoiceSettings.savedCameraBackgroundAssets,
   participantVolumes: {},
   voiceOutputMuted: false,
   streamVolumes: {},
@@ -1875,9 +1909,11 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
 
   setCameraBackgroundAsset: (asset) => {
     const current = get();
+    const nextSavedAssets = upsertSavedCameraBackgroundAssets(current.savedCameraBackgroundAssets, asset);
     const nextState = {
       cameraBackgroundAsset: asset,
       cameraBackgroundMode: asset ? 'custom' as CameraBackgroundMode : 'none' as CameraBackgroundMode,
+      savedCameraBackgroundAssets: nextSavedAssets,
     };
     set(nextState);
     persistVoiceSettingsFromStore({ ...current, ...nextState });

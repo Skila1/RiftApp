@@ -402,7 +402,7 @@ function VoiceLevelMeter({ level }: { level: number }) {
         <span
           key={index}
           className={`h-6 min-w-0 flex-1 rounded-[2px] transition-colors ${
-            index < activeBars ? 'bg-[#7b808c]' : 'bg-[#4b4f59]'
+            index < activeBars ? 'bg-riftapp-voice-speaking' : 'bg-[#4b4f59]'
           }`}
         />
       ))}
@@ -484,41 +484,6 @@ function CameraSelectControl({
         </a>
       </p>
     </div>
-  );
-}
-
-function CameraPreviewToggleRow({
-  enabled,
-  onToggle,
-}: {
-  enabled: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className="flex w-full items-start justify-between gap-4 rounded-[10px] py-1 text-left"
-    >
-      <span className="min-w-0 flex-1">
-        <span className="block text-[16px] font-semibold text-riftapp-text">Always preview video</span>
-        <span className="mt-1 block text-[13px] leading-snug text-riftapp-text-muted">
-          Pops up preview modal every time you turn on video
-        </span>
-      </span>
-      <span
-        className={`mt-1 inline-flex h-6 w-10 shrink-0 items-center rounded-full border transition-colors ${
-          enabled ? 'border-[#5865f2] bg-[#5865f2]' : 'border-riftapp-border/70 bg-riftapp-bg-alt'
-        }`}
-        aria-hidden="true"
-      >
-        <span
-          className={`inline-block h-4.5 w-4.5 rounded-full bg-white transition-transform ${
-            enabled ? 'translate-x-[18px]' : 'translate-x-0.5'
-          }`}
-        />
-      </span>
-    </button>
   );
 }
 
@@ -1186,7 +1151,7 @@ function CameraTestCard({
 
   return (
     <div className="space-y-5">
-      <div className="overflow-hidden rounded-[12px] border border-riftapp-border/60 bg-[#1b1c21] shadow-[0_8px_24px_rgba(0,0,0,0.28)]">
+      <div className="group overflow-hidden rounded-[12px] border border-riftapp-border/60 bg-[#1b1c21] shadow-[0_8px_24px_rgba(0,0,0,0.28)]">
         <div className="relative aspect-[2.56/1] bg-[#1b1c21]">
           <video
             ref={videoRef}
@@ -1194,24 +1159,21 @@ function CameraTestCard({
             muted
             className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-150 ${previewEnabled ? 'opacity-100' : 'opacity-0'}`}
           />
-          {!previewEnabled ? (
-            <div className="absolute inset-0 flex items-center justify-center px-6">
-              <button
-                type="button"
-                onClick={() => setPreviewEnabled(true)}
-                className="inline-flex h-9 items-center justify-center rounded-[8px] bg-[#5865f2] px-5 text-[14px] font-medium text-white transition-colors hover:bg-[#4752c4]"
-              >
-                Test Video
-              </button>
-            </div>
-          ) : null}
+          <div className="absolute inset-0 flex items-center justify-center px-6">
+            <button
+              type="button"
+              onClick={() => setPreviewEnabled((current) => !current)}
+              className={`inline-flex h-9 items-center justify-center rounded-[8px] px-5 text-[14px] font-medium text-white transition-all ${
+                previewEnabled
+                  ? 'bg-black/55 opacity-0 backdrop-blur-sm hover:bg-black/65 group-hover:opacity-100 focus-visible:opacity-100'
+                  : 'bg-[#5865f2] opacity-100 hover:bg-[#4752c4]'
+              }`}
+            >
+              {previewEnabled ? 'Stop Video' : 'Test Video'}
+            </button>
+          </div>
         </div>
       </div>
-
-      <CameraPreviewToggleRow
-        enabled={previewEnabled}
-        onToggle={() => setPreviewEnabled((current) => !current)}
-      />
 
       {starting ? <p className="text-[12px] text-riftapp-text-muted">Starting preview…</p> : null}
       {error ? <p className="text-[12px] text-[#f87171]">{error}</p> : null}
@@ -1237,7 +1199,6 @@ function MicrophoneTestCard({
   outputVolume: number;
 }) {
   const [testing, setTesting] = useState(false);
-  const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [level, setLevel] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -1358,7 +1319,6 @@ function MicrophoneTestCard({
       return;
     }
 
-    setStarting(true);
     setError(null);
     disposeTestResources();
 
@@ -1433,8 +1393,6 @@ function MicrophoneTestCard({
       setError('Could not start the microphone test. Check microphone permissions.');
       disposeTestResources();
       setTesting(false);
-    } finally {
-      setStarting(false);
     }
   }, [disposeTestResources, echoCancellationEnabled, inputDeviceId, noiseSuppressionEnabled, outputDeviceId, outputDeviceSelectionSupported, startMeter]);
 
@@ -1481,7 +1439,6 @@ function MicrophoneTestCard({
         </button>
         <VoiceLevelMeter level={level} />
       </div>
-      {starting ? <p className="text-[12px] text-riftapp-text-muted">Starting microphone test…</p> : null}
       {error ? <p className="text-[12px] text-[#f87171]">{error}</p> : null}
     </div>
   );
@@ -1599,6 +1556,7 @@ function VoiceVideoSettingsTab() {
   const pttMode = useVoiceStore((s) => s.pttMode);
   const cameraBackgroundMode = useVoiceStore((s) => s.cameraBackgroundMode);
   const cameraBackgroundAsset = useVoiceStore((s) => s.cameraBackgroundAsset);
+  const savedCameraBackgroundAssets = useVoiceStore((s) => s.savedCameraBackgroundAssets);
   const mediaDevices = useVoiceStore((s) => s.mediaDevices);
   const refreshMediaDevices = useVoiceStore((s) => s.refreshMediaDevices);
   const setInputDeviceId = useVoiceStore((s) => s.setInputDeviceId);
@@ -1616,8 +1574,6 @@ function VoiceVideoSettingsTab() {
 
   const outputDeviceSelectionSupported = supportsAudioOutputSelection();
   const [backgroundPickerOpen, setBackgroundPickerOpen] = useState(false);
-  const [backgroundQuickPicks, setBackgroundQuickPicks] = useState<CameraBackgroundAsset[]>([]);
-  const [backgroundQuickPicksLoading, setBackgroundQuickPicksLoading] = useState(true);
 
   const detectedProfile = useMemo<VoiceInputProfile>(
     () => detectVoiceInputProfile({
@@ -1649,52 +1605,6 @@ function VoiceVideoSettingsTab() {
     };
   }, [refreshMediaDevices]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadQuickPicks = async () => {
-      setBackgroundQuickPicksLoading(true);
-
-      try {
-        const params = new URLSearchParams({
-          key: TENOR_PUBLIC_KEY,
-          limit: '8',
-          contentfilter: 'medium',
-          media_filter: 'minimal',
-        });
-
-        const response = await fetch(`https://g.tenor.com/v1/trending?${params.toString()}`);
-        if (!response.ok) {
-          throw new Error('Trending backgrounds unavailable.');
-        }
-
-        const payload = (await response.json()) as { results?: TenorResult[] };
-        const mapped = (payload.results ?? [])
-          .map(mapTenorResultToBackgroundAsset)
-          .filter((asset): asset is CameraBackgroundAsset => asset !== null)
-          .slice(0, 8);
-
-        if (!cancelled) {
-          setBackgroundQuickPicks(mapped);
-        }
-      } catch {
-        if (!cancelled) {
-          setBackgroundQuickPicks([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setBackgroundQuickPicksLoading(false);
-        }
-      }
-    };
-
-    void loadQuickPicks();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const applyProfile = useCallback(async (profile: VoiceInputProfile) => {
     setSelectedProfile(profile);
     if (profile === 'custom') {
@@ -1710,13 +1620,10 @@ function VoiceVideoSettingsTab() {
 
   const showCustomControls = selectedProfile === 'custom';
   const customBackgroundPreview = backgroundPreviewUrl(cameraBackgroundAsset);
-  const selectedQuickBackground = cameraBackgroundMode === 'custom' && cameraBackgroundAsset
-    ? backgroundQuickPicks.find((asset) => asset.source === cameraBackgroundAsset.source && asset.url === cameraBackgroundAsset.url) ?? null
+  const selectedSavedBackground = cameraBackgroundMode === 'custom' && cameraBackgroundAsset
+    ? savedCameraBackgroundAssets.find((asset) => asset.source === cameraBackgroundAsset.source && asset.url === cameraBackgroundAsset.url) ?? null
     : null;
-  const customTileSelected = cameraBackgroundMode === 'custom' && !selectedQuickBackground;
-  const quickBackgroundPlaceholders = backgroundQuickPicksLoading && backgroundQuickPicks.length === 0
-    ? Array.from({ length: 8 }, (_, index) => `placeholder-${index}`)
-    : [];
+  const customTileSelected = cameraBackgroundMode === 'custom' && !selectedSavedBackground;
 
   return (
     <div className="space-y-10">
@@ -1977,7 +1884,7 @@ function VoiceVideoSettingsTab() {
                 )}
               </CameraBackgroundTile>
 
-              {backgroundQuickPicks.map((asset) => {
+              {savedCameraBackgroundAssets.map((asset) => {
                 const selected = cameraBackgroundMode === 'custom'
                   && cameraBackgroundAsset?.source === asset.source
                   && cameraBackgroundAsset.url === asset.url;
@@ -1998,13 +1905,6 @@ function VoiceVideoSettingsTab() {
                   </CameraBackgroundTile>
                 );
               })}
-
-              {quickBackgroundPlaceholders.map((placeholderId) => (
-                <div
-                  key={placeholderId}
-                  className="aspect-[1.74/1] rounded-[10px] border border-riftapp-border/60 bg-riftapp-panel/80"
-                />
-              ))}
             </div>
           </div>
         </div>
