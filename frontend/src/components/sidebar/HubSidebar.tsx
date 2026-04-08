@@ -139,7 +139,7 @@ export default function HubSidebar() {
   };
 
   return (
-    <div className="flex w-[72px] flex-shrink-0 flex-col items-center gap-2 overflow-y-auto bg-riftapp-chrome py-3">
+    <div className="flex w-[72px] flex-shrink-0 flex-col items-center gap-2 overflow-y-auto border-r border-riftapp-border/60 bg-riftapp-chrome py-3">
       {/* DM Button */}
       <div
         className="relative flex items-center justify-center w-full"

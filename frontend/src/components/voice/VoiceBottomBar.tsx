@@ -233,7 +233,7 @@ export default function VoiceBottomBar() {
     : '';
 
   return (
-    <div className="flex-shrink-0 bg-riftapp-chrome">
+    <div className="flex-shrink-0 border-t border-riftapp-border/50 bg-riftapp-chrome">
       {/* ── Voice Connected Section (above user bar) ── */}
       {inVoice && (
         <>

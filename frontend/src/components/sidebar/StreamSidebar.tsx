@@ -211,7 +211,7 @@ export default function StreamSidebar() {
 
   if (!activeHubId) {
     return (
-      <div className="sidebar w-60 min-h-0 overflow-hidden flex-shrink-0 bg-riftapp-chrome flex flex-col">
+      <div className="sidebar w-60 min-h-0 overflow-hidden flex-shrink-0 border-r border-riftapp-border/60 bg-riftapp-chrome flex flex-col">
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center px-6">
             <div className="w-12 h-12 rounded-2xl bg-riftapp-panel flex items-center justify-center mx-auto mb-3">
@@ -229,10 +229,10 @@ export default function StreamSidebar() {
   }
 
   return (
-    <div className="sidebar w-60 min-h-0 overflow-hidden flex-shrink-0 bg-riftapp-chrome flex flex-col">
+    <div className="sidebar w-60 min-h-0 overflow-hidden flex-shrink-0 border-r border-riftapp-border/60 bg-riftapp-chrome flex flex-col">
       {/* Hub header */}
       <div
-        className="h-12 flex items-center flex-shrink-0"
+        className="h-12 flex items-center border-b border-riftapp-border/50 flex-shrink-0"
         onContextMenu={handleHeaderContext}
       >
         <button

@@ -83,9 +83,9 @@ export default function DMSidebar() {
   };
 
   return (
-    <div className="w-60 flex-shrink-0 bg-riftapp-chrome flex flex-col">
+    <div className="w-60 flex-shrink-0 border-r border-riftapp-border/60 bg-riftapp-chrome flex flex-col">
       {/* Search bar */}
-      <div className="h-12 flex items-center px-3 flex-shrink-0">
+      <div className="h-12 flex items-center border-b border-riftapp-border/50 px-3 flex-shrink-0">
         <button
           onClick={handleSearchToggle}
           className="w-full h-[28px] flex items-center gap-2 px-2 rounded bg-riftapp-chrome-hover/80 text-riftapp-text-dim text-[13px] hover:bg-riftapp-chrome-hover transition-colors"

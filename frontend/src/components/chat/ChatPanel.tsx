@@ -1112,7 +1112,7 @@ export default function ChatPanel({
       {!showWelcome && (
         <div
           ref={headerRef}
-          className="flex h-12 items-center gap-3 bg-riftapp-content px-4 shadow-[0_1px_0_rgba(255,255,255,0.03)] flex-shrink-0"
+          className="flex h-12 items-center gap-3 border-b border-riftapp-border/50 bg-riftapp-content px-4 flex-shrink-0"
         >
           <div className="flex min-w-0 flex-1 items-center gap-3">
             {isDMMode ? (

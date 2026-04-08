@@ -104,8 +104,8 @@ export default function MemberList() {
   if (Object.keys(hubMembers).length === 0) return null;
 
   return (
-    <div className="w-60 bg-riftapp-content flex flex-col overflow-hidden flex-shrink-0">
-      <div className="bg-riftapp-content px-3 py-3">
+    <div className="w-60 border-l border-riftapp-border/60 bg-riftapp-content flex flex-col overflow-hidden flex-shrink-0">
+      <div className="border-b border-riftapp-border/50 bg-riftapp-content px-3 py-3">
         <div className="flex items-center gap-2 rounded-md border border-[#2e3138] bg-riftapp-content-elevated px-2.5 text-[#aeb4bf] focus-within:border-[#3a3d45] focus-within:text-[#f2f3f5]">
           <SearchIcon className="h-4 w-4 shrink-0" />
           <input

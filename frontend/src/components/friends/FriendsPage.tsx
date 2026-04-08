@@ -45,7 +45,7 @@ export default function FriendsPage() {
   return (
     <div className="flex-1 flex flex-col bg-riftapp-content min-w-0">
       {/* Header bar */}
-      <div className="h-12 flex items-center gap-1 px-4 flex-shrink-0 bg-riftapp-content">
+      <div className="h-12 flex items-center gap-1 border-b border-riftapp-border/50 px-4 flex-shrink-0 bg-riftapp-content">
         <div className="flex items-center gap-2 mr-4">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-riftapp-text-dim">
             <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
