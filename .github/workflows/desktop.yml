@@ -1,9 +1,12 @@
 name: Desktop Build
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
-    paths: ['app/**']
+    paths:
+      - 'app/**'
+      - '.github/workflows/desktop.yml'
 
 permissions:
   contents: write
@@ -75,10 +78,13 @@ jobs:
       - name: Upload artifacts to R2
         shell: bash
         run: |
+          shopt -s nullglob
           for file in dist-electron/*; do
+            [ -f "$file" ] || continue
             name=$(basename "$file")
+            object_path="rift-updates/$name"
             echo "Uploading $name"
-            wrangler r2 object put rift-updates/$name --file "$file"
+            wrangler r2 object put "$object_path" --file "$file" --remote
           done
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
