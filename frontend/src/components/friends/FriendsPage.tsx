@@ -7,6 +7,7 @@ import StatusDot, { statusLabel } from '../shared/StatusDot';
 import type { User, Friendship, Block } from '../../types';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { normalizeUser } from '../../utils/entityAssets';
+import UpdateActionButton from '../shared/UpdateActionButton';
 
 type Tab = 'online' | 'all' | 'pending' | 'blocked' | 'add';
 
@@ -55,30 +56,35 @@ export default function FriendsPage() {
           <span className="font-semibold text-[15px]">Friends</span>
         </div>
         <div className="h-6 w-px bg-riftapp-border/40 mx-1" />
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-3 py-1 rounded text-sm font-medium transition-colors relative ${
-              t.key === 'add'
-                ? tab === 'add'
-                  ? 'bg-transparent text-riftapp-success'
-                  : 'bg-riftapp-success/20 text-riftapp-success hover:bg-riftapp-success/30'
-                : tab === t.key
-                  ? 'bg-riftapp-content-elevated text-riftapp-text'
-                  : 'text-riftapp-text-muted hover:bg-riftapp-content-elevated/80 hover:text-riftapp-text'
-            }`}
-          >
-            {t.label}
-            {t.count !== undefined && t.count > 0 && (
-              <span className={`ml-1.5 min-w-[18px] h-[16px] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold leading-none ${
-                t.key === 'pending' ? 'bg-riftapp-danger text-white' : 'bg-riftapp-content-elevated text-riftapp-text-dim'
-              }`}>
-                {t.count}
-              </span>
-            )}
-          </button>
-        ))}
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`px-3 py-1 rounded text-sm font-medium transition-colors relative whitespace-nowrap ${
+                t.key === 'add'
+                  ? tab === 'add'
+                    ? 'bg-transparent text-riftapp-success'
+                    : 'bg-riftapp-success/20 text-riftapp-success hover:bg-riftapp-success/30'
+                  : tab === t.key
+                    ? 'bg-riftapp-content-elevated text-riftapp-text'
+                    : 'text-riftapp-text-muted hover:bg-riftapp-content-elevated/80 hover:text-riftapp-text'
+              }`}
+            >
+              {t.label}
+              {t.count !== undefined && t.count > 0 && (
+                <span className={`ml-1.5 min-w-[18px] h-[16px] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold leading-none ${
+                  t.key === 'pending' ? 'bg-riftapp-danger text-white' : 'bg-riftapp-content-elevated text-riftapp-text-dim'
+                }`}>
+                  {t.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+        <div className="ml-3 flex-shrink-0">
+          <UpdateActionButton />
+        </div>
       </div>
 
       {/* Content */}

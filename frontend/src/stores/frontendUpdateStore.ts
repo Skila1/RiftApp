@@ -9,8 +9,11 @@ interface FrontendUpdateState {
   updateReady: boolean;
   setCurrentSignature: (signature: string | null) => void;
   markUpdateReady: (signature: string) => void;
+  markUpdateReadyFromAssetFailure: () => void;
   applyUpdate: () => void;
 }
+
+const ASSET_FAILURE_SIGNATURE = '__asset_failure__';
 
 export const useFrontendUpdateStore = create<FrontendUpdateState>((set, get) => ({
   currentCommitSha: __RIFT_FRONTEND_COMMIT_SHA__,
@@ -36,6 +39,19 @@ export const useFrontendUpdateStore = create<FrontendUpdateState>((set, get) => 
       return {
         updateReady: true,
         latestSignature: signature,
+      };
+    });
+  },
+
+  markUpdateReadyFromAssetFailure: () => {
+    set((state) => {
+      if (state.updateReady) {
+        return state;
+      }
+
+      return {
+        updateReady: true,
+        latestSignature: state.latestSignature ?? ASSET_FAILURE_SIGNATURE,
       };
     });
   },

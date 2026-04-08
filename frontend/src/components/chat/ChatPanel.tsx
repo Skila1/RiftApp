@@ -17,11 +17,11 @@ import { useDMStore } from '../../stores/dmStore';
 import { useAuthStore } from '../../stores/auth';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { usePresenceStore } from '../../stores/presenceStore';
-import { useFrontendUpdateStore } from '../../stores/frontendUpdateStore';
 import { useWsSend } from '../../hooks/useWebSocket';
 import MessageInput from './MessageInput';
 import MessageItem from './MessageItem';
 import TypingIndicator from './TypingIndicator';
+import UpdateActionButton from '../shared/UpdateActionButton';
 import type {
   Message,
   MessageSearchFilters,
@@ -29,10 +29,8 @@ import type {
   StreamNotificationSettings,
   User,
 } from '../../types';
-import type { DesktopUpdateStatus } from '../../types/desktop';
 import { normalizeMessages } from '../../utils/entityAssets';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
-import { getDesktop, idleDesktopUpdateStatus } from '../../utils/desktop';
 import { subscribeToChatSearchRequests } from '../../utils/chatSearchBridge';
 
 type HeaderPanel = 'notifications' | 'pins' | 'search' | 'inbox' | null;
@@ -233,16 +231,6 @@ function IconClose(props: SVGProps<SVGSVGElement>) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <path d="M18 6 6 18" />
       <path d="m6 6 12 12" />
-    </svg>
-  );
-}
-
-function IconUpdateAction(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M12 3.5v10.75" />
-      <path d="m8.25 10.75 3.75 3.75 3.75-3.75" />
-      <path d="M5 16.75v1.5A1.75 1.75 0 0 0 6.75 20h10.5A1.75 1.75 0 0 0 19 18.25v-1.5" />
     </svg>
   );
 }
@@ -558,7 +546,6 @@ export default function ChatPanel({
   const pendingJumpMessageIdRef = useRef<string | null>(null);
   const send = useWsSend();
   const lastReadMessageIds = useStreamStore((s) => s.lastReadMessageIds);
-  const desktop = useMemo(() => getDesktop(), []);
 
   // DM state
   const activeConversationId = useDMStore((s) => s.activeConversationId);
@@ -604,9 +591,6 @@ export default function ChatPanel({
   const isLoading = isDMMode ? dmMessagesLoading : messagesLoading;
 
   const [activePanel, setActivePanel] = useState<HeaderPanel>(null);
-  const frontendUpdateReady = useFrontendUpdateStore((s) => s.updateReady);
-  const applyFrontendUpdate = useFrontendUpdateStore((s) => s.applyUpdate);
-  const [updateStatus, setUpdateStatus] = useState<DesktopUpdateStatus>(idleDesktopUpdateStatus);
   const [pinnedMessages, setPinnedMessages] = useState<Message[]>([]);
   const [pinnedLoading, setPinnedLoading] = useState(false);
   const [pinnedError, setPinnedError] = useState<string | null>(null);
@@ -1034,31 +1018,6 @@ export default function ChatPanel({
   );
 
   useEffect(() => {
-    if (!desktop) return;
-
-    let cancelled = false;
-    void desktop.getUpdateStatus().then((status) => {
-      if (!cancelled) setUpdateStatus(status);
-    });
-
-    const disposeStatus = desktop.onUpdateStatus((status) => {
-      setUpdateStatus(status);
-    });
-    const disposeReady = desktop.onUpdateReady(() => {
-      setUpdateStatus((current) => ({
-        ...current,
-        state: 'ready',
-      }));
-    });
-
-    return () => {
-      cancelled = true;
-      disposeStatus();
-      disposeReady();
-    };
-  }, [desktop]);
-
-  useEffect(() => {
     if (activePanel !== 'pins') return;
     void refreshPinnedMessages();
   }, [activePanel, refreshPinnedMessages, pinMutationVersion]);
@@ -1110,12 +1069,6 @@ export default function ChatPanel({
   }, [activeHubId, activeStreamId, activeConversationId]);
 
   const canShowChannelTools = !showWelcome && !isDMMode && Boolean(activeHubId);
-  const desktopUpdateReady = Boolean(desktop && updateStatus.state === 'ready');
-  const showUpdateAction = desktopUpdateReady || frontendUpdateReady;
-  const updateActionLabel = desktopUpdateReady ? 'Restart to update' : 'Refresh to update';
-  const updateActionTitle = desktopUpdateReady
-    ? 'Restart to install the downloaded desktop update'
-    : 'Refresh to load the latest frontend build';
 
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-riftapp-content min-w-0 relative">
@@ -1180,23 +1133,7 @@ export default function ChatPanel({
                 </HeaderIconButton>
               ) : null}
 
-              {showUpdateAction ? (
-                <HeaderIconButton
-                  label={updateActionLabel}
-                  title={updateActionTitle}
-                  tone="success"
-                  onClick={() => {
-                    if (desktopUpdateReady) {
-                      desktop?.restartToUpdate();
-                      return;
-                    }
-
-                    applyFrontendUpdate();
-                  }}
-                >
-                  <IconUpdateAction className="h-4 w-4" />
-                </HeaderIconButton>
-              ) : null}
+              <UpdateActionButton />
             </div>
           ) : null}
         </div>

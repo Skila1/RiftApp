@@ -1,4 +1,63 @@
 const FRONTEND_UPDATE_SESSION_KEY = 'riftapp:stale-chunk-reload';
+const FRONTEND_ASSET_RE = /\/assets\/.+\.(?:js|css)(?:$|\?)/;
+
+let frontendAssetAutoReloadSuppressionCount = 0;
+
+export function isDynamicImportFailureMessage(message: string) {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('failed to fetch dynamically imported module')
+    || normalized.includes('importing a module script failed')
+    || normalized.includes('failed to load module script')
+    || normalized.includes('chunkloaderror')
+    || normalized.includes('loading css chunk')
+    || normalized.includes('unable to preload css')
+  );
+}
+
+export function isFrontendAssetLoadError(reason: unknown) {
+  if (typeof reason === 'string') {
+    return isDynamicImportFailureMessage(reason);
+  }
+
+  if (reason && typeof reason === 'object' && 'message' in reason && typeof reason.message === 'string') {
+    return isDynamicImportFailureMessage(reason.message);
+  }
+
+  return false;
+}
+
+export function isFrontendAssetFailureEvent(event: ErrorEvent) {
+  const directMessage = typeof event.message === 'string' ? event.message : '';
+  if (isDynamicImportFailureMessage(directMessage) || isFrontendAssetLoadError(event.error)) {
+    return true;
+  }
+
+  const target = event.target;
+  if (target instanceof HTMLScriptElement) {
+    return FRONTEND_ASSET_RE.test(target.src);
+  }
+
+  if (target instanceof HTMLLinkElement) {
+    return target.rel === 'stylesheet' && FRONTEND_ASSET_RE.test(target.href);
+  }
+
+  return false;
+}
+
+export function shouldAutoReloadForFrontendAssetFailure() {
+  return frontendAssetAutoReloadSuppressionCount === 0;
+}
+
+export async function withFrontendAssetAutoReloadSuppressed<T>(load: () => Promise<T>) {
+  frontendAssetAutoReloadSuppressionCount += 1;
+
+  try {
+    return await load();
+  } finally {
+    frontendAssetAutoReloadSuppressionCount = Math.max(0, frontendAssetAutoReloadSuppressionCount - 1);
+  }
+}
 
 export function reloadOnceForFrontendUpdate() {
   try {

@@ -21,6 +21,7 @@ import {
 } from './VoiceIcons';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { canModerateVoice } from '../../utils/permissions';
+import UpdateActionButton from '../shared/UpdateActionButton';
 
 type LayoutSlotKind = 'screen' | 'camera';
 
@@ -251,6 +252,9 @@ export default function VoiceView() {
               {participants.length} participant{participants.length !== 1 ? 's' : ''}
             </span>
           )}
+        </div>
+        <div className="ml-3 flex-shrink-0">
+          <UpdateActionButton className="border-[#2f8555] bg-[#248046] text-white hover:bg-[#2d9d58]" />
         </div>
       </div>
 

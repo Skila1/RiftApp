@@ -1,17 +1,39 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/auth';
 import { useAppSettingsStore } from './stores/appSettingsStore';
 import TitleBar from './components/layout/TitleBar';
+import { isProtectedImportUpdateReadyError, safeImport } from './utils/safeImport';
 
 const AuthPage = lazy(() => import('./components/auth/AuthPage'));
 const AppLayout = lazy(() => import('./components/layout/AppLayout'));
 const InviteJoinPage = lazy(() => import('./components/invite/InviteJoinPage'));
-const SettingsModal = lazy(() => import('./components/settings/SettingsModal'));
 const MarketingLayout = lazy(() => import('./components/marketing/MarketingLayout'));
 const LandingPage = lazy(() => import('./components/marketing/LandingPage'));
 const DiscoverPage = lazy(() => import('./components/marketing/DiscoverPage'));
 const SupportPage = lazy(() => import('./components/marketing/SupportPage'));
+
+type SettingsModalModule = typeof import('./components/settings/SettingsModal');
+type SettingsModalComponent = ComponentType;
+
+let settingsModalModulePromise: Promise<SettingsModalModule> | null = null;
+let settingsModalLoadError: unknown = null;
+
+function importSettingsModal() {
+  if (settingsModalLoadError) {
+    return Promise.reject(settingsModalLoadError);
+  }
+
+  if (!settingsModalModulePromise) {
+    settingsModalModulePromise = safeImport(() => import('./components/settings/SettingsModal')).catch((error) => {
+      settingsModalModulePromise = null;
+      settingsModalLoadError = error;
+      throw error;
+    });
+  }
+
+  return settingsModalModulePromise;
+}
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -57,6 +79,46 @@ function RequireGuest({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function SettingsModalHost() {
+  const closeSettings = useAppSettingsStore((s) => s.closeSettings);
+  const [LoadedModal, setLoadedModal] = useState<SettingsModalComponent | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void importSettingsModal()
+      .then((module) => {
+        if (!cancelled) {
+          setLoadedModal(() => module.default);
+        }
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
+        if (isProtectedImportUpdateReadyError(error)) {
+          closeSettings();
+          return;
+        }
+
+        queueMicrotask(() => {
+          throw error;
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [closeSettings]);
+
+  if (!LoadedModal) {
+    return null;
+  }
+
+  return <LoadedModal />;
+}
+
 export default function App() {
   const restore = useAuthStore((s) => s.restore);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -72,6 +134,24 @@ export default function App() {
       closeSettings();
     }
   }, [closeSettings, isAuthenticated, settingsOpen]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      settingsModalModulePromise = null;
+      settingsModalLoadError = null;
+      return;
+    }
+
+    void importSettingsModal().catch((error) => {
+      if (isProtectedImportUpdateReadyError(error)) {
+        return;
+      }
+
+      queueMicrotask(() => {
+        throw error;
+      });
+    });
+  }, [isAuthenticated]);
 
   return (
     <BrowserRouter>
@@ -110,7 +190,7 @@ export default function App() {
 
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-            {settingsOpen && isAuthenticated && <SettingsModal />}
+            {settingsOpen && isAuthenticated && <SettingsModalHost />}
           </Suspense>
         </div>
       </div>

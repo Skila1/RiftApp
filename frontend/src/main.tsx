@@ -3,57 +3,16 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 import { useFrontendUpdateStore } from './stores/frontendUpdateStore';
-import { reloadOnceForFrontendUpdate } from './utils/frontendUpdate';
+import {
+  isFrontendAssetFailureEvent,
+  isFrontendAssetLoadError,
+  reloadOnceForFrontendUpdate,
+  shouldAutoReloadForFrontendAssetFailure,
+} from './utils/frontendUpdate';
 
 const DEPLOY_CHECK_INTERVAL_MS = 3 * 60 * 1000;
 const DEPLOY_SCRIPT_RE = /<script[^>]+type=["']module["'][^>]+src=["']([^"']*\/assets\/[^"']+\.js[^"']*)["']/i;
 const DEPLOY_STYLE_RE = /<link[^>]+rel=["']stylesheet["'][^>]+href=["']([^"']*\/assets\/[^"']+\.css[^"']*)["']/i;
-
-function isDynamicImportFailureMessage(message: string) {
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes('failed to fetch dynamically imported module')
-    || normalized.includes('importing a module script failed')
-    || normalized.includes('failed to load module script')
-    || normalized.includes('chunkloaderror')
-    || normalized.includes('loading css chunk')
-    || normalized.includes('unable to preload css')
-  );
-}
-
-function shouldRecoverFromAssetFailure(event: ErrorEvent) {
-  const directMessage = typeof event.message === 'string' ? event.message : '';
-  const nestedMessage =
-    event.error && typeof event.error === 'object' && 'message' in event.error && typeof event.error.message === 'string'
-      ? event.error.message
-      : '';
-
-  if (isDynamicImportFailureMessage(directMessage) || isDynamicImportFailureMessage(nestedMessage)) {
-    return true;
-  }
-
-  const target = event.target;
-  if (target instanceof HTMLScriptElement) {
-    return /\/assets\/.+\.js(?:$|\?)/.test(target.src);
-  }
-  if (target instanceof HTMLLinkElement) {
-    return target.rel === 'stylesheet' && /\/assets\/.+\.css(?:$|\?)/.test(target.href);
-  }
-
-  return false;
-}
-
-function shouldRecoverFromPromiseRejection(reason: unknown) {
-  if (typeof reason === 'string') {
-    return isDynamicImportFailureMessage(reason);
-  }
-
-  if (reason && typeof reason === 'object' && 'message' in reason && typeof reason.message === 'string') {
-    return isDynamicImportFailureMessage(reason.message);
-  }
-
-  return false;
-}
 
 function normalizeAssetPath(value: string) {
   try {
@@ -150,10 +109,19 @@ function installDeployRefreshMonitor() {
 }
 
 function installChunkMismatchRecovery() {
+  const handleProtectedAssetFailure = () => {
+    useFrontendUpdateStore.getState().markUpdateReadyFromAssetFailure();
+  };
+
   window.addEventListener(
     'error',
     (event) => {
-      if (shouldRecoverFromAssetFailure(event)) {
+      if (isFrontendAssetFailureEvent(event)) {
+        if (!shouldAutoReloadForFrontendAssetFailure()) {
+          handleProtectedAssetFailure();
+          return;
+        }
+
         reloadOnceForFrontendUpdate();
       }
     },
@@ -161,8 +129,14 @@ function installChunkMismatchRecovery() {
   );
 
   window.addEventListener('unhandledrejection', (event) => {
-    if (shouldRecoverFromPromiseRejection(event.reason)) {
+    if (isFrontendAssetLoadError(event.reason)) {
       event.preventDefault();
+
+      if (!shouldAutoReloadForFrontendAssetFailure()) {
+        handleProtectedAssetFailure();
+        return;
+      }
+
       reloadOnceForFrontendUpdate();
     }
   });
