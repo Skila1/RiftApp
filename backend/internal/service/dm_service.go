@@ -128,8 +128,9 @@ func (s *DMService) ListMessages(ctx context.Context, convID, userID string, bef
 }
 
 type SendDMInput struct {
-	Content       string   `json:"content"`
-	AttachmentIDs []string `json:"attachment_ids"`
+	Content          string   `json:"content"`
+	AttachmentIDs    []string `json:"attachment_ids"`
+	ReplyToMessageID *string  `json:"reply_to_message_id"`
 }
 
 func (s *DMService) SendMessage(ctx context.Context, convID, userID string, input SendDMInput) (*models.Message, error) {
@@ -146,13 +147,21 @@ func (s *DMService) SendMessage(ctx context.Context, convID, userID string, inpu
 	if len(input.AttachmentIDs) > 10 {
 		return nil, apperror.BadRequest(fmt.Sprintf("too many attachments (max %d)", 10))
 	}
+	replyToMessageID := normalizeOptionalMessageID(input.ReplyToMessageID)
+	if replyToMessageID != nil {
+		belongs, err := s.dmRepo.MessageBelongsToConversation(ctx, *replyToMessageID, convID)
+		if err != nil || !belongs {
+			return nil, apperror.BadRequest("reply target must be in the same conversation")
+		}
+	}
 
 	msg := &models.Message{
-		ID:             uuid.New().String(),
-		ConversationID: &convID,
-		AuthorID:       userID,
-		Content:        input.Content,
-		CreatedAt:      time.Now(),
+		ID:               uuid.New().String(),
+		ConversationID:   &convID,
+		AuthorID:         userID,
+		Content:          input.Content,
+		ReplyToMessageID: replyToMessageID,
+		CreatedAt:        time.Now(),
 	}
 
 	if err := s.msgRepo.Create(ctx, msg); err != nil {
@@ -163,12 +172,12 @@ func (s *DMService) SendMessage(ctx context.Context, convID, userID string, inpu
 
 	if len(input.AttachmentIDs) > 0 {
 		_ = s.msgRepo.LinkAttachments(ctx, msg.ID, userID, input.AttachmentIDs)
-		atts, _ := s.msgRepo.GetLinkedAttachments(ctx, msg.ID)
-		msg.Attachments = atts
 	}
 
-	author, _ := s.msgRepo.GetAuthorInfo(ctx, userID)
-	msg.Author = author
+	msg, err := s.loadDetailedMessage(ctx, msg.ID)
+	if err != nil {
+		return nil, apperror.Internal("failed to load created message", err)
+	}
 
 	evt := ws.NewEvent(ws.OpDMMessageCreate, msg)
 	// Sender: apply immediately in their UI (and other tabs/devices).
@@ -178,10 +187,10 @@ func (s *DMService) SendMessage(ctx context.Context, convID, userID string, inpu
 		s.hub.SendToUser(uid, evt)
 	}
 
-	if s.notifSvc != nil && author != nil {
+	if s.notifSvc != nil && msg.Author != nil {
 		for _, recipientID := range others {
 			rid := recipientID
-			title := author.DisplayName + " sent you a message"
+			title := msg.Author.DisplayName + " sent you a message"
 			bodyStr := input.Content
 			notifCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			go func() {
@@ -192,6 +201,18 @@ func (s *DMService) SendMessage(ctx context.Context, convID, userID string, inpu
 	}
 
 	return msg, nil
+}
+
+func (s *DMService) loadDetailedMessage(ctx context.Context, msgID string) (*models.Message, error) {
+	msg, err := s.msgRepo.GetDetailedByID(ctx, msgID)
+	if err != nil {
+		return nil, err
+	}
+	messages := []models.Message{*msg}
+	if err := s.msgRepo.EnrichMessages(ctx, messages); err != nil {
+		return nil, err
+	}
+	return &messages[0], nil
 }
 
 func (s *DMService) AckDM(ctx context.Context, convID, userID, messageID string) error {

@@ -1,13 +1,66 @@
-import { useRef, useEffect, useLayoutEffect, useMemo, useCallback, useState } from 'react';
+import {
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useCallback,
+  useState,
+  type ReactNode,
+  type SVGProps,
+} from 'react';
+import { formatDistanceToNow } from 'date-fns';
+import { api } from '../../api/client';
 import { useStreamStore } from '../../stores/streamStore';
 import { useHubStore } from '../../stores/hubStore';
 import { useMessageStore } from '../../stores/messageStore';
 import { useDMStore } from '../../stores/dmStore';
 import { useAuthStore } from '../../stores/auth';
+import { useNotificationStore } from '../../stores/notificationStore';
+import { usePresenceStore } from '../../stores/presenceStore';
 import { useWsSend } from '../../hooks/useWebSocket';
 import MessageInput from './MessageInput';
 import MessageItem from './MessageItem';
 import TypingIndicator from './TypingIndicator';
+import type {
+  Message,
+  MessageSearchFilters,
+  Notification,
+  StreamNotificationSettings,
+  User,
+} from '../../types';
+import type { DesktopUpdateStatus } from '../../types/desktop';
+import { normalizeMessages } from '../../utils/entityAssets';
+import { publicAssetUrl } from '../../utils/publicAssetUrl';
+import { getDesktop, idleDesktopUpdateStatus } from '../../utils/desktop';
+
+type HeaderPanel = 'notifications' | 'pins' | 'search' | 'inbox' | null;
+type StreamNotificationToggleKey =
+  | 'suppress_everyone'
+  | 'suppress_role_mentions'
+  | 'suppress_highlights'
+  | 'mute_events'
+  | 'mobile_push'
+  | 'hide_muted_channels';
+
+const DEFAULT_STREAM_NOTIFICATION: StreamNotificationSettings = {
+  notification_level: 'mentions_only',
+  suppress_everyone: false,
+  suppress_role_mentions: false,
+  suppress_highlights: false,
+  mute_events: false,
+  mobile_push: true,
+  hide_muted_channels: false,
+  channel_muted: false,
+};
+
+const STREAM_NOTIFICATION_TOGGLES: ReadonlyArray<readonly [StreamNotificationToggleKey, string]> = [
+  ['suppress_everyone', 'Suppress @everyone and @here'],
+  ['suppress_role_mentions', 'Suppress role mentions'],
+  ['suppress_highlights', 'Suppress highlights'],
+  ['mute_events', 'Mute new events'],
+  ['mobile_push', 'Mobile push notifications'],
+  ['hide_muted_channels', 'Hide muted channels'],
+];
 
 function formatDateSeparator(dateStr: string): string {
   const date = new Date(dateStr);
@@ -16,23 +69,503 @@ function formatDateSeparator(dateStr: string): string {
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
   if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
-  return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  return date.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
-export default function ChatPanel() {
+function formatCompactTimestamp(dateStr: string): string {
+  return new Date(dateStr).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function formatRelativeTimestamp(dateStr: string): string {
+  try {
+    return formatDistanceToNow(new Date(dateStr), { addSuffix: true });
+  } catch {
+    return formatCompactTimestamp(dateStr);
+  }
+}
+
+function countSearchFilters(filters: MessageSearchFilters): number {
+  let count = 0;
+  if (filters.stream_id) count += 1;
+  if (filters.author_id) count += 1;
+  if (filters.author_type) count += 1;
+  if (filters.mentions) count += 1;
+  if (filters.has) count += 1;
+  if (filters.before) count += 1;
+  if (filters.after) count += 1;
+  if (filters.on) count += 1;
+  if (filters.during) count += 1;
+  if (filters.pinned) count += 1;
+  if (filters.link) count += 1;
+  if (filters.filename) count += 1;
+  if (filters.ext) count += 1;
+  return count;
+}
+
+function cleanSearchFilters(filters: MessageSearchFilters): MessageSearchFilters {
+  const next: MessageSearchFilters = {
+    limit: filters.limit ?? 25,
+  };
+  if (filters.query?.trim()) next.query = filters.query.trim();
+  if (filters.stream_id) next.stream_id = filters.stream_id;
+  if (filters.author_id) next.author_id = filters.author_id;
+  if (filters.author_type) next.author_type = filters.author_type;
+  if (filters.mentions?.trim()) next.mentions = filters.mentions.trim().replace(/^@/, '');
+  if (filters.has) next.has = filters.has;
+  if (filters.before) next.before = filters.before;
+  if (filters.after) next.after = filters.after;
+  if (filters.on) next.on = filters.on;
+  if (filters.during) next.during = filters.during;
+  if (filters.pinned) next.pinned = true;
+  if (filters.link) next.link = true;
+  if (filters.filename?.trim()) next.filename = filters.filename.trim();
+  if (filters.ext?.trim()) next.ext = filters.ext.trim();
+  return next;
+}
+
+function getUserLabel(user?: User): string {
+  if (!user) return 'Unknown user';
+  return user.display_name || user.username;
+}
+
+function getUserInitial(user?: User): string {
+  const label = getUserLabel(user).trim();
+  return label ? label[0].toUpperCase() : '?';
+}
+
+function getMessagePreview(message: Message): string {
+  const content = message.content.trim();
+  if (content) return content;
+  if (message.attachments?.length) {
+    return message.attachments.length === 1
+      ? `Attachment: ${message.attachments[0].filename}`
+      : `${message.attachments.length} attachments`;
+  }
+  return 'No message content';
+}
+
+function notifLevelSubtitle(level: StreamNotificationSettings['notification_level']): string {
+  switch (level) {
+    case 'all':
+      return 'All messages';
+    case 'nothing':
+      return 'Nothing';
+    default:
+      return 'Only @mentions';
+  }
+}
+
+function IconBell(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.17V11a6 6 0 1 0-12 0v3.17a2 2 0 0 1-.6 1.42L4 17h5" />
+      <path d="M9 17a3 3 0 0 0 6 0" />
+    </svg>
+  );
+}
+
+function IconPin(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="m14 9 7 7" />
+      <path d="m4 20 6-6" />
+      <path d="m8 16 8-8" />
+      <path d="m13 4 7 7" />
+      <path d="m10 7 7 7" />
+    </svg>
+  );
+}
+
+function IconUsers(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function IconInbox(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M22 12h-4l-3 4H9l-3-4H2" />
+      <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z" />
+    </svg>
+  );
+}
+
+function IconSearch(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+}
+
+function IconFilter(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+    </svg>
+  );
+}
+
+function IconRefresh(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M21 2v6h-6" />
+      <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+      <path d="M3 22v-6h6" />
+      <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+    </svg>
+  );
+}
+
+function IconClose(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </svg>
+  );
+}
+
+function IconDownload(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M12 3v12" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M5 21h14" />
+    </svg>
+  );
+}
+
+function UserAvatar({
+  user,
+  sizeClass = 'w-9 h-9',
+  textClass = 'text-sm',
+}: {
+  user?: User;
+  sizeClass?: string;
+  textClass?: string;
+}) {
+  if (user?.avatar_url) {
+    return (
+      <img
+        src={publicAssetUrl(user.avatar_url)}
+        alt=""
+        className={`${sizeClass} rounded-full object-cover shrink-0`}
+      />
+    );
+  }
+
+  return (
+    <div className={`${sizeClass} rounded-full bg-riftapp-accent/15 text-riftapp-accent flex items-center justify-center shrink-0`}>
+      <span className={`${textClass} font-semibold uppercase`}>{getUserInitial(user)}</span>
+    </div>
+  );
+}
+
+function HeaderIconButton({
+  label,
+  title,
+  active,
+  onClick,
+  badge,
+  tone = 'default',
+  children,
+}: {
+  label: string;
+  title?: string;
+  active?: boolean;
+  onClick: () => void;
+  badge?: number | string;
+  tone?: 'default' | 'success';
+  children: ReactNode;
+}) {
+  const success = tone === 'success';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={title ?? label}
+      className={`relative inline-flex h-8 items-center justify-center rounded-md border px-2 transition-colors ${
+        success
+          ? 'border-[#2f8555] bg-[#248046] text-white hover:bg-[#2d9d58]'
+          : active
+            ? 'border-white/10 bg-[#313338] text-[#f2f3f5]'
+            : 'border-transparent bg-transparent text-[#b5bac1] hover:bg-[#313338] hover:text-[#f2f3f5]'
+      }`}
+    >
+      <span className="inline-flex items-center justify-center">{children}</span>
+      {badge != null && badge !== 0 && badge !== '' && (
+        <span className="absolute -right-1.5 -top-1.5 min-w-[18px] rounded-full bg-[#f23f43] px-1.5 py-[1px] text-[10px] font-bold leading-4 text-white shadow-sm">
+          {badge}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function FloatingPanel({
+  title,
+  subtitle,
+  widthClass = 'w-[380px]',
+  actions,
+  onClose,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  widthClass?: string;
+  actions?: ReactNode;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className={`${widthClass} overflow-hidden rounded-2xl border border-white/10 bg-[#111214]/95 shadow-[0_18px_48px_rgba(0,0,0,0.45)] backdrop-blur-xl animate-scale-in`}>
+      <div className="flex items-start justify-between gap-3 border-b border-white/6 px-4 py-3">
+        <div className="min-w-0">
+          <h4 className="text-sm font-semibold text-[#f2f3f5]">{title}</h4>
+          {subtitle ? <p className="mt-0.5 text-xs text-[#949ba4]">{subtitle}</p> : null}
+        </div>
+        <div className="flex items-center gap-2">
+          {actions}
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#949ba4] transition-colors hover:bg-[#232428] hover:text-[#f2f3f5]"
+            aria-label="Close panel"
+          >
+            <IconClose className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+      <div className="max-h-[min(72vh,680px)] overflow-y-auto p-3">{children}</div>
+    </div>
+  );
+}
+
+function EmptyPanelState({
+  title,
+  description,
+  icon,
+}: {
+  title: string;
+  description: string;
+  icon: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-white/8 bg-[#0f1012] px-5 py-10 text-center">
+      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#1b1d22] text-[#b5bac1]">
+        {icon}
+      </div>
+      <h5 className="text-sm font-semibold text-[#f2f3f5]">{title}</h5>
+      <p className="mt-1 max-w-[260px] text-xs leading-5 text-[#949ba4]">{description}</p>
+    </div>
+  );
+}
+
+function MessagePreviewCard({
+  message,
+  streamName,
+  onOpen,
+  extraLabel,
+}: {
+  message: Message;
+  streamName?: string;
+  onOpen: () => void;
+  extraLabel?: string;
+}) {
+  const attachmentLabel = message.attachments?.length
+    ? message.attachments.map((attachment) => attachment.filename).join(', ')
+    : null;
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="w-full rounded-xl border border-white/6 bg-[#17181c] px-3 py-3 text-left transition-colors hover:bg-[#1d1f24]"
+    >
+      <div className="flex items-start gap-3">
+        <UserAvatar user={message.author} sizeClass="w-9 h-9" textClass="text-xs" />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-[#f2f3f5]">{getUserLabel(message.author)}</span>
+            {streamName ? (
+              <span className="rounded-md bg-[#232428] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#b5bac1]">
+                #{streamName}
+              </span>
+            ) : null}
+            {message.pinned ? (
+              <span className="rounded-md bg-[#1f4129] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#7adf8f]">
+                Pinned
+              </span>
+            ) : null}
+            {extraLabel ? (
+              <span className="rounded-md bg-[#2a1e12] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#f0b232]">
+                {extraLabel}
+              </span>
+            ) : null}
+            <span className="text-[11px] text-[#949ba4]">{formatCompactTimestamp(message.created_at)}</span>
+          </div>
+          <p className="mt-1 whitespace-pre-wrap break-words text-[13px] leading-5 text-[#dbdee1]">
+            {getMessagePreview(message)}
+          </p>
+          {attachmentLabel ? (
+            <p className="mt-2 truncate text-[11px] text-[#949ba4]">{attachmentLabel}</p>
+          ) : null}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function NotificationPreviewCard({
+  notification,
+  onOpen,
+  onMarkRead,
+  streamName,
+}: {
+  notification: Notification;
+  onOpen: () => void;
+  onMarkRead: () => void;
+  streamName?: string;
+}) {
+  const unread = !notification.read;
+
+  return (
+    <div className="rounded-xl border border-white/6 bg-[#17181c] px-3 py-3">
+      <div className="flex items-start gap-3">
+        <UserAvatar user={notification.actor} sizeClass="w-9 h-9" textClass="text-xs" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onOpen}
+              className="min-w-0 flex-1 text-left"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold text-[#f2f3f5]">{notification.title}</span>
+                {streamName ? (
+                  <span className="rounded-md bg-[#232428] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#b5bac1]">
+                    #{streamName}
+                  </span>
+                ) : null}
+                {unread ? <span className="h-2 w-2 rounded-full bg-[#5865f2]" /> : null}
+              </div>
+              {notification.body ? (
+                <p className="mt-1 whitespace-pre-wrap break-words text-[13px] leading-5 text-[#dbdee1]">
+                  {notification.body}
+                </p>
+              ) : null}
+              <p className="mt-2 text-[11px] text-[#949ba4]">{formatRelativeTimestamp(notification.created_at)}</p>
+            </button>
+            {unread ? (
+              <button
+                type="button"
+                onClick={onMarkRead}
+                className="shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-[#b5bac1] transition-colors hover:bg-[#232428] hover:text-[#f2f3f5]"
+              >
+                Mark read
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PanelSectionLabel({ children }: { children: ReactNode }) {
+  return <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#949ba4]">{children}</div>;
+}
+
+function SearchField({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-[#949ba4]">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function NotificationToggleRow({
+  label,
+  checked,
+  onToggle,
+}: {
+  label: string;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="flex w-full items-center justify-between gap-3 rounded-xl border border-white/6 bg-[#17181c] px-3 py-3 text-left transition-colors hover:bg-[#1d1f24]"
+    >
+      <span className="text-sm text-[#dbdee1]">{label}</span>
+      <span className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${checked ? 'bg-[#5865f2]' : 'bg-[#4e5058]'}`}>
+        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${checked ? 'translate-x-4' : 'translate-x-0.5'}`} />
+      </span>
+    </button>
+  );
+}
+interface ChatPanelProps {
+  showMemberList: boolean;
+  onToggleMemberList: () => void;
+}
+
+export default function ChatPanel({
+  showMemberList,
+  onToggleMemberList,
+}: ChatPanelProps) {
   const messages = useMessageStore((s) => s.messages);
   const messagesLoading = useMessageStore((s) => s.messagesLoading);
+  const pinMutationVersion = useMessageStore((s) => s.pinMutationVersion);
   const activeStreamId = useStreamStore((s) => s.activeStreamId);
   const streams = useStreamStore((s) => s.streams);
   const user = useAuthStore((s) => s.user);
   const activeHubId = useHubStore((s) => s.activeHubId);
+  const hubs = useHubStore((s) => s.hubs);
+  const hubMembers = usePresenceStore((s) => s.hubMembers);
+  const notifications = useNotificationStore((s) => s.notifications);
+  const notificationUnreadCount = useNotificationStore((s) => s.unreadCount);
+  const loadNotifications = useNotificationStore((s) => s.loadNotifications);
+  const markNotifRead = useNotificationStore((s) => s.markNotifRead);
+  const markAllNotifsRead = useNotificationStore((s) => s.markAllNotifsRead);
   const bottomRef = useRef<HTMLDivElement>(null);
   const unreadRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const floatingPanelRef = useRef<HTMLDivElement>(null);
   const prevMessageCountRef = useRef(0);
   const wasNearBottomRef = useRef(true);
+  const pendingJumpMessageIdRef = useRef<string | null>(null);
   const send = useWsSend();
   const lastReadMessageIds = useStreamStore((s) => s.lastReadMessageIds);
+  const desktop = useMemo(() => getDesktop(), []);
 
   // DM state
   const activeConversationId = useDMStore((s) => s.activeConversationId);
@@ -54,8 +587,56 @@ export default function ChatPanel() {
     [conversations, activeConversationId]
   );
 
+  const activeHub = useMemo(
+    () => hubs.find((hub) => hub.id === activeHubId),
+    [hubs, activeHubId],
+  );
+
+  const streamMap = useMemo(
+    () => new Map(streams.map((stream) => [stream.id, stream])),
+    [streams],
+  );
+
+  const textStreamsInHub = useMemo(
+    () => streams.filter((stream) => stream.hub_id === activeHubId && stream.type === 0),
+    [streams, activeHubId],
+  );
+
+  const memberOptions = useMemo(() => {
+    const members = Object.values(hubMembers);
+    return [...members].sort((a, b) => getUserLabel(a).localeCompare(getUserLabel(b)));
+  }, [hubMembers]);
+
   const displayMessages = isDMMode ? dmMessages : messages;
   const isLoading = isDMMode ? dmMessagesLoading : messagesLoading;
+
+  const [activePanel, setActivePanel] = useState<HeaderPanel>(null);
+  const [updateStatus, setUpdateStatus] = useState<DesktopUpdateStatus>(idleDesktopUpdateStatus);
+  const [pinnedMessages, setPinnedMessages] = useState<Message[]>([]);
+  const [pinnedLoading, setPinnedLoading] = useState(false);
+  const [pinnedError, setPinnedError] = useState<string | null>(null);
+  const [searchFilters, setSearchFilters] = useState<MessageSearchFilters>({ query: '', limit: 25 });
+  const [searchResults, setSearchResults] = useState<Message[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchPerformed, setSearchPerformed] = useState(false);
+  const [streamNotifSettings, setStreamNotifSettings] = useState<StreamNotificationSettings | null>(null);
+  const [notifSettingsLoading, setNotifSettingsLoading] = useState(false);
+  const [inboxTab, setInboxTab] = useState<'mentions' | 'unread'>('mentions');
+
+  const mentionUnreadCount = useMemo(
+    () => notifications.filter((notification) => !notification.read && notification.type === 'mention').length,
+    [notifications],
+  );
+
+  const inboxItems = useMemo(() => {
+    if (inboxTab === 'mentions') {
+      return notifications.filter((notification) => notification.type === 'mention');
+    }
+    return notifications.filter((notification) => !notification.read);
+  }, [notifications, inboxTab]);
+
+  const activeSearchFilterCount = useMemo(() => countSearchFilters(searchFilters), [searchFilters]);
 
   // Compute unread divider position for stream messages
   const firstUnreadIndex = useMemo(() => {
@@ -289,29 +870,839 @@ export default function ChatPanel() {
 
   const showWelcome = !activeStreamId && !activeConversationId;
 
+  const focusMessage = useCallback((messageId: string) => {
+    const target = document.getElementById(`message-${messageId}`);
+    if (!target) return false;
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return true;
+  }, []);
+
+  const closePanel = useCallback(() => setActivePanel(null), []);
+
+  const togglePanel = useCallback((panel: Exclude<HeaderPanel, null>) => {
+    setActivePanel((current) => (current === panel ? null : panel));
+  }, []);
+
+  const refreshPinnedMessages = useCallback(async () => {
+    if (!activeStreamId || isDMMode) return;
+    setPinnedLoading(true);
+    setPinnedError(null);
+    try {
+      const items = normalizeMessages(await api.getPinnedMessages(activeStreamId));
+      setPinnedMessages(items);
+    } catch (error) {
+      setPinnedError(error instanceof Error ? error.message : 'Could not load pinned messages');
+    } finally {
+      setPinnedLoading(false);
+    }
+  }, [activeStreamId, isDMMode]);
+
+  const refreshStreamNotificationSettings = useCallback(async () => {
+    if (!activeStreamId || isDMMode) return;
+    setNotifSettingsLoading(true);
+    try {
+      setStreamNotifSettings(await api.getStreamNotificationSettings(activeStreamId));
+    } catch {
+      setStreamNotifSettings(DEFAULT_STREAM_NOTIFICATION);
+    } finally {
+      setNotifSettingsLoading(false);
+    }
+  }, [activeStreamId, isDMMode]);
+
+  const patchStreamNotificationSettings = useCallback(
+    async (patch: Partial<StreamNotificationSettings>) => {
+      if (!activeStreamId || !streamNotifSettings) return;
+      const next = { ...streamNotifSettings, ...patch };
+      setStreamNotifSettings(next);
+      try {
+        setStreamNotifSettings(await api.patchStreamNotificationSettings(activeStreamId, next));
+      } catch {
+        await refreshStreamNotificationSettings();
+      }
+    },
+    [activeStreamId, streamNotifSettings, refreshStreamNotificationSettings],
+  );
+
+  const updateSearchFilter = useCallback(
+    <K extends keyof MessageSearchFilters>(key: K, value: MessageSearchFilters[K] | undefined) => {
+      setSearchFilters((current) => ({
+        ...current,
+        [key]: value,
+      }));
+    },
+    [],
+  );
+
+  const resetSearch = useCallback(() => {
+    setSearchFilters({ query: '', limit: 25 });
+    setSearchResults([]);
+    setSearchError(null);
+    setSearchPerformed(false);
+  }, []);
+
+  const runSearch = useCallback(async () => {
+    if (!activeHubId || isDMMode) return;
+    setActivePanel('search');
+    setSearchLoading(true);
+    setSearchError(null);
+    setSearchPerformed(true);
+    try {
+      const results = normalizeMessages(await api.searchHubMessages(activeHubId, cleanSearchFilters(searchFilters)));
+      setSearchResults(results);
+    } catch (error) {
+      setSearchError(error instanceof Error ? error.message : 'Could not search messages');
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [activeHubId, isDMMode, searchFilters]);
+
+  const openStreamMessage = useCallback(
+    async (message: Pick<Message, 'id' | 'stream_id'>, hubId = activeHubId ?? undefined) => {
+      if (!message.stream_id) return;
+      if (hubId && useHubStore.getState().activeHubId !== hubId) {
+        await useHubStore.getState().setActiveHub(hubId);
+      }
+      pendingJumpMessageIdRef.current = message.id;
+      await useStreamStore.getState().setActiveStream(message.stream_id);
+      await useMessageStore.getState().ensureMessageLoaded(message.stream_id, message.id);
+      setActivePanel(null);
+      if (!focusMessage(message.id)) {
+        requestAnimationFrame(() => {
+          if (pendingJumpMessageIdRef.current === message.id && focusMessage(message.id)) {
+            pendingJumpMessageIdRef.current = null;
+          }
+        });
+      } else {
+        pendingJumpMessageIdRef.current = null;
+      }
+    },
+    [activeHubId, focusMessage],
+  );
+
+  const openNotificationItem = useCallback(
+    async (notification: Notification) => {
+      if (!notification.read) {
+        void markNotifRead(notification.id);
+      }
+
+      if (notification.type === 'dm' && notification.actor_id) {
+        pendingJumpMessageIdRef.current = notification.reference_id ?? null;
+        await useDMStore.getState().openDM(notification.actor_id);
+        if (notification.reference_id) {
+          const conversationId = useDMStore.getState().activeConversationId;
+          if (conversationId) {
+            await useDMStore.getState().ensureMessageLoaded(conversationId, notification.reference_id);
+          }
+        }
+        setActivePanel(null);
+        return;
+      }
+
+      if (notification.reference_id && notification.stream_id) {
+        await openStreamMessage(
+          { id: notification.reference_id, stream_id: notification.stream_id },
+          notification.hub_id ?? activeHubId ?? undefined,
+        );
+        return;
+      }
+
+      if (notification.hub_id && useHubStore.getState().activeHubId !== notification.hub_id) {
+        await useHubStore.getState().setActiveHub(notification.hub_id);
+      }
+      if (notification.stream_id) {
+        await useStreamStore.getState().setActiveStream(notification.stream_id);
+      }
+      setActivePanel(null);
+    },
+    [activeHubId, markNotifRead, openStreamMessage],
+  );
+
+  useEffect(() => {
+    if (!desktop) return;
+
+    let cancelled = false;
+    void desktop.getUpdateStatus().then((status) => {
+      if (!cancelled) setUpdateStatus(status);
+    });
+
+    const disposeStatus = desktop.onUpdateStatus((status) => {
+      setUpdateStatus(status);
+    });
+    const disposeReady = desktop.onUpdateReady(() => {
+      setUpdateStatus((current) => ({
+        ...current,
+        state: 'ready',
+      }));
+    });
+
+    return () => {
+      cancelled = true;
+      disposeStatus();
+      disposeReady();
+    };
+  }, [desktop]);
+
+  useEffect(() => {
+    if (activePanel !== 'pins') return;
+    void refreshPinnedMessages();
+  }, [activePanel, refreshPinnedMessages, pinMutationVersion]);
+
+  useEffect(() => {
+    if (activePanel !== 'notifications') return;
+    void refreshStreamNotificationSettings();
+  }, [activePanel, refreshStreamNotificationSettings]);
+
+  useEffect(() => {
+    if (activePanel !== 'inbox') return;
+    void loadNotifications();
+  }, [activePanel, loadNotifications]);
+
+  useEffect(() => {
+    if (!pendingJumpMessageIdRef.current) return;
+    if (focusMessage(pendingJumpMessageIdRef.current)) {
+      pendingJumpMessageIdRef.current = null;
+    }
+  }, [displayMessages, activeStreamId, activeConversationId, focusMessage]);
+
+  useEffect(() => {
+    if (!activePanel) return;
+
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (headerRef.current?.contains(target) || floatingPanelRef.current?.contains(target)) {
+        return;
+      }
+      setActivePanel(null);
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setActivePanel(null);
+      }
+    };
+
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [activePanel]);
+
+  useEffect(() => {
+    setActivePanel(null);
+  }, [activeHubId, activeStreamId, activeConversationId]);
+
+  const canShowChannelTools = !showWelcome && !isDMMode && Boolean(activeHubId);
+
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-riftapp-bg min-w-0">
+    <div className="flex-1 min-h-0 flex flex-col bg-riftapp-bg min-w-0 relative">
       {/* Header */}
       {!showWelcome && (
-      <div className="h-12 flex items-center px-4 border-b border-riftapp-border/60 flex-shrink-0 shadow-[0_1px_0_rgba(0,0,0,0.2)]">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          {isDMMode ? (
+        <div
+          ref={headerRef}
+          className="flex h-12 items-center gap-3 border-b border-riftapp-border/60 bg-[#232428] px-4 shadow-[0_1px_0_rgba(0,0,0,0.2)] flex-shrink-0"
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            {isDMMode ? (
+              <>
+                <UserAvatar user={activeConversation?.recipient} sizeClass="w-7 h-7" textClass="text-[11px]" />
+                <div className="min-w-0">
+                  <h3 className="truncate text-[15px] font-semibold text-[#f2f3f5]">
+                    {activeConversation?.recipient?.display_name || 'Direct Message'}
+                  </h3>
+                </div>
+              </>
+            ) : (
+              <>
+                <span className="text-lg font-medium text-[#949ba4]">#</span>
+                <div className="min-w-0">
+                  <h3 className="truncate text-[15px] font-semibold text-[#f2f3f5]">{activeStream?.name}</h3>
+                </div>
+              </>
+            )}
+          </div>
+
+          {canShowChannelTools ? (
             <>
-              <span className="text-riftapp-text-dim text-lg font-medium">@</span>
-              <h3 className="font-semibold text-[15px] truncate">{activeConversation?.recipient?.display_name || 'Direct Message'}</h3>
+              <div className="hidden h-5 w-px bg-white/10 lg:block" />
+              <div className="hidden items-center gap-2 lg:flex">
+                <div className="flex h-8 items-center gap-2 rounded-md border border-white/8 bg-[#1e1f22] px-2.5 text-[#b5bac1] focus-within:border-white/15 focus-within:text-[#f2f3f5]">
+                  <IconSearch className="h-4 w-4 shrink-0" />
+                  <input
+                    type="text"
+                    value={searchFilters.query ?? ''}
+                    onFocus={() => setActivePanel('search')}
+                    onChange={(event) => updateSearchFilter('query', event.target.value || undefined)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        void runSearch();
+                      }
+                    }}
+                    placeholder={activeStream ? `Search #${activeStream.name}` : 'Search messages'}
+                    className="w-52 bg-transparent text-sm text-[#f2f3f5] outline-none placeholder:text-[#949ba4] xl:w-64"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivePanel('search');
+                      void runSearch();
+                    }}
+                    className="inline-flex h-6 w-6 items-center justify-center rounded text-[#949ba4] transition-colors hover:bg-[#232428] hover:text-[#f2f3f5]"
+                    aria-label="Search messages"
+                  >
+                    <IconFilter className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                <HeaderIconButton
+                  label="Notification settings"
+                  active={activePanel === 'notifications'}
+                  onClick={() => togglePanel('notifications')}
+                >
+                  <IconBell className="h-4 w-4" />
+                </HeaderIconButton>
+
+                <HeaderIconButton
+                  label="Pinned messages"
+                  active={activePanel === 'pins'}
+                  onClick={() => togglePanel('pins')}
+                >
+                  <IconPin className="h-4 w-4" />
+                </HeaderIconButton>
+
+                <HeaderIconButton
+                  label={showMemberList ? 'Hide member list' : 'Show member list'}
+                  active={showMemberList}
+                  onClick={onToggleMemberList}
+                >
+                  <IconUsers className="h-4 w-4" />
+                </HeaderIconButton>
+              </div>
             </>
-          ) : (
-            <>
-              <span className="text-riftapp-text-dim text-lg font-medium">#</span>
-              <h3 className="font-semibold text-[15px] truncate">{activeStream?.name}</h3>
-            </>
-          )}
+          ) : null}
+
+          {!showWelcome ? (
+            <div className="flex items-center gap-2">
+              <HeaderIconButton
+                label="Inbox"
+                active={activePanel === 'inbox'}
+                badge={mentionUnreadCount || notificationUnreadCount}
+                onClick={() => togglePanel('inbox')}
+              >
+                <IconInbox className="h-4 w-4" />
+              </HeaderIconButton>
+
+              {desktop && updateStatus.state === 'ready' ? (
+                <HeaderIconButton
+                  label="Restart to update"
+                  title="Restart to install the downloaded update"
+                  tone="success"
+                  onClick={() => desktop.restartToUpdate()}
+                >
+                  <IconDownload className="h-4 w-4" />
+                </HeaderIconButton>
+              ) : null}
+            </div>
+          ) : null}
         </div>
-      </div>
       )}
 
       {/* Messages */}
       <div className="flex-1 overflow-hidden relative">
+        {activePanel ? (
+          <div ref={floatingPanelRef} className="absolute right-4 top-3 z-30">
+            {activePanel === 'notifications' && canShowChannelTools ? (
+              <FloatingPanel
+                title="Notification Settings"
+                subtitle={streamNotifSettings ? `${notifLevelSubtitle(streamNotifSettings.notification_level)} for #${activeStream?.name ?? 'channel'}` : `Controls for #${activeStream?.name ?? 'channel'}`}
+                onClose={closePanel}
+                actions={
+                  <button
+                    type="button"
+                    onClick={() => void refreshStreamNotificationSettings()}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#949ba4] transition-colors hover:bg-[#232428] hover:text-[#f2f3f5]"
+                    aria-label="Refresh notification settings"
+                  >
+                    <IconRefresh className="h-4 w-4" />
+                  </button>
+                }
+              >
+                {notifSettingsLoading && !streamNotifSettings ? (
+                  <div className="space-y-2">
+                    {[0, 1, 2].map((item) => (
+                      <div key={item} className="h-14 animate-pulse rounded-xl bg-[#17181c]" />
+                    ))}
+                  </div>
+                ) : streamNotifSettings ? (
+                  <div className="space-y-4">
+                    <div>
+                      <PanelSectionLabel>Deliveries</PanelSectionLabel>
+                      <div className="space-y-2">
+                        {(['all', 'mentions_only', 'nothing'] as const).map((level) => (
+                          <button
+                            key={level}
+                            type="button"
+                            onClick={() => void patchStreamNotificationSettings({ notification_level: level })}
+                            className={`flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors ${
+                              streamNotifSettings.notification_level === level
+                                ? 'border-[#5865f2] bg-[#1e2238]'
+                                : 'border-white/6 bg-[#17181c] hover:bg-[#1d1f24]'
+                            }`}
+                          >
+                            <span className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${streamNotifSettings.notification_level === level ? 'border-[#5865f2]' : 'border-[#4e5058]'}`}>
+                              {streamNotifSettings.notification_level === level ? <span className="h-2 w-2 rounded-full bg-white" /> : null}
+                            </span>
+                            <span className="text-sm text-[#dbdee1]">
+                              {level === 'all' ? 'All Messages' : level === 'mentions_only' ? 'Only @mentions' : 'Nothing'}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <PanelSectionLabel>Suppressions</PanelSectionLabel>
+                      <div className="space-y-2">
+                        {STREAM_NOTIFICATION_TOGGLES.map(([key, label]) => (
+                          <NotificationToggleRow
+                            key={key}
+                            label={label}
+                            checked={streamNotifSettings[key]}
+                            onToggle={() => void patchStreamNotificationSettings({ [key]: !streamNotifSettings[key] })}
+                          />
+                        ))}
+                        <NotificationToggleRow
+                          label={streamNotifSettings.channel_muted ? 'Channel muted' : 'Mute channel'}
+                          checked={streamNotifSettings.channel_muted}
+                          onToggle={() => void patchStreamNotificationSettings({ channel_muted: !streamNotifSettings.channel_muted })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <EmptyPanelState
+                    title="Notification settings unavailable"
+                    description="This channel did not return notification settings. Try refreshing the panel."
+                    icon={<IconBell className="h-5 w-5" />}
+                  />
+                )}
+              </FloatingPanel>
+            ) : null}
+
+            {activePanel === 'pins' && canShowChannelTools ? (
+              <FloatingPanel
+                title="Pinned Messages"
+                subtitle={activeStream ? `#${activeStream.name}` : 'Current channel'}
+                onClose={closePanel}
+                actions={
+                  <button
+                    type="button"
+                    onClick={() => void refreshPinnedMessages()}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#949ba4] transition-colors hover:bg-[#232428] hover:text-[#f2f3f5]"
+                    aria-label="Refresh pinned messages"
+                  >
+                    <IconRefresh className="h-4 w-4" />
+                  </button>
+                }
+              >
+                {pinnedLoading ? (
+                  <div className="space-y-2">
+                    {[0, 1, 2].map((item) => (
+                      <div key={item} className="h-24 animate-pulse rounded-xl bg-[#17181c]" />
+                    ))}
+                  </div>
+                ) : pinnedError ? (
+                  <EmptyPanelState
+                    title="Pinned messages failed to load"
+                    description={pinnedError}
+                    icon={<IconPin className="h-5 w-5" />}
+                  />
+                ) : pinnedMessages.length > 0 ? (
+                  <div className="space-y-2">
+                    {pinnedMessages.map((message) => (
+                      <MessagePreviewCard
+                        key={message.id}
+                        message={message}
+                        onOpen={() => void openStreamMessage(message)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyPanelState
+                    title="No pinned messages"
+                    description="Pin a message from its context menu and it will show up here."
+                    icon={<IconPin className="h-5 w-5" />}
+                  />
+                )}
+              </FloatingPanel>
+            ) : null}
+
+            {activePanel === 'search' && canShowChannelTools ? (
+              <FloatingPanel
+                title="Search Messages"
+                subtitle={activeSearchFilterCount > 0 ? `${activeSearchFilterCount} filters active in ${activeHub?.name ?? 'this hub'}` : `Search across ${activeHub?.name ?? 'this hub'}`}
+                widthClass="w-[430px]"
+                onClose={closePanel}
+                actions={
+                  <button
+                    type="button"
+                    onClick={() => void runSearch()}
+                    className="inline-flex items-center gap-1 rounded-md bg-[#5865f2] px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-[#4752c4]"
+                  >
+                    <IconSearch className="h-3.5 w-3.5" />
+                    Search
+                  </button>
+                }
+              >
+                <div className="space-y-4">
+                  <div>
+                    <PanelSectionLabel>Quick Filters</PanelSectionLabel>
+                    <div className="flex flex-wrap gap-2">
+                      {activeStream ? (
+                        <button
+                          type="button"
+                          onClick={() => updateSearchFilter('stream_id', searchFilters.stream_id === activeStream.id ? undefined : activeStream.id)}
+                          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${searchFilters.stream_id === activeStream.id ? 'bg-[#5865f2] text-white' : 'bg-[#1b1d22] text-[#b5bac1] hover:bg-[#232428] hover:text-[#f2f3f5]'}`}
+                        >
+                          #{activeStream.name}
+                        </button>
+                      ) : null}
+                      {user ? (
+                        <button
+                          type="button"
+                          onClick={() => updateSearchFilter('author_id', searchFilters.author_id === user.id ? undefined : user.id)}
+                          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${searchFilters.author_id === user.id ? 'bg-[#5865f2] text-white' : 'bg-[#1b1d22] text-[#b5bac1] hover:bg-[#232428] hover:text-[#f2f3f5]'}`}
+                        >
+                          From me
+                        </button>
+                      ) : null}
+                      {user?.username ? (
+                        <button
+                          type="button"
+                          onClick={() => updateSearchFilter('mentions', searchFilters.mentions === user.username ? undefined : user.username)}
+                          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${searchFilters.mentions === user.username ? 'bg-[#5865f2] text-white' : 'bg-[#1b1d22] text-[#b5bac1] hover:bg-[#232428] hover:text-[#f2f3f5]'}`}
+                        >
+                          Mentions @{user.username}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => updateSearchFilter('link', searchFilters.link ? undefined : true)}
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${searchFilters.link ? 'bg-[#5865f2] text-white' : 'bg-[#1b1d22] text-[#b5bac1] hover:bg-[#232428] hover:text-[#f2f3f5]'}`}
+                      >
+                        Has link
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateSearchFilter('pinned', searchFilters.pinned ? undefined : true)}
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${searchFilters.pinned ? 'bg-[#5865f2] text-white' : 'bg-[#1b1d22] text-[#b5bac1] hover:bg-[#232428] hover:text-[#f2f3f5]'}`}
+                      >
+                        Pinned
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <PanelSectionLabel>Filters</PanelSectionLabel>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <SearchField label="Channel">
+                        <select
+                          value={searchFilters.stream_id ?? ''}
+                          onChange={(event) => updateSearchFilter('stream_id', event.target.value || undefined)}
+                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-white/15"
+                        >
+                          <option value="">All channels</option>
+                          {textStreamsInHub.map((stream) => (
+                            <option key={stream.id} value={stream.id}>
+                              #{stream.name}
+                            </option>
+                          ))}
+                        </select>
+                      </SearchField>
+
+                      <SearchField label="Author">
+                        <select
+                          value={searchFilters.author_id ?? ''}
+                          onChange={(event) => updateSearchFilter('author_id', event.target.value || undefined)}
+                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-white/15"
+                        >
+                          <option value="">Anyone</option>
+                          {memberOptions.map((member) => (
+                            <option key={member.id} value={member.id}>
+                              {getUserLabel(member)}
+                            </option>
+                          ))}
+                        </select>
+                      </SearchField>
+
+                      <SearchField label="Author Type">
+                        <select
+                          value={searchFilters.author_type ?? ''}
+                          onChange={(event) => updateSearchFilter('author_type', (event.target.value || undefined) as MessageSearchFilters['author_type'])}
+                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-white/15"
+                        >
+                          <option value="">Any</option>
+                          <option value="user">User</option>
+                          <option value="bot">Bot</option>
+                          <option value="webhook">Webhook</option>
+                        </select>
+                      </SearchField>
+
+                      <SearchField label="Mentions Username">
+                        <>
+                          <input
+                            type="text"
+                            list="search-mention-usernames"
+                            value={searchFilters.mentions ?? ''}
+                            onChange={(event) => updateSearchFilter('mentions', event.target.value || undefined)}
+                            placeholder="username"
+                            className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none placeholder:text-[#949ba4] transition-colors focus:border-white/15"
+                          />
+                          <datalist id="search-mention-usernames">
+                            {memberOptions.map((member) => (
+                              <option key={member.id} value={member.username} />
+                            ))}
+                          </datalist>
+                        </>
+                      </SearchField>
+
+                      <SearchField label="Has">
+                        <select
+                          value={searchFilters.has ?? ''}
+                          onChange={(event) => updateSearchFilter('has', (event.target.value || undefined) as MessageSearchFilters['has'])}
+                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-white/15"
+                        >
+                          <option value="">Anything</option>
+                          <option value="file">File</option>
+                          <option value="image">Image</option>
+                          <option value="video">Video</option>
+                          <option value="audio">Audio</option>
+                          <option value="link">Link</option>
+                        </select>
+                      </SearchField>
+
+                      <SearchField label="Before">
+                        <input
+                          type="date"
+                          value={searchFilters.before ?? ''}
+                          onChange={(event) => updateSearchFilter('before', event.target.value || undefined)}
+                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-white/15"
+                        />
+                      </SearchField>
+
+                      <SearchField label="After">
+                        <input
+                          type="date"
+                          value={searchFilters.after ?? ''}
+                          onChange={(event) => updateSearchFilter('after', event.target.value || undefined)}
+                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-white/15"
+                        />
+                      </SearchField>
+
+                      <SearchField label="On">
+                        <input
+                          type="date"
+                          value={searchFilters.on ?? ''}
+                          onChange={(event) => {
+                            const value = event.target.value || undefined;
+                            setSearchFilters((current) => ({
+                              ...current,
+                              on: value,
+                              during: value ? undefined : current.during,
+                            }));
+                          }}
+                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-white/15"
+                        />
+                      </SearchField>
+
+                      <SearchField label="During">
+                        <input
+                          type="date"
+                          value={searchFilters.during ?? ''}
+                          onChange={(event) => {
+                            const value = event.target.value || undefined;
+                            setSearchFilters((current) => ({
+                              ...current,
+                              during: value,
+                              on: value ? undefined : current.on,
+                            }));
+                          }}
+                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-white/15"
+                        />
+                      </SearchField>
+
+                      <SearchField label="Filename">
+                        <input
+                          type="text"
+                          value={searchFilters.filename ?? ''}
+                          onChange={(event) => updateSearchFilter('filename', event.target.value || undefined)}
+                          placeholder="clip, export, notes"
+                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none placeholder:text-[#949ba4] transition-colors focus:border-white/15"
+                        />
+                      </SearchField>
+
+                      <SearchField label="Extension">
+                        <input
+                          type="text"
+                          value={searchFilters.ext ?? ''}
+                          onChange={(event) => updateSearchFilter('ext', event.target.value || undefined)}
+                          placeholder="png, mp4, pdf"
+                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none placeholder:text-[#949ba4] transition-colors focus:border-white/15"
+                        />
+                      </SearchField>
+
+                      <SearchField label="Limit">
+                        <select
+                          value={searchFilters.limit ?? 25}
+                          onChange={(event) => updateSearchFilter('limit', Number(event.target.value))}
+                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-white/15"
+                        >
+                          <option value={25}>25 results</option>
+                          <option value={50}>50 results</option>
+                          <option value={100}>100 results</option>
+                        </select>
+                      </SearchField>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-3">
+                      <label className="inline-flex items-center gap-2 text-sm text-[#dbdee1]">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(searchFilters.pinned)}
+                          onChange={(event) => updateSearchFilter('pinned', event.target.checked || undefined)}
+                          className="h-4 w-4 rounded border-white/20 bg-[#17181c]"
+                        />
+                        Pinned only
+                      </label>
+                      <label className="inline-flex items-center gap-2 text-sm text-[#dbdee1]">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(searchFilters.link)}
+                          onChange={(event) => updateSearchFilter('link', event.target.checked || undefined)}
+                          className="h-4 w-4 rounded border-white/20 bg-[#17181c]"
+                        />
+                        Contains link
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-white/6 bg-[#17181c] px-3 py-2.5">
+                    <span className="text-xs text-[#949ba4]">Press Enter in the top search bar or run search from here.</span>
+                    <button
+                      type="button"
+                      onClick={resetSearch}
+                      className="rounded-md px-2.5 py-1 text-xs font-semibold text-[#b5bac1] transition-colors hover:bg-[#232428] hover:text-[#f2f3f5]"
+                    >
+                      Reset
+                    </button>
+                  </div>
+
+                  <div>
+                    <PanelSectionLabel>Results</PanelSectionLabel>
+                    {searchLoading ? (
+                      <div className="space-y-2">
+                        {[0, 1, 2].map((item) => (
+                          <div key={item} className="h-24 animate-pulse rounded-xl bg-[#17181c]" />
+                        ))}
+                      </div>
+                    ) : searchError ? (
+                      <EmptyPanelState
+                        title="Search failed"
+                        description={searchError}
+                        icon={<IconSearch className="h-5 w-5" />}
+                      />
+                    ) : searchResults.length > 0 ? (
+                      <div className="space-y-2">
+                        {searchResults.map((message) => (
+                          <MessagePreviewCard
+                            key={message.id}
+                            message={message}
+                            streamName={message.stream_id ? streamMap.get(message.stream_id)?.name : undefined}
+                            onOpen={() => void openStreamMessage(message)}
+                          />
+                        ))}
+                      </div>
+                    ) : searchPerformed ? (
+                      <EmptyPanelState
+                        title="No messages matched"
+                        description="Adjust the filters or broaden the query and try again."
+                        icon={<IconSearch className="h-5 w-5" />}
+                      />
+                    ) : (
+                      <EmptyPanelState
+                        title="Search the hub"
+                        description="Use the text query, channel selector, author filter, file filters, and date filters to search this hub."
+                        icon={<IconSearch className="h-5 w-5" />}
+                      />
+                    )}
+                  </div>
+                </div>
+              </FloatingPanel>
+            ) : null}
+
+            {activePanel === 'inbox' ? (
+              <FloatingPanel
+                title="Inbox"
+                subtitle="Unread items and mentions"
+                onClose={closePanel}
+                actions={
+                  <button
+                    type="button"
+                    onClick={() => void markAllNotifsRead()}
+                    className="rounded-md px-2.5 py-1 text-xs font-semibold text-[#b5bac1] transition-colors hover:bg-[#232428] hover:text-[#f2f3f5]"
+                  >
+                    Mark all read
+                  </button>
+                }
+              >
+                <div className="space-y-3">
+                  <div className="inline-flex rounded-lg bg-[#17181c] p-1">
+                    {([
+                      ['mentions', 'Mentions'],
+                      ['unread', 'Unread'],
+                    ] as const).map(([tab, label]) => (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setInboxTab(tab)}
+                        className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${inboxTab === tab ? 'bg-[#5865f2] text-white' : 'text-[#b5bac1] hover:text-[#f2f3f5]'}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {inboxItems.length > 0 ? (
+                    <div className="space-y-2">
+                      {inboxItems.map((notification) => (
+                        <NotificationPreviewCard
+                          key={notification.id}
+                          notification={notification}
+                          streamName={notification.stream_id ? streamMap.get(notification.stream_id)?.name : undefined}
+                          onOpen={() => void openNotificationItem(notification)}
+                          onMarkRead={() => void markNotifRead(notification.id)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyPanelState
+                      title={inboxTab === 'mentions' ? 'No mentions waiting' : 'Nothing unread'}
+                      description={
+                        inboxTab === 'mentions'
+                          ? 'Mentions will show up here across your hubs and channels.'
+                          : 'Unread notifications and DMs will show up here.'
+                      }
+                      icon={<IconInbox className="h-5 w-5" />}
+                    />
+                  )}
+                </div>
+              </FloatingPanel>
+            ) : null}
+          </div>
+        ) : null}
+
         {showWelcome && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-riftapp-bg">
             <div className="text-center animate-fade-in max-w-sm px-6">
@@ -451,14 +1842,14 @@ export default function ChatPanel() {
       {/* Typing indicator + Input */}
       {!showWelcome && activeStreamId && <TypingIndicator streamId={activeStreamId} />}
       {!showWelcome && (
-      <MessageInput
-        streamName={isDMMode ? (activeConversation?.recipient?.display_name || '') : (activeStream?.name || '')}
-        onTyping={isDMMode ? undefined : onTyping}
-        onTypingStop={isDMMode ? undefined : onTypingStop}
-        isDMMode={isDMMode}
-        onSendDM={isDMMode ? sendDMMessage : undefined}
-        replyScopeKey={activeStreamId || activeConversationId || ''}
-      />
+        <MessageInput
+          streamName={isDMMode ? (activeConversation?.recipient?.display_name || '') : (activeStream?.name || '')}
+          onTyping={isDMMode ? undefined : onTyping}
+          onTypingStop={isDMMode ? undefined : onTypingStop}
+          isDMMode={isDMMode}
+          onSendDM={isDMMode ? sendDMMessage : undefined}
+          replyScopeKey={activeStreamId || activeConversationId || ''}
+        />
       )}
     </div>
   );

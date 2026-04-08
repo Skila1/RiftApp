@@ -13,10 +13,11 @@ import (
 )
 
 type StreamService struct {
-	streamRepo *repository.StreamRepo
-	hubService *HubService
-	msgRepo    *repository.MessageRepo
-	notifRepo  *repository.NotificationRepo
+	streamRepo      *repository.StreamRepo
+	hubService      *HubService
+	msgRepo         *repository.MessageRepo
+	notifRepo       *repository.NotificationRepo
+	streamNotifRepo *repository.StreamNotificationSettingsRepo
 }
 
 func NewStreamService(
@@ -24,12 +25,14 @@ func NewStreamService(
 	hubService *HubService,
 	msgRepo *repository.MessageRepo,
 	notifRepo *repository.NotificationRepo,
+	streamNotifRepo *repository.StreamNotificationSettingsRepo,
 ) *StreamService {
 	return &StreamService{
-		streamRepo: streamRepo,
-		hubService: hubService,
-		msgRepo:    msgRepo,
-		notifRepo:  notifRepo,
+		streamRepo:      streamRepo,
+		hubService:      hubService,
+		msgRepo:         msgRepo,
+		notifRepo:       notifRepo,
+		streamNotifRepo: streamNotifRepo,
 	}
 }
 
@@ -181,6 +184,28 @@ func (s *StreamService) GetHubID(ctx context.Context, streamID string) (string, 
 
 func (s *StreamService) GetName(ctx context.Context, streamID string) (string, error) {
 	return s.streamRepo.GetName(ctx, streamID)
+}
+
+func (s *StreamService) GetNotificationSettings(ctx context.Context, streamID, userID string) (repository.StreamNotificationSettings, error) {
+	if _, err := s.hubService.GetStreamHubID(ctx, streamID, userID); err != nil {
+		return repository.StreamNotificationSettings{}, err
+	}
+	return s.streamNotifRepo.Get(ctx, userID, streamID)
+}
+
+func (s *StreamService) UpdateNotificationSettings(ctx context.Context, streamID, userID string, in repository.StreamNotificationSettings) (repository.StreamNotificationSettings, error) {
+	if _, err := s.hubService.GetStreamHubID(ctx, streamID, userID); err != nil {
+		return repository.StreamNotificationSettings{}, err
+	}
+	switch in.NotificationLevel {
+	case "all", "mentions_only", "nothing":
+	default:
+		return repository.StreamNotificationSettings{}, apperror.BadRequest("invalid notification_level")
+	}
+	if err := s.streamNotifRepo.Upsert(ctx, userID, streamID, in); err != nil {
+		return repository.StreamNotificationSettings{}, apperror.Internal("failed to save settings", err)
+	}
+	return s.streamNotifRepo.Get(ctx, userID, streamID)
 }
 
 // MarkAllReadInHub marks every text stream in the hub read (latest message per stream) and clears hub notifications.

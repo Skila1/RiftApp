@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,12 +21,13 @@ const maxAttachmentsPerMessage = 10
 const maxMentionsPerMessage = 25
 
 type MessageService struct {
-	msgRepo      *repository.MessageRepo
-	streamRepo   *repository.StreamRepo
-	hubService   *HubService
-	notifSvc     *NotificationService
-	hub          *ws.Hub
-	hubNotifRepo *repository.HubNotificationSettingsRepo
+	msgRepo         *repository.MessageRepo
+	streamRepo      *repository.StreamRepo
+	hubService      *HubService
+	notifSvc        *NotificationService
+	hub             *ws.Hub
+	hubNotifRepo    *repository.HubNotificationSettingsRepo
+	streamNotifRepo *repository.StreamNotificationSettingsRepo
 }
 
 func NewMessageService(
@@ -35,20 +37,41 @@ func NewMessageService(
 	notifSvc *NotificationService,
 	hub *ws.Hub,
 	hubNotifRepo *repository.HubNotificationSettingsRepo,
+	streamNotifRepo *repository.StreamNotificationSettingsRepo,
 ) *MessageService {
 	return &MessageService{
-		msgRepo:      msgRepo,
-		streamRepo:   streamRepo,
-		hubService:   hubService,
-		notifSvc:     notifSvc,
-		hub:          hub,
-		hubNotifRepo: hubNotifRepo,
+		msgRepo:         msgRepo,
+		streamRepo:      streamRepo,
+		hubService:      hubService,
+		notifSvc:        notifSvc,
+		hub:             hub,
+		hubNotifRepo:    hubNotifRepo,
+		streamNotifRepo: streamNotifRepo,
 	}
 }
 
 type CreateMessageInput struct {
-	Content       string   `json:"content"`
-	AttachmentIDs []string `json:"attachment_ids"`
+	Content          string   `json:"content"`
+	AttachmentIDs    []string `json:"attachment_ids"`
+	ReplyToMessageID *string  `json:"reply_to_message_id"`
+}
+
+type SearchMessagesInput struct {
+	Query      string
+	StreamID   *string
+	AuthorID   *string
+	AuthorType string
+	Mention    string
+	Has        string
+	Before     *time.Time
+	After      *time.Time
+	StartAt    *time.Time
+	EndAt      *time.Time
+	PinnedOnly bool
+	LinkOnly   bool
+	Filename   string
+	Extension  string
+	Limit      int
 }
 
 func (s *MessageService) List(ctx context.Context, streamID string, before *string, limit int) ([]models.Message, error) {
@@ -84,13 +107,18 @@ func (s *MessageService) Create(ctx context.Context, userID, streamID string, in
 	if len(input.AttachmentIDs) > maxAttachmentsPerMessage {
 		return nil, apperror.BadRequest(fmt.Sprintf("too many attachments (max %d)", maxAttachmentsPerMessage))
 	}
+	replyToMessageID := normalizeOptionalMessageID(input.ReplyToMessageID)
+	if err := s.validateStreamReplyTarget(ctx, streamID, replyToMessageID); err != nil {
+		return nil, err
+	}
 
 	msg := &models.Message{
-		ID:        uuid.New().String(),
-		StreamID:  &streamID,
-		AuthorID:  userID,
-		Content:   input.Content,
-		CreatedAt: time.Now(),
+		ID:               uuid.New().String(),
+		StreamID:         &streamID,
+		AuthorID:         userID,
+		Content:          input.Content,
+		ReplyToMessageID: replyToMessageID,
+		CreatedAt:        time.Now(),
 	}
 
 	if err := s.msgRepo.Create(ctx, msg); err != nil {
@@ -99,12 +127,12 @@ func (s *MessageService) Create(ctx context.Context, userID, streamID string, in
 
 	if len(input.AttachmentIDs) > 0 {
 		_ = s.msgRepo.LinkAttachments(ctx, msg.ID, userID, input.AttachmentIDs)
-		atts, _ := s.msgRepo.GetLinkedAttachments(ctx, msg.ID)
-		msg.Attachments = atts
 	}
 
-	author, _ := s.msgRepo.GetAuthorInfo(ctx, userID)
-	msg.Author = author
+	msg, err = s.loadDetailedMessage(ctx, msg.ID)
+	if err != nil {
+		return nil, apperror.Internal("failed to load created message", err)
+	}
 
 	evt := ws.NewEvent(ws.OpMessageCreate, msg)
 	s.hub.BroadcastToStream(streamID, evt, "")
@@ -113,7 +141,7 @@ func (s *MessageService) Create(ctx context.Context, userID, streamID string, in
 		notifCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		go func() {
 			defer cancel()
-			s.createMentionNotifications(notifCtx, msg, hubID, streamID, userID, author)
+			s.createMentionNotifications(notifCtx, msg, hubID, streamID, userID, msg.Author)
 		}()
 	}
 
@@ -132,6 +160,10 @@ func (s *MessageService) Update(ctx context.Context, msgID, userID, content stri
 	if msg == nil {
 		return nil, apperror.NotFound("message not found or unauthorized")
 	}
+	msg, err = s.loadDetailedMessage(ctx, msg.ID)
+	if err != nil {
+		return nil, apperror.Internal("internal error", err)
+	}
 
 	if msg.StreamID != nil {
 		evt := ws.NewEvent(ws.OpMessageUpdate, msg)
@@ -141,6 +173,72 @@ func (s *MessageService) Update(ctx context.Context, msgID, userID, content stri
 	}
 
 	return msg, nil
+}
+
+func (s *MessageService) Pin(ctx context.Context, msgID, userID string) (*models.Message, error) {
+	return s.togglePin(ctx, msgID, userID, true)
+}
+
+func (s *MessageService) Unpin(ctx context.Context, msgID, userID string) (*models.Message, error) {
+	return s.togglePin(ctx, msgID, userID, false)
+}
+
+func (s *MessageService) ListPinned(ctx context.Context, streamID, userID string, limit int) ([]models.Message, error) {
+	if _, err := s.hubService.GetStreamHubID(ctx, streamID, userID); err != nil {
+		return nil, err
+	}
+
+	messages, err := s.msgRepo.ListPinnedByStream(ctx, streamID, limit)
+	if err != nil {
+		return nil, apperror.Internal("failed to list pinned messages", err)
+	}
+	if err := s.msgRepo.EnrichMessages(ctx, messages); err != nil {
+		return nil, apperror.Internal("failed to load pinned messages", err)
+	}
+	return messages, nil
+}
+
+func (s *MessageService) Search(ctx context.Context, hubID, userID string, input SearchMessagesInput) ([]models.Message, error) {
+	if err := s.hubService.AssertHubMember(ctx, hubID, userID); err != nil {
+		return nil, err
+	}
+
+	if input.StreamID != nil && *input.StreamID != "" {
+		streamHubID, err := s.streamRepo.GetHubID(ctx, *input.StreamID)
+		if err != nil {
+			return nil, apperror.NotFound("stream not found")
+		}
+		if streamHubID != hubID {
+			return nil, apperror.BadRequest("stream does not belong to this hub")
+		}
+	}
+
+	filters := repository.MessageSearchFilters{
+		Query:      strings.TrimSpace(input.Query),
+		StreamID:   input.StreamID,
+		AuthorID:   input.AuthorID,
+		AuthorType: strings.TrimSpace(input.AuthorType),
+		Mention:    strings.TrimSpace(input.Mention),
+		Has:        strings.TrimSpace(input.Has),
+		Before:     input.Before,
+		After:      input.After,
+		StartAt:    input.StartAt,
+		EndAt:      input.EndAt,
+		PinnedOnly: input.PinnedOnly,
+		LinkOnly:   input.LinkOnly,
+		Filename:   strings.TrimSpace(input.Filename),
+		Extension:  strings.TrimSpace(input.Extension),
+		Limit:      input.Limit,
+	}
+
+	messages, err := s.msgRepo.SearchInHub(ctx, hubID, filters)
+	if err != nil {
+		return nil, apperror.Internal("failed to search messages", err)
+	}
+	if err := s.msgRepo.EnrichMessages(ctx, messages); err != nil {
+		return nil, apperror.Internal("failed to load search results", err)
+	}
+	return messages, nil
 }
 
 func (s *MessageService) Delete(ctx context.Context, msgID, userID string) error {
@@ -310,7 +408,11 @@ func (s *MessageService) createMentionNotifications(ctx context.Context, msg *mo
 		if err != nil {
 			continue
 		}
-		if !hubMentionNotificationsEnabled(st) {
+		streamSt, err := s.streamMentionSettings(ctx, mentionedID, streamID)
+		if err != nil {
+			continue
+		}
+		if !streamMentionNotificationsEnabled(st, streamSt) {
 			continue
 		}
 		mID, hID, sID, aID := msg.ID, hubID, streamID, authorID
@@ -322,6 +424,94 @@ func (s *MessageService) createMentionNotifications(ctx context.Context, msg *mo
 	}
 }
 
+func (s *MessageService) togglePin(ctx context.Context, msgID, userID string, pinned bool) (*models.Message, error) {
+	msg, err := s.msgRepo.GetByID(ctx, msgID)
+	if err != nil {
+		return nil, apperror.NotFound("message not found")
+	}
+	if msg.StreamID == nil {
+		return nil, apperror.BadRequest("only stream messages can be pinned")
+	}
+
+	hubID, err := s.streamRepo.GetHubID(ctx, *msg.StreamID)
+	if err != nil {
+		return nil, apperror.NotFound("stream not found")
+	}
+	if err := s.hubService.AssertHubMember(ctx, hubID, userID); err != nil {
+		return nil, err
+	}
+	if msg.AuthorID != userID && !s.hubService.HasPermission(ctx, hubID, userID, models.PermManageMessages) {
+		return nil, apperror.Forbidden("you do not have permission to pin this message")
+	}
+
+	if pinned {
+		if err := s.msgRepo.Pin(ctx, msgID, userID, time.Now()); err != nil {
+			return nil, apperror.Internal("failed to pin message", err)
+		}
+	} else {
+		if err := s.msgRepo.Unpin(ctx, msgID); err != nil {
+			return nil, apperror.Internal("failed to unpin message", err)
+		}
+	}
+
+	updated, err := s.loadDetailedMessage(ctx, msgID)
+	if err != nil {
+		return nil, apperror.Internal("failed to load updated message", err)
+	}
+
+	evt := ws.NewEvent(ws.OpMessageUpdate, updated)
+	s.hub.BroadcastToStream(*updated.StreamID, evt, "")
+	return updated, nil
+}
+
+func (s *MessageService) loadDetailedMessage(ctx context.Context, msgID string) (*models.Message, error) {
+	msg, err := s.msgRepo.GetDetailedByID(ctx, msgID)
+	if err != nil {
+		return nil, err
+	}
+	messages := []models.Message{*msg}
+	if err := s.msgRepo.EnrichMessages(ctx, messages); err != nil {
+		return nil, err
+	}
+	return &messages[0], nil
+}
+
+func normalizeOptionalMessageID(raw *string) *string {
+	if raw == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*raw)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
+func (s *MessageService) validateStreamReplyTarget(ctx context.Context, streamID string, replyToMessageID *string) error {
+	if replyToMessageID == nil {
+		return nil
+	}
+	replyTo, err := s.msgRepo.GetByID(ctx, *replyToMessageID)
+	if err != nil {
+		return apperror.BadRequest("reply target not found")
+	}
+	if replyTo.StreamID == nil || *replyTo.StreamID != streamID {
+		return apperror.BadRequest("reply target must be in the same channel")
+	}
+	return nil
+}
+
+func (s *MessageService) streamMentionSettings(ctx context.Context, userID, streamID string) (*repository.StreamNotificationSettings, error) {
+	if s.streamNotifRepo == nil {
+		return nil, nil
+	}
+	st, err := s.streamNotifRepo.Get(ctx, userID, streamID)
+	if err != nil {
+		return nil, err
+	}
+	return &st, nil
+}
+
 func hubMentionNotificationsEnabled(st repository.HubNotificationSettings) bool {
 	if st.ServerMuted {
 		return false
@@ -331,6 +521,24 @@ func hubMentionNotificationsEnabled(st repository.HubNotificationSettings) bool 
 		return false
 	case "all", "mentions_only":
 		return true
+	default:
+		return true
+	}
+}
+
+func streamMentionNotificationsEnabled(hub repository.HubNotificationSettings, stream *repository.StreamNotificationSettings) bool {
+	if !hubMentionNotificationsEnabled(hub) {
+		return false
+	}
+	if stream == nil {
+		return true
+	}
+	if stream.ChannelMuted {
+		return false
+	}
+	switch stream.NotificationLevel {
+	case "nothing":
+		return false
 	default:
 		return true
 	}

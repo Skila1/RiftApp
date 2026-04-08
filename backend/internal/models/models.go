@@ -7,6 +7,7 @@ type User struct {
 	Username     string     `json:"username"`
 	Email        *string    `json:"email,omitempty"`
 	PasswordHash string     `json:"-"`
+	IsBot        bool       `json:"is_bot"`
 	DisplayName  string     `json:"display_name"`
 	AvatarURL    *string    `json:"avatar_url,omitempty"`
 	Bio          *string    `json:"bio,omitempty"`
@@ -68,16 +69,25 @@ type Stream struct {
 }
 
 type Message struct {
-	ID             string        `json:"id"`
-	StreamID       *string       `json:"stream_id,omitempty"`
-	ConversationID *string       `json:"conversation_id,omitempty"`
-	AuthorID       string        `json:"author_id"`
-	Content        string        `json:"content"`
-	EditedAt       *time.Time    `json:"edited_at,omitempty"`
-	CreatedAt      time.Time     `json:"created_at"`
-	Author         *User         `json:"author,omitempty"`
-	Attachments    []Attachment  `json:"attachments,omitempty"`
-	Reactions      []ReactionAgg `json:"reactions,omitempty"`
+	ID               string        `json:"id"`
+	StreamID         *string       `json:"stream_id,omitempty"`
+	ConversationID   *string       `json:"conversation_id,omitempty"`
+	AuthorID         string        `json:"author_id"`
+	AuthorType       string        `json:"author_type"`
+	Content          string        `json:"content"`
+	EditedAt         *time.Time    `json:"edited_at,omitempty"`
+	CreatedAt        time.Time     `json:"created_at"`
+	ReplyToMessageID *string       `json:"reply_to_message_id,omitempty"`
+	WebhookName      *string       `json:"webhook_name,omitempty"`
+	WebhookAvatarURL *string       `json:"webhook_avatar_url,omitempty"`
+	Pinned           bool          `json:"pinned"`
+	PinnedAt         *time.Time    `json:"pinned_at,omitempty"`
+	PinnedByID       *string       `json:"pinned_by_id,omitempty"`
+	Author           *User         `json:"author,omitempty"`
+	ReplyTo          *Message      `json:"reply_to,omitempty"`
+	PinnedBy         *User         `json:"pinned_by,omitempty"`
+	Attachments      []Attachment  `json:"attachments,omitempty"`
+	Reactions        []ReactionAgg `json:"reactions,omitempty"`
 }
 
 type Attachment struct {

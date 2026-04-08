@@ -28,7 +28,7 @@ interface MessageInputProps {
   onTyping?: () => void;
   onTypingStop?: () => void;
   isDMMode?: boolean;
-  onSendDM?: (content: string, attachmentIds?: string[]) => Promise<void>;
+  onSendDM?: (content: string, attachmentIds?: string[], replyToMessageId?: string) => Promise<void>;
   /** When this changes (channel / DM switch), reply draft is cleared. */
   replyScopeKey?: string;
 }
@@ -174,14 +174,7 @@ export default function MessageInput({
     const trimmed = content.trim();
     const readyAttachments = pendingFiles.filter((f) => f.attachment).map((f) => f.attachment!);
     if (!trimmed && readyAttachments.length === 0) return;
-
-    let body = trimmed;
-    if (replyTo) {
-      const author = replyTo.author?.display_name || 'User';
-      const snippet = (replyTo.content || '').split('\n')[0].slice(0, 200);
-      body = `> **@${author}** ${snippet}\n\n${trimmed}`;
-      setReplyTo(null);
-    }
+    const replyToMessageId = replyTo?.id;
 
     // Revoke any object URLs to prevent memory leaks
     for (const pf of pendingFiles) {
@@ -199,10 +192,11 @@ export default function MessageInput({
 
     const attachmentIds = readyAttachments.map((a) => a.id);
     if (isDMMode && onSendDM) {
-      await onSendDM(body, attachmentIds.length > 0 ? attachmentIds : undefined);
+      await onSendDM(trimmed, attachmentIds.length > 0 ? attachmentIds : undefined, replyToMessageId);
     } else {
-      await sendMessage(body, attachmentIds.length > 0 ? attachmentIds : undefined);
+      await sendMessage(trimmed, attachmentIds.length > 0 ? attachmentIds : undefined, replyToMessageId);
     }
+    setReplyTo(null);
   }, [content, pendingFiles, sendMessage, onTypingStop, isDMMode, onSendDM, replyTo, setReplyTo]);
 
   const insertMention = useCallback((username: string) => {
@@ -262,22 +256,26 @@ export default function MessageInput({
 
   const handleGifSelect = useCallback(async (url: string, _previewUrl: string, _width?: number, _height?: number) => {
     closeMediaPicker();
+    const replyToMessageId = replyTo?.id;
     if (isDMMode && onSendDM) {
-      await onSendDM(url);
+      await onSendDM(url, undefined, replyToMessageId);
     } else {
-      await sendMessage(url);
+      await sendMessage(url, undefined, replyToMessageId);
     }
-  }, [closeMediaPicker, isDMMode, onSendDM, sendMessage]);
+    setReplyTo(null);
+  }, [closeMediaPicker, isDMMode, onSendDM, replyTo?.id, sendMessage, setReplyTo]);
 
   const handleStickerSelect = useCallback(async (sticker: HubSticker) => {
     closeMediaPicker();
     const stickerUrl = publicAssetUrl(sticker.file_url);
+    const replyToMessageId = replyTo?.id;
     if (isDMMode && onSendDM) {
-      await onSendDM(stickerUrl);
+      await onSendDM(stickerUrl, undefined, replyToMessageId);
     } else {
-      await sendMessage(stickerUrl);
+      await sendMessage(stickerUrl, undefined, replyToMessageId);
     }
-  }, [closeMediaPicker, isDMMode, onSendDM, sendMessage]);
+    setReplyTo(null);
+  }, [closeMediaPicker, isDMMode, onSendDM, replyTo?.id, sendMessage, setReplyTo]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Mention autocomplete navigation

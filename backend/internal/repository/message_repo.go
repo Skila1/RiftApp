@@ -2,7 +2,9 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,23 +16,114 @@ type MessageRepo struct {
 	db *pgxpool.Pool
 }
 
+const detailedMessageSelect = `m.id, m.stream_id, m.conversation_id, m.author_id, m.content, m.edited_at, m.created_at,
+		m.reply_to_message_id, m.webhook_name, m.webhook_avatar_url,
+		m.pinned_at, m.pinned_by_id,
+		author.id, author.username, author.display_name, author.avatar_url, author.is_bot,
+		pinner.id, pinner.username, pinner.display_name, pinner.avatar_url`
+
+const detailedMessageFrom = `FROM messages m
+	JOIN users author ON m.author_id = author.id
+	LEFT JOIN users pinner ON m.pinned_by_id = pinner.id`
+
+type messageScanner interface {
+	Scan(dest ...interface{}) error
+}
+
+type MessageSearchFilters struct {
+	Query      string
+	StreamID   *string
+	AuthorID   *string
+	AuthorType string
+	Mention    string
+	Has        string
+	Before     *time.Time
+	After      *time.Time
+	StartAt    *time.Time
+	EndAt      *time.Time
+	PinnedOnly bool
+	LinkOnly   bool
+	Filename   string
+	Extension  string
+	Limit      int
+}
+
 func NewMessageRepo(db *pgxpool.Pool) *MessageRepo {
 	return &MessageRepo{db: db}
 }
 
+func scanDetailedMessage(scanner messageScanner) (models.Message, error) {
+	var msg models.Message
+	var author models.User
+	var authorIsBot bool
+	var pinnerID *string
+	var pinnerUsername *string
+	var pinnerDisplayName *string
+	var pinnerAvatarURL *string
+
+	err := scanner.Scan(
+		&msg.ID,
+		&msg.StreamID,
+		&msg.ConversationID,
+		&msg.AuthorID,
+		&msg.Content,
+		&msg.EditedAt,
+		&msg.CreatedAt,
+		&msg.ReplyToMessageID,
+		&msg.WebhookName,
+		&msg.WebhookAvatarURL,
+		&msg.PinnedAt,
+		&msg.PinnedByID,
+		&author.ID,
+		&author.Username,
+		&author.DisplayName,
+		&author.AvatarURL,
+		&authorIsBot,
+		&pinnerID,
+		&pinnerUsername,
+		&pinnerDisplayName,
+		&pinnerAvatarURL,
+	)
+	if err != nil {
+		return models.Message{}, err
+	}
+
+	author.IsBot = authorIsBot
+	msg.Author = &author
+	msg.Pinned = msg.PinnedAt != nil
+	switch {
+	case msg.WebhookName != nil && *msg.WebhookName != "":
+		msg.AuthorType = "webhook"
+	case author.IsBot:
+		msg.AuthorType = "bot"
+	default:
+		msg.AuthorType = "user"
+	}
+
+	if pinnerID != nil {
+		pinner := &models.User{ID: *pinnerID, AvatarURL: pinnerAvatarURL}
+		if pinnerUsername != nil {
+			pinner.Username = *pinnerUsername
+		}
+		if pinnerDisplayName != nil {
+			pinner.DisplayName = *pinnerDisplayName
+		}
+		msg.PinnedBy = pinner
+	}
+
+	return msg, nil
+}
+
 func (r *MessageRepo) Create(ctx context.Context, msg *models.Message) error {
 	_, err := r.db.Exec(ctx,
-		`INSERT INTO messages (id, stream_id, conversation_id, author_id, content, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		msg.ID, msg.StreamID, msg.ConversationID, msg.AuthorID, msg.Content, msg.CreatedAt)
+		`INSERT INTO messages (id, stream_id, conversation_id, author_id, content, reply_to_message_id, webhook_name, webhook_avatar_url, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		msg.ID, msg.StreamID, msg.ConversationID, msg.AuthorID, msg.Content, msg.ReplyToMessageID, msg.WebhookName, msg.WebhookAvatarURL, msg.CreatedAt)
 	return err
 }
 
 func (r *MessageRepo) ListByStream(ctx context.Context, streamID string, before *string, limit int) ([]models.Message, error) {
-	query := `SELECT m.id, m.stream_id, m.author_id, m.content, m.edited_at, m.created_at,
-	                  u.id, u.username, u.display_name, u.avatar_url
-	           FROM messages m JOIN users u ON m.author_id = u.id
-	           WHERE m.stream_id = $1`
+	query := `SELECT ` + detailedMessageSelect + ` ` + detailedMessageFrom + ` WHERE m.stream_id = $1`
 	args := []interface{}{streamID}
 
 	if before != nil {
@@ -48,15 +141,10 @@ func (r *MessageRepo) ListByStream(ctx context.Context, streamID string, before 
 
 	var messages []models.Message
 	for rows.Next() {
-		var m models.Message
-		var author models.User
-		var sid *string
-		if err := rows.Scan(&m.ID, &sid, &m.AuthorID, &m.Content, &m.EditedAt, &m.CreatedAt,
-			&author.ID, &author.Username, &author.DisplayName, &author.AvatarURL); err != nil {
+		m, err := scanDetailedMessage(rows)
+		if err != nil {
 			return nil, err
 		}
-		m.StreamID = sid
-		m.Author = &author
 		messages = append(messages, m)
 	}
 
@@ -68,10 +156,7 @@ func (r *MessageRepo) ListByStream(ctx context.Context, streamID string, before 
 }
 
 func (r *MessageRepo) ListByConversation(ctx context.Context, convID string, before *string, limit int) ([]models.Message, error) {
-	query := `SELECT m.id, m.conversation_id, m.author_id, m.content, m.edited_at, m.created_at,
-	                  u.id, u.username, u.display_name, u.avatar_url
-	           FROM messages m JOIN users u ON m.author_id = u.id
-	           WHERE m.conversation_id = $1`
+	query := `SELECT ` + detailedMessageSelect + ` ` + detailedMessageFrom + ` WHERE m.conversation_id = $1`
 	args := []interface{}{convID}
 
 	if before != nil {
@@ -89,13 +174,10 @@ func (r *MessageRepo) ListByConversation(ctx context.Context, convID string, bef
 
 	var messages []models.Message
 	for rows.Next() {
-		var m models.Message
-		var author models.User
-		if err := rows.Scan(&m.ID, &m.ConversationID, &m.AuthorID, &m.Content, &m.EditedAt, &m.CreatedAt,
-			&author.ID, &author.Username, &author.DisplayName, &author.AvatarURL); err != nil {
+		m, err := scanDetailedMessage(rows)
+		if err != nil {
 			return nil, err
 		}
-		m.Author = &author
 		messages = append(messages, m)
 	}
 
@@ -118,19 +200,7 @@ func (r *MessageRepo) Update(ctx context.Context, msgID, authorID, content strin
 		return nil, nil
 	}
 
-	var msg models.Message
-	var author models.User
-	err = r.db.QueryRow(ctx,
-		`SELECT m.id, m.stream_id, m.conversation_id, m.author_id, m.content, m.edited_at, m.created_at,
-		        u.id, u.username, u.display_name, u.avatar_url
-		 FROM messages m JOIN users u ON m.author_id = u.id WHERE m.id = $1`, msgID,
-	).Scan(&msg.ID, &msg.StreamID, &msg.ConversationID, &msg.AuthorID, &msg.Content, &msg.EditedAt, &msg.CreatedAt,
-		&author.ID, &author.Username, &author.DisplayName, &author.AvatarURL)
-	if err != nil {
-		return nil, err
-	}
-	msg.Author = &author
-	return &msg, nil
+	return r.GetDetailedByID(ctx, msgID)
 }
 
 func (r *MessageRepo) Delete(ctx context.Context, msgID string) error {
@@ -141,9 +211,34 @@ func (r *MessageRepo) Delete(ctx context.Context, msgID string) error {
 func (r *MessageRepo) GetByID(ctx context.Context, msgID string) (*models.Message, error) {
 	var msg models.Message
 	err := r.db.QueryRow(ctx,
-		`SELECT id, stream_id, conversation_id, author_id, content, edited_at, created_at
+		`SELECT id, stream_id, conversation_id, author_id, content, edited_at, created_at,
+		        reply_to_message_id, webhook_name, webhook_avatar_url, pinned_at, pinned_by_id
 		 FROM messages WHERE id = $1`, msgID,
-	).Scan(&msg.ID, &msg.StreamID, &msg.ConversationID, &msg.AuthorID, &msg.Content, &msg.EditedAt, &msg.CreatedAt)
+	).Scan(
+		&msg.ID,
+		&msg.StreamID,
+		&msg.ConversationID,
+		&msg.AuthorID,
+		&msg.Content,
+		&msg.EditedAt,
+		&msg.CreatedAt,
+		&msg.ReplyToMessageID,
+		&msg.WebhookName,
+		&msg.WebhookAvatarURL,
+		&msg.PinnedAt,
+		&msg.PinnedByID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	msg.Pinned = msg.PinnedAt != nil
+	return &msg, nil
+}
+
+func (r *MessageRepo) GetDetailedByID(ctx context.Context, msgID string) (*models.Message, error) {
+	msg, err := scanDetailedMessage(r.db.QueryRow(ctx,
+		`SELECT `+detailedMessageSelect+` `+detailedMessageFrom+` WHERE m.id = $1`, msgID,
+	))
 	if err != nil {
 		return nil, err
 	}
@@ -275,12 +370,207 @@ func (r *MessageRepo) GetLinkedAttachments(ctx context.Context, msgID string) ([
 func (r *MessageRepo) GetAuthorInfo(ctx context.Context, userID string) (*models.User, error) {
 	var user models.User
 	err := r.db.QueryRow(ctx,
-		`SELECT id, username, display_name, avatar_url, bio FROM users WHERE id = $1`, userID,
-	).Scan(&user.ID, &user.Username, &user.DisplayName, &user.AvatarURL, &user.Bio)
+		`SELECT id, username, display_name, avatar_url, bio, is_bot FROM users WHERE id = $1`, userID,
+	).Scan(&user.ID, &user.Username, &user.DisplayName, &user.AvatarURL, &user.Bio, &user.IsBot)
 	if err != nil {
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (r *MessageRepo) FetchReplyTargets(ctx context.Context, replyIDs []string) (map[string]models.Message, error) {
+	result := make(map[string]models.Message)
+	if len(replyIDs) == 0 {
+		return result, nil
+	}
+
+	rows, err := r.db.Query(ctx,
+		`SELECT `+detailedMessageSelect+` `+detailedMessageFrom+` WHERE m.id = ANY($1)`,
+		replyIDs,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	msgIDs := make([]string, 0, len(replyIDs))
+	for rows.Next() {
+		msg, err := scanDetailedMessage(rows)
+		if err != nil {
+			return nil, err
+		}
+		msgIDs = append(msgIDs, msg.ID)
+		result[msg.ID] = msg
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	attachments, err := r.FetchAttachments(ctx, msgIDs)
+	if err != nil {
+		return nil, err
+	}
+	for id, atts := range attachments {
+		msg := result[id]
+		msg.Attachments = atts
+		result[id] = msg
+	}
+
+	return result, nil
+}
+
+func (r *MessageRepo) Pin(ctx context.Context, msgID, pinnedByID string, pinnedAt time.Time) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE messages SET pinned_at = $1, pinned_by_id = $2 WHERE id = $3`,
+		pinnedAt, pinnedByID, msgID,
+	)
+	return err
+}
+
+func (r *MessageRepo) Unpin(ctx context.Context, msgID string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE messages SET pinned_at = NULL, pinned_by_id = NULL WHERE id = $1`,
+		msgID,
+	)
+	return err
+}
+
+func (r *MessageRepo) ListPinnedByStream(ctx context.Context, streamID string, limit int) ([]models.Message, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+
+	rows, err := r.db.Query(ctx,
+		`SELECT `+detailedMessageSelect+` `+detailedMessageFrom+`
+		 WHERE m.stream_id = $1 AND m.pinned_at IS NOT NULL
+		 ORDER BY m.pinned_at DESC, m.created_at DESC
+		 LIMIT `+strconv.Itoa(limit),
+		streamID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var messages []models.Message
+	for rows.Next() {
+		msg, err := scanDetailedMessage(rows)
+		if err != nil {
+			return nil, err
+		}
+		messages = append(messages, msg)
+	}
+	if messages == nil {
+		messages = []models.Message{}
+	}
+	return messages, rows.Err()
+}
+
+func (r *MessageRepo) SearchInHub(ctx context.Context, hubID string, filters MessageSearchFilters) ([]models.Message, error) {
+	limit := filters.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+
+	clauses := []string{"s.hub_id = $1", "s.type = 0"}
+	args := []interface{}{hubID}
+	addArg := func(value interface{}) string {
+		args = append(args, value)
+		return fmt.Sprintf("$%d", len(args))
+	}
+
+	if filters.StreamID != nil && *filters.StreamID != "" {
+		clauses = append(clauses, "m.stream_id = "+addArg(*filters.StreamID))
+	}
+	if filters.Query != "" {
+		clauses = append(clauses, "m.content ILIKE "+addArg("%"+filters.Query+"%"))
+	}
+	if filters.AuthorID != nil && *filters.AuthorID != "" {
+		clauses = append(clauses, "m.author_id = "+addArg(*filters.AuthorID))
+	}
+	switch strings.ToLower(strings.TrimSpace(filters.AuthorType)) {
+	case "user":
+		clauses = append(clauses, "m.webhook_name IS NULL", "author.is_bot = false")
+	case "bot":
+		clauses = append(clauses, "m.webhook_name IS NULL", "author.is_bot = true")
+	case "webhook":
+		clauses = append(clauses, "m.webhook_name IS NOT NULL")
+	}
+	if mention := strings.TrimSpace(filters.Mention); mention != "" {
+		clauses = append(clauses, "m.content ILIKE "+addArg("%@"+mention+"%"))
+	}
+	if filters.PinnedOnly {
+		clauses = append(clauses, "m.pinned_at IS NOT NULL")
+	}
+	if filters.LinkOnly {
+		clauses = append(clauses, `m.content ~* '(https?://|www\\.)'`)
+	}
+	if filters.Filename != "" {
+		clauses = append(clauses, `EXISTS (
+			SELECT 1 FROM attachments a
+			WHERE a.message_id = m.id AND a.filename ILIKE `+addArg("%"+filters.Filename+"%")+`
+		)`)
+	}
+	if ext := strings.TrimSpace(strings.TrimPrefix(strings.ToLower(filters.Extension), ".")); ext != "" {
+		clauses = append(clauses, `EXISTS (
+			SELECT 1 FROM attachments a
+			WHERE a.message_id = m.id AND lower(a.filename) LIKE `+addArg("%."+ext)+`
+		)`)
+	}
+
+	switch strings.ToLower(strings.TrimSpace(filters.Has)) {
+	case "file":
+		clauses = append(clauses, `EXISTS (SELECT 1 FROM attachments a WHERE a.message_id = m.id)`)
+	case "image":
+		clauses = append(clauses, `EXISTS (SELECT 1 FROM attachments a WHERE a.message_id = m.id AND a.content_type LIKE 'image/%')`)
+	case "video":
+		clauses = append(clauses, `EXISTS (SELECT 1 FROM attachments a WHERE a.message_id = m.id AND a.content_type LIKE 'video/%')`)
+	case "audio":
+		clauses = append(clauses, `EXISTS (SELECT 1 FROM attachments a WHERE a.message_id = m.id AND a.content_type LIKE 'audio/%')`)
+	case "link", "embed":
+		clauses = append(clauses, `m.content ~* '(https?://|www\\.)'`)
+	}
+
+	if filters.After != nil {
+		clauses = append(clauses, "m.created_at > "+addArg(*filters.After))
+	}
+	if filters.Before != nil {
+		clauses = append(clauses, "m.created_at < "+addArg(*filters.Before))
+	}
+	if filters.StartAt != nil {
+		clauses = append(clauses, "m.created_at >= "+addArg(*filters.StartAt))
+	}
+	if filters.EndAt != nil {
+		clauses = append(clauses, "m.created_at < "+addArg(*filters.EndAt))
+	}
+
+	query := `SELECT ` + detailedMessageSelect + `
+		FROM messages m
+		JOIN streams s ON s.id = m.stream_id
+		JOIN users author ON m.author_id = author.id
+		LEFT JOIN users pinner ON m.pinned_by_id = pinner.id
+		WHERE ` + strings.Join(clauses, ` AND `) + `
+		ORDER BY m.created_at DESC
+		LIMIT ` + strconv.Itoa(limit)
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var messages []models.Message
+	for rows.Next() {
+		msg, err := scanDetailedMessage(rows)
+		if err != nil {
+			return nil, err
+		}
+		messages = append(messages, msg)
+	}
+	if messages == nil {
+		messages = []models.Message{}
+	}
+	return messages, rows.Err()
 }
 
 func (r *MessageRepo) EnrichMessages(ctx context.Context, messages []models.Message) error {
@@ -313,6 +603,35 @@ func (r *MessageRepo) EnrichMessages(ctx context.Context, messages []models.Mess
 		if m, ok := msgMap[id]; ok {
 			m.Reactions = reacts
 		}
+	}
+
+	replyIDs := make([]string, 0)
+	seenReplyIDs := make(map[string]struct{})
+	for i := range messages {
+		if messages[i].ReplyToMessageID == nil || *messages[i].ReplyToMessageID == "" {
+			continue
+		}
+		if _, ok := seenReplyIDs[*messages[i].ReplyToMessageID]; ok {
+			continue
+		}
+		seenReplyIDs[*messages[i].ReplyToMessageID] = struct{}{}
+		replyIDs = append(replyIDs, *messages[i].ReplyToMessageID)
+	}
+
+	replyTargets, err := r.FetchReplyTargets(ctx, replyIDs)
+	if err != nil {
+		return err
+	}
+	for i := range messages {
+		if messages[i].ReplyToMessageID == nil {
+			continue
+		}
+		reply, ok := replyTargets[*messages[i].ReplyToMessageID]
+		if !ok {
+			continue
+		}
+		replyCopy := reply
+		messages[i].ReplyTo = &replyCopy
 	}
 
 	return nil

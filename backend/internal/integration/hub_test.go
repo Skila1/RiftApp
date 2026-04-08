@@ -187,7 +187,8 @@ func TestStream_CreateAndList(t *testing.T) {
 	streamRepo := repository.NewStreamRepo(testPool)
 	msgRepo := repository.NewMessageRepo(testPool)
 	notifRepo := repository.NewNotificationRepo(testPool)
-	streamSvc := service.NewStreamService(streamRepo, hubSvc, msgRepo, notifRepo)
+	streamNotifRepo := repository.NewStreamNotificationSettingsRepo(testPool)
+	streamSvc := service.NewStreamService(streamRepo, hubSvc, msgRepo, notifRepo, streamNotifRepo)
 
 	stream, err := streamSvc.Create(ctx, hub.ID, ownerID, "general-2", 0, false, nil)
 	if err != nil {
@@ -216,7 +217,8 @@ func TestMessage_CreateAndList(t *testing.T) {
 	msgRepo := repository.NewMessageRepo(testPool)
 	notifRepo := repository.NewNotificationRepo(testPool)
 	hubNotifRepo := repository.NewHubNotificationSettingsRepo(testPool)
-	streams, _ := service.NewStreamService(streamRepo, hubSvc, msgRepo, notifRepo).List(ctx, hub.ID)
+	streamNotifRepo := repository.NewStreamNotificationSettingsRepo(testPool)
+	streams, _ := service.NewStreamService(streamRepo, hubSvc, msgRepo, notifRepo, streamNotifRepo).List(ctx, hub.ID)
 	if len(streams) == 0 {
 		t.Fatal("expected at least one stream")
 	}
@@ -226,7 +228,7 @@ func TestMessage_CreateAndList(t *testing.T) {
 	go wsHub.Run()
 
 	notifSvc := service.NewNotificationService(notifRepo, wsHub)
-	msgSvc := service.NewMessageService(msgRepo, streamRepo, hubSvc, notifSvc, wsHub, hubNotifRepo)
+	msgSvc := service.NewMessageService(msgRepo, streamRepo, hubSvc, notifSvc, wsHub, hubNotifRepo, streamNotifRepo)
 
 	msg, err := msgSvc.Create(ctx, ownerID, streamID, service.CreateMessageInput{
 		Content: "Hello world!",

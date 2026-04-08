@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { MenuOverlay, menuDivider } from './MenuOverlay';
 import { api } from '../../api/client';
-import type { HubNotificationSettings, Stream } from '../../types';
+import type { Stream, StreamNotificationSettings } from '../../types';
 import { useStreamStore } from '../../stores/streamStore';
 import { useVoiceChannelUiStore } from '../../stores/voiceChannelUiStore';
 import { useAppSettingsStore } from '../../stores/appSettingsStore';
 import ConfirmModal from '../modals/ConfirmModal';
 
-const DEFAULT_HUB_NOTIFICATION: HubNotificationSettings = {
+const DEFAULT_STREAM_NOTIFICATION: StreamNotificationSettings = {
   notification_level: 'mentions_only',
   suppress_everyone: false,
   suppress_role_mentions: false,
@@ -15,7 +15,7 @@ const DEFAULT_HUB_NOTIFICATION: HubNotificationSettings = {
   mute_events: false,
   mobile_push: true,
   hide_muted_channels: false,
-  server_muted: false,
+  channel_muted: false,
 };
 
 function notifLevelSubtitle(level: string): string {
@@ -71,7 +71,7 @@ export default function ChannelContextMenu({
   const toggleHideNames = useVoiceChannelUiStore((s) => s.toggleHideNames);
   const developerMode = useAppSettingsStore((s) => s.developerMode);
 
-  const [hubNotifSettings, setHubNotifSettings] = useState<HubNotificationSettings | null>(null);
+  const [streamNotifSettings, setStreamNotifSettings] = useState<StreamNotificationSettings | null>(null);
   const [muteSubOpen, setMuteSubOpen] = useState(false);
   const [notifSubOpen, setNotifSubOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -82,16 +82,16 @@ export default function ChannelContextMenu({
     let cancelled = false;
     (async () => {
       try {
-        const s = await api.getHubNotificationSettings(hubId);
-        if (!cancelled) setHubNotifSettings(s);
+        const s = await api.getStreamNotificationSettings(stream.id);
+        if (!cancelled) setStreamNotifSettings(s);
       } catch {
-        if (!cancelled) setHubNotifSettings(DEFAULT_HUB_NOTIFICATION);
+        if (!cancelled) setStreamNotifSettings(DEFAULT_STREAM_NOTIFICATION);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [hubId]);
+  }, [stream.id]);
 
   const copyChannelId = () => {
     void navigator.clipboard.writeText(stream.id);
@@ -104,23 +104,23 @@ export default function ChannelContextMenu({
     onClose();
   };
 
-  const patchNotif = async (next: HubNotificationSettings) => {
-    setHubNotifSettings(next);
+  const patchNotif = async (next: StreamNotificationSettings) => {
+    setStreamNotifSettings(next);
     try {
-      const saved = await api.patchHubNotificationSettings(hubId, next);
-      setHubNotifSettings(saved);
+      const saved = await api.patchStreamNotificationSettings(stream.id, next);
+      setStreamNotifSettings(saved);
     } catch {
       try {
-        setHubNotifSettings(await api.getHubNotificationSettings(hubId));
+        setStreamNotifSettings(await api.getStreamNotificationSettings(stream.id));
       } catch {
         /* ignore */
       }
     }
   };
 
-  const setServerMuted = async (muted: boolean) => {
-    if (!hubNotifSettings) return;
-    await patchNotif({ ...hubNotifSettings, server_muted: muted });
+  const setChannelMuted = async (muted: boolean) => {
+    if (!streamNotifSettings) return;
+    await patchNotif({ ...streamNotifSettings, channel_muted: muted });
     onClose();
   };
 
@@ -236,14 +236,14 @@ export default function ChannelContextMenu({
             <span>Mute Channel</span>
             <span className="text-riftapp-text-dim">›</span>
           </div>
-          {muteSubOpen && hubNotifSettings && (
+          {muteSubOpen && streamNotifSettings && (
             <div className="absolute left-full top-0 pl-1 z-10" onMouseEnter={() => setMuteSubOpen(true)} onMouseLeave={() => setMuteSubOpen(false)}>
               <div className="bg-[#111214] rounded-md border border-black/40 shadow-modal py-1.5 min-w-[200px]">
                 {(['For 15 Minutes', 'For 1 Hour', 'For 8 Hours', 'Until I Turn It Back On'] as const).map((label) => (
                   <button
                     key={label}
                     type="button"
-                    onClick={() => void setServerMuted(true)}
+                    onClick={() => void setChannelMuted(true)}
                     className="block text-left px-2.5 py-1.5 hover:bg-[#232428] rounded-sm mx-1 w-[calc(100%-8px)]"
                   >
                     {label}
@@ -252,7 +252,7 @@ export default function ChannelContextMenu({
                 <div className="mx-2 my-1 h-px bg-white/[0.06]" />
                 <button
                   type="button"
-                  onClick={() => void setServerMuted(false)}
+                  onClick={() => void setChannelMuted(false)}
                   className="block text-left px-2.5 py-1.5 hover:bg-[#232428] rounded-sm mx-1 w-[calc(100%-8px)]"
                 >
                   Unmute
@@ -273,11 +273,11 @@ export default function ChannelContextMenu({
                 <span className="text-riftapp-text-dim">›</span>
               </div>
               <p className="text-[11px] text-[#949ba4] leading-tight mt-0.5">
-                {hubNotifSettings ? notifLevelSubtitle(hubNotifSettings.notification_level) : '…'}
+                {streamNotifSettings ? notifLevelSubtitle(streamNotifSettings.notification_level) : '…'}
               </p>
             </div>
           </div>
-          {notifSubOpen && hubNotifSettings && (
+          {notifSubOpen && streamNotifSettings && (
             <div className="absolute left-full top-0 pl-1 z-10" onMouseEnter={() => setNotifSubOpen(true)} onMouseLeave={() => setNotifSubOpen(false)}>
               <div className="bg-[#111214] rounded-md border border-black/40 shadow-modal py-1.5 min-w-[260px] max-h-[min(70vh,420px)] overflow-y-auto">
                 {(['all', 'mentions_only', 'nothing'] as const).map((level) => (
@@ -286,7 +286,7 @@ export default function ChannelContextMenu({
                     type="button"
                     onClick={() =>
                       void patchNotif({
-                        ...hubNotifSettings,
+                        ...streamNotifSettings,
                         notification_level: level,
                       })
                     }
@@ -294,10 +294,10 @@ export default function ChannelContextMenu({
                   >
                     <span
                       className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
-                        hubNotifSettings.notification_level === level ? 'border-[#5865f2]' : 'border-[#4e5058]'
+                        streamNotifSettings.notification_level === level ? 'border-[#5865f2]' : 'border-[#4e5058]'
                       }`}
                     >
-                      {hubNotifSettings.notification_level === level && <span className="w-2 h-2 rounded-full bg-white" />}
+                      {streamNotifSettings.notification_level === level && <span className="w-2 h-2 rounded-full bg-white" />}
                     </span>
                     {level === 'all' && 'All Messages'}
                     {level === 'mentions_only' && 'Only @mentions'}
@@ -316,16 +316,16 @@ export default function ChannelContextMenu({
                   <button
                     key={key}
                     type="button"
-                    onClick={() => void patchNotif({ ...hubNotifSettings, [key]: !hubNotifSettings[key] })}
+                    onClick={() => void patchNotif({ ...streamNotifSettings, [key]: !streamNotifSettings[key] })}
                     className="flex items-center justify-between gap-2 px-2.5 py-1.5 text-left hover:bg-[#232428] rounded-sm mx-1 w-[calc(100%-8px)]"
                   >
                     <span>{label}</span>
                     <span
                       className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center ${
-                        hubNotifSettings[key] ? 'bg-[#5865f2] border-[#5865f2]' : 'border-[#4e5058]'
+                        streamNotifSettings[key] ? 'bg-[#5865f2] border-[#5865f2]' : 'border-[#4e5058]'
                       }`}
                     >
-                      {hubNotifSettings[key] && (
+                      {streamNotifSettings[key] && (
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
@@ -336,16 +336,16 @@ export default function ChannelContextMenu({
                 <div className="mx-2 my-1 h-px bg-white/[0.06]" />
                 <button
                   type="button"
-                  onClick={() => void patchNotif({ ...hubNotifSettings, mobile_push: !hubNotifSettings.mobile_push })}
+                  onClick={() => void patchNotif({ ...streamNotifSettings, mobile_push: !streamNotifSettings.mobile_push })}
                   className="flex items-center justify-between gap-2 px-2.5 py-1.5 text-left hover:bg-[#232428] rounded-sm mx-1 w-[calc(100%-8px)]"
                 >
                   <span>Mobile Push Notifications</span>
                   <span
                     className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center ${
-                      hubNotifSettings.mobile_push ? 'bg-[#5865f2] border-[#5865f2]' : 'border-[#4e5058]'
+                      streamNotifSettings.mobile_push ? 'bg-[#5865f2] border-[#5865f2]' : 'border-[#4e5058]'
                     }`}
                   >
-                    {hubNotifSettings.mobile_push && (
+                    {streamNotifSettings.mobile_push && (
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="20 6 9 17 4 12" />
                       </svg>

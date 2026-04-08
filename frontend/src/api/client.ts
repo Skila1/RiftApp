@@ -1,4 +1,4 @@
-import type { AuthResponse, Hub, HubInvite, HubNotificationSettings, Stream, Category, Message, User, Attachment, Notification, Conversation, Friendship, Block, RelationshipType, HubEmoji, HubSticker, HubSound, HubRole, HubPermissions } from '../types';
+import type { AuthResponse, Hub, HubInvite, HubNotificationSettings, Stream, Category, Message, User, Attachment, Notification, Conversation, Friendship, Block, RelationshipType, HubEmoji, HubSticker, HubSound, HubRole, HubPermissions, MessageSearchFilters, StreamNotificationSettings } from '../types';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -151,6 +151,15 @@ class ApiClient {
       body: JSON.stringify(body),
     });
   }
+  getStreamNotificationSettings(streamId: string) {
+    return this.request<StreamNotificationSettings>(`/streams/${streamId}/notification-settings`);
+  }
+  patchStreamNotificationSettings(streamId: string, body: StreamNotificationSettings) {
+    return this.request<StreamNotificationSettings>(`/streams/${streamId}/notification-settings`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  }
   markHubRead(hubId: string) {
     return this.request<void>(`/hubs/${hubId}/mark-read`, { method: 'POST' });
   }
@@ -182,7 +191,32 @@ class ApiClient {
     if (before) params.set('before', before);
     return this.request<Message[]>(`/streams/${streamId}/messages?${params}`);
   }
-  sendMessage(streamId: string, content: string, attachmentIds?: string[]) { return this.request<Message>(`/streams/${streamId}/messages`, { method: 'POST', body: JSON.stringify({ content, attachment_ids: attachmentIds }) }); }
+  getPinnedMessages(streamId: string, limit = 50) {
+    const params = new URLSearchParams({ limit: String(limit) });
+    return this.request<Message[]>(`/streams/${streamId}/pins?${params}`);
+  }
+  pinMessage(messageId: string) { return this.request<Message>(`/messages/${messageId}/pin`, { method: 'PUT' }); }
+  unpinMessage(messageId: string) { return this.request<Message>(`/messages/${messageId}/pin`, { method: 'DELETE' }); }
+  searchHubMessages(hubId: string, filters: MessageSearchFilters = {}) {
+    const params = new URLSearchParams();
+    if (filters.query) params.set('q', filters.query);
+    if (filters.stream_id) params.set('stream_id', filters.stream_id);
+    if (filters.author_id) params.set('author_id', filters.author_id);
+    if (filters.author_type) params.set('author_type', filters.author_type);
+    if (filters.mentions) params.set('mentions', filters.mentions);
+    if (filters.has) params.set('has', filters.has);
+    if (filters.before) params.set('before', filters.before);
+    if (filters.after) params.set('after', filters.after);
+    if (filters.on) params.set('on', filters.on);
+    if (filters.during) params.set('during', filters.during);
+    if (filters.pinned != null) params.set('pinned', String(filters.pinned));
+    if (filters.link != null) params.set('link', String(filters.link));
+    if (filters.filename) params.set('filename', filters.filename);
+    if (filters.ext) params.set('ext', filters.ext);
+    if (filters.limit != null) params.set('limit', String(filters.limit));
+    return this.request<Message[]>(`/hubs/${hubId}/messages/search?${params}`);
+  }
+  sendMessage(streamId: string, content: string, attachmentIds?: string[], replyToMessageId?: string) { return this.request<Message>(`/streams/${streamId}/messages`, { method: 'POST', body: JSON.stringify({ content, attachment_ids: attachmentIds, reply_to_message_id: replyToMessageId }) }); }
   editMessage(messageId: string, content: string) { return this.request<Message>(`/messages/${messageId}`, { method: 'PATCH', body: JSON.stringify({ content }) }); }
   deleteMessage(messageId: string) { return this.request(`/messages/${messageId}`, { method: 'DELETE' }); }
 
@@ -203,7 +237,7 @@ class ApiClient {
     if (before) params.set('before', before);
     return this.request<Message[]>(`/dms/${conversationId}/messages?${params}`);
   }
-  sendDMMessage(conversationId: string, content: string, attachmentIds?: string[]) { return this.request<Message>(`/dms/${conversationId}/messages`, { method: 'POST', body: JSON.stringify({ content, attachment_ids: attachmentIds }) }); }
+  sendDMMessage(conversationId: string, content: string, attachmentIds?: string[], replyToMessageId?: string) { return this.request<Message>(`/dms/${conversationId}/messages`, { method: 'POST', body: JSON.stringify({ content, attachment_ids: attachmentIds, reply_to_message_id: replyToMessageId }) }); }
   ackDM(conversationId: string, messageId: string) { return this.request(`/dms/${conversationId}/ack`, { method: 'PUT', body: JSON.stringify({ message_id: messageId }) }); }
   getDMReadStates() { return this.request<import('../types').DMReadState[]>('/dms/read-states'); }
 

@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/riftapp-cloud/riftapp/internal/middleware"
+	"github.com/riftapp-cloud/riftapp/internal/repository"
 	"github.com/riftapp-cloud/riftapp/internal/service"
 	"github.com/riftapp-cloud/riftapp/internal/ws"
 )
@@ -101,6 +102,33 @@ func (h *StreamHandler) Patch(w http.ResponseWriter, r *http.Request) {
 	}
 	h.hub.BroadcastToHubMembers(stream.HubID, ws.NewEvent(ws.OpStreamUpdate, map[string]string{"hub_id": stream.HubID}))
 	writeData(w, http.StatusOK, stream)
+}
+
+func (h *StreamHandler) GetNotificationSettings(w http.ResponseWriter, r *http.Request) {
+	streamID := chi.URLParam(r, "streamID")
+	userID := middleware.GetUserID(r.Context())
+	st, err := h.svc.GetNotificationSettings(r.Context(), streamID, userID)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, st)
+}
+
+func (h *StreamHandler) PatchNotificationSettings(w http.ResponseWriter, r *http.Request) {
+	streamID := chi.URLParam(r, "streamID")
+	userID := middleware.GetUserID(r.Context())
+	var body repository.StreamNotificationSettings
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	st, err := h.svc.UpdateNotificationSettings(r.Context(), streamID, userID, body)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, st)
 }
 
 func (h *StreamHandler) Ack(w http.ResponseWriter, r *http.Request) {

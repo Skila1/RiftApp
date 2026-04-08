@@ -1,81 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import type { DesktopAPI, DesktopBuildInfo, DesktopUpdateStatus } from '@/types/desktop';
 import { useDMStore } from '../../stores/dmStore';
 import { useHubStore } from '../../stores/hubStore';
-
-const idleDesktopUpdateStatus: DesktopUpdateStatus = {
-  state: 'idle',
-  version: '',
-  progress: null,
-  message: '',
-};
-
-function getDesktop(): DesktopAPI | undefined {
-  if (typeof window === 'undefined') return undefined;
-  const d = window.desktop as Partial<DesktopAPI> | undefined;
-  if (d && typeof d.minimize === 'function' && typeof d.maximize === 'function' && typeof d.close === 'function' && typeof d.isMaximized === 'function') {
-    return {
-      minimize: () => {
-        void d.minimize?.();
-      },
-      maximize: () => {
-        void d.maximize?.();
-      },
-      close: () => {
-        void d.close?.();
-      },
-      isMaximized: () => d.isMaximized?.() ?? Promise.resolve(false),
-      getVersion: () => d.getVersion?.() ?? Promise.resolve(''),
-      getBuildInfo: () => d.getBuildInfo?.() ?? Promise.resolve({
-        appVersion: '',
-        electronVersion: '',
-        platform: '',
-        arch: '',
-        osVersion: '',
-      } satisfies DesktopBuildInfo),
-      getUpdateStatus: () => d.getUpdateStatus?.() ?? Promise.resolve(idleDesktopUpdateStatus),
-      isUpdateReady: () => d.isUpdateReady?.() ?? Promise.resolve(false),
-      checkForUpdates: () => d.checkForUpdates?.() ?? Promise.resolve(idleDesktopUpdateStatus),
-      onMaximizedChange: (cb) => d.onMaximizedChange?.(cb) ?? (() => {}),
-      onUpdateStatus: (cb) => d.onUpdateStatus?.(cb) ?? (() => {}),
-      onUpdateReady: (cb) => d.onUpdateReady?.(cb) ?? (() => {}),
-      restartToUpdate: () => {
-        d.restartToUpdate?.();
-      },
-    };
-  }
-
-  const r = window.riftDesktop;
-  if (!r) return undefined;
-  return {
-    minimize: () => {
-      void r.minimize();
-    },
-    maximize: () => {
-      void r.maximizeToggle();
-    },
-    close: () => {
-      void r.close();
-    },
-    isMaximized: () => r.isMaximized(),
-    getVersion: async () => '',
-    getBuildInfo: async () => ({
-      appVersion: '',
-      electronVersion: '',
-      platform: '',
-      arch: '',
-      osVersion: '',
-    }),
-    getUpdateStatus: async () => idleDesktopUpdateStatus,
-    isUpdateReady: async () => false,
-    checkForUpdates: async () => idleDesktopUpdateStatus,
-    onMaximizedChange: r.onMaximizedChange,
-    onUpdateStatus: () => () => {},
-    onUpdateReady: () => () => {},
-    restartToUpdate: () => {},
-  };
-}
+import { getDesktop } from '../../utils/desktop';
 
 /**
  * Frameless window chrome: drag region + min / max / close via preload `window.desktop`.
@@ -85,7 +12,6 @@ function TitleBar() {
   const location = useLocation();
   const [ready, setReady] = useState(false);
   const [maximized, setMaximized] = useState(false);
-  const [updateStatus, setUpdateStatus] = useState<DesktopUpdateStatus>(idleDesktopUpdateStatus);
   const hubs = useHubStore((s) => s.hubs);
   const activeHubId = useHubStore((s) => s.activeHubId);
   const conversations = useDMStore((s) => s.conversations);
@@ -137,53 +63,25 @@ function TitleBar() {
     if (!api) return;
     let cancelled = false;
     let unlistenMaximized: (() => void) | undefined;
-    let unlistenUpdateStatus: (() => void) | undefined;
-    let unlistenUpdate: (() => void) | undefined;
     const run = async () => {
-      const [isMaximized, currentUpdateStatus] = await Promise.all([
-        api.isMaximized(),
-        api.getUpdateStatus(),
-      ]);
+      const isMaximized = await api.isMaximized();
       if (!cancelled) {
         setMaximized(isMaximized);
-        setUpdateStatus(currentUpdateStatus);
       }
       unlistenMaximized = api.onMaximizedChange((v) => {
         if (!cancelled) setMaximized(v);
-      });
-      unlistenUpdateStatus = api.onUpdateStatus((status) => {
-        if (!cancelled) setUpdateStatus(status);
-      });
-      unlistenUpdate = api.onUpdateReady(() => {
-        if (!cancelled) {
-          setUpdateStatus((current) => ({
-            ...current,
-            state: 'ready',
-            progress: 100,
-            message: current.message || 'Restart to install the update.',
-          }));
-        }
       });
     };
     void run();
     return () => {
       cancelled = true;
       unlistenMaximized?.();
-      unlistenUpdateStatus?.();
-      unlistenUpdate?.();
     };
   }, [ready]);
 
   if (!ready || !getDesktop()) return null;
 
   const api = getDesktop()!;
-  const showUpdateButton = updateStatus.state === 'ready';
-
-  const handleUpdateClick = (event: React.MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (updateStatus.state === 'ready') api.restartToUpdate();
-  };
 
   const handleMinimizeClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -232,23 +130,6 @@ function TitleBar() {
         className="flex h-full items-stretch gap-2 pr-1"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       >
-        {showUpdateButton && (
-          <button
-            type="button"
-            onClick={handleUpdateClick}
-            onMouseDown={(event) => event.stopPropagation()}
-            className="my-auto flex h-7 w-7 items-center justify-center rounded-md text-[#43b581] transition-colors hover:bg-[#285336]/55 hover:text-[#6ee7a5]"
-            aria-label="Restart and install update"
-            title={updateStatus.message || 'Restart to install the downloaded update'}
-          >
-            <svg width="14" height="14" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M6 1.5v5" />
-              <path d="M3.75 4.75L6 7l2.25-2.25" />
-              <path d="M2.25 9.75h7.5" />
-            </svg>
-          </button>
-        )}
-
         <div className="window-buttons flex h-full items-stretch">
         <button
           type="button"

@@ -22,7 +22,8 @@ interface DMState {
   setActiveConversation: (convId: string) => Promise<void>;
   clearActive: () => void;
   loadDMMessages: (convId: string) => Promise<void>;
-  sendDMMessage: (content: string, attachmentIds?: string[]) => Promise<void>;
+  ensureMessageLoaded: (convId: string, messageId: string) => Promise<boolean>;
+  sendDMMessage: (content: string, attachmentIds?: string[], replyToMessageId?: string) => Promise<void>;
   addDMMessage: (message: Message) => void;
   removeDMMessage: (messageId: string) => void;
   deleteDMMessage: (messageId: string) => Promise<void>;
@@ -90,9 +91,14 @@ export const useDMStore = create<DMState>((set, get) => ({
       const fetched = normalizeMessages(await api.getDMMessages(convId));
       set((s) => {
         if (s.activeConversationId !== convId) return { dmMessagesLoading: false };
-        const fetchedIds = new Set(fetched.map((m) => m.id));
-        const wsOnly = s.dmMessages.filter((m) => !fetchedIds.has(m.id) && m.conversation_id === convId);
-        const merged = [...fetched, ...wsOnly].sort(
+        const mergedMap = new Map<string, Message>();
+        for (const message of s.dmMessages.filter((m) => m.conversation_id === convId)) {
+          mergedMap.set(message.id, message);
+        }
+        for (const message of fetched) {
+          mergedMap.set(message.id, message);
+        }
+        const merged = [...mergedMap.values()].sort(
           (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         );
         return { dmMessages: merged, dmMessagesLoading: false };
@@ -102,10 +108,49 @@ export const useDMStore = create<DMState>((set, get) => ({
     }
   },
 
-  sendDMMessage: async (content, attachmentIds) => {
+  ensureMessageLoaded: async (convId, messageId) => {
+    const isActiveConversation = () => get().activeConversationId === convId;
+    let loaded = isActiveConversation() ? [...get().dmMessages] : [];
+
+    if (isActiveConversation()) {
+      set({ dmMessagesLoading: true });
+    }
+
+    try {
+      if (loaded.length === 0) {
+        loaded = normalizeMessages(await api.getDMMessages(convId, undefined, 100)).sort(
+          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+        );
+      }
+
+      let before = loaded[0]?.id;
+      while (!loaded.some((message) => message.id === messageId)) {
+        if (!before) break;
+        const older = normalizeMessages(await api.getDMMessages(convId, before, 100));
+        if (older.length === 0) break;
+        const merged = normalizeMessages([...loaded, ...older]);
+        if (merged.length === loaded.length) break;
+        loaded = merged.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        before = loaded[0]?.id;
+      }
+
+      const found = loaded.some((message) => message.id === messageId);
+      if (isActiveConversation()) {
+        set({ dmMessages: loaded, dmMessagesLoading: false });
+      }
+      return found;
+    } catch {
+      if (isActiveConversation()) {
+        set({ dmMessagesLoading: false });
+      }
+      return false;
+    }
+  },
+
+  sendDMMessage: async (content, attachmentIds, replyToMessageId) => {
     const convId = get().activeConversationId;
     if (!convId) return;
-    const msg = await api.sendDMMessage(convId, content, attachmentIds);
+    const msg = await api.sendDMMessage(convId, content, attachmentIds, replyToMessageId);
     get().addDMMessage(msg);
   },
 
@@ -200,8 +245,20 @@ export const useDMStore = create<DMState>((set, get) => ({
   patchUser: (user) => {
     const nextUser = normalizeUser(user);
     const patchMessage = (message: Message) => {
-      if (message.author?.id !== nextUser.id) return message;
-      return { ...message, author: { ...message.author, ...nextUser } };
+      let nextMessage = message;
+      if (message.author?.id === nextUser.id) {
+        nextMessage = { ...nextMessage, author: { ...message.author, ...nextUser } };
+      }
+      if (message.reply_to?.author?.id === nextUser.id) {
+        nextMessage = {
+          ...nextMessage,
+          reply_to: {
+            ...message.reply_to,
+            author: { ...message.reply_to.author, ...nextUser },
+          },
+        };
+      }
+      return nextMessage;
     };
     set((s) => ({
       conversations: s.conversations.map((conversation) => ({

@@ -43,6 +43,15 @@ function IconThread() {
   );
 }
 
+function IconPin() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#b5bac1] shrink-0">
+      <path d="M14 4v5l3 3v1H7v-1l3-3V4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12 13v8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function IconCopy() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#b5bac1] shrink-0">
@@ -117,6 +126,7 @@ interface Props {
   isOwn: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  canPin: boolean;
   onClose: () => void;
   onEdit: () => void;
   onDelete?: () => void;
@@ -132,18 +142,22 @@ export default function MessageContextMenu({
   isOwn,
   canEdit,
   canDelete,
+  canPin,
   onClose,
   onEdit,
   onDelete,
   mediaUrl,
 }: Props) {
   const toggleReaction = useMessageStore((s) => s.toggleReaction);
+  const pinMessage = useMessageStore((s) => s.pinMessage);
+  const unpinMessage = useMessageStore((s) => s.unpinMessage);
   const setReplyTo = useReplyDraftStore((s) => s.setReplyTo);
   const developerMode = useAppSettingsStore((s) => s.developerMode);
 
   const [reactionOpen, setReactionOpen] = useState(false);
 
   const plainText = message.content ?? '';
+  const isPinned = Boolean(message.pinned || message.pinned_at);
 
   const copyText = () => {
     void navigator.clipboard.writeText(plainText);
@@ -182,6 +196,16 @@ export default function MessageContextMenu({
     if (!canDelete) return;
     onClose();
     onDelete?.();
+  };
+
+  const handleTogglePin = () => {
+    if (!canPin) return;
+    if (isPinned) {
+      void unpinMessage(message.id);
+    } else {
+      void pinMessage(message.id);
+    }
+    onClose();
   };
 
   const addReaction = (emoji: string, emojiId?: string) => {
@@ -285,6 +309,7 @@ export default function MessageContextMenu({
             setTimeout(() => document.querySelector<HTMLTextAreaElement>('[data-riftapp-message-input]')?.focus(), 0);
           },
         )}
+        {!isDM && row(isPinned ? 'Unpin Message' : 'Pin Message', <IconPin />, handleTogglePin, { disabled: !canPin })}
         {row('Forward', <IconForward />, undefined, { disabled: true })}
         {row('Create Thread', <IconThread />, undefined, { disabled: true })}
 

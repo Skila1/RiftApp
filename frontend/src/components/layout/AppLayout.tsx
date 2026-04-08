@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import HubSidebar from '../sidebar/HubSidebar';
 import StreamSidebar from '../sidebar/StreamSidebar';
@@ -24,6 +24,7 @@ import { useVoiceChannelUiStore } from '../../stores/voiceChannelUiStore';
 
 export default function AppLayout() {
   useWebSocket();
+  const [showMemberList, setShowMemberList] = useState(true);
   const loadHubs = useHubStore((s) => s.loadHubs);
   const loadNotifications = useNotificationStore((s) => s.loadNotifications);
   const activeConversationId = useDMStore((s) => s.activeConversationId);
@@ -92,6 +93,12 @@ export default function AppLayout() {
     }
   }, [activeVoiceChannelId, resetVoiceView, streams]);
 
+  useEffect(() => {
+    if (!activeHubId || activeConversationId || voiceUiOpen) {
+      setShowMemberList(true);
+    }
+  }, [activeConversationId, activeHubId, voiceUiOpen]);
+
   return (
     <div className="app-root h-full min-h-0 flex overflow-hidden">
       {/* Left sidebar group: server list + channel list + bottom voice/user bar */}
@@ -107,9 +114,12 @@ export default function AppLayout() {
       ) : voiceUiOpen ? (
         <VoiceView />
       ) : (
-        <ChatPanel />
+        <ChatPanel
+          showMemberList={showMemberList}
+          onToggleMemberList={() => setShowMemberList((current) => !current)}
+        />
       )}
-      {activeHubId && !activeConversationId && !voiceUiOpen && <MemberList />}
+      {activeHubId && !activeConversationId && !voiceUiOpen && showMemberList && <MemberList />}
       <MiniProfilePopover />
       <FullProfileModal />
       <SelfProfilePopover />

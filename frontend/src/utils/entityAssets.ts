@@ -36,6 +36,7 @@ export function stripAssetVersion(raw: string | undefined | null): string {
 export function normalizeUser(user: User): User {
   return {
     ...user,
+    is_bot: Boolean(user.is_bot),
     avatar_url: withAssetVersion(user.avatar_url, user.updated_at),
   };
 }
@@ -58,9 +59,22 @@ export function normalizeHubs(hubs: Hub[]): Hub[] {
 }
 
 export function normalizeMessage(message: Message): Message {
+  const normalizeReplyPreview = (reply?: Message): Message | undefined => {
+    if (!reply) return reply;
+    return {
+      ...reply,
+      pinned: Boolean(reply.pinned || reply.pinned_at),
+      author: reply.author ? normalizeUser(reply.author) : reply.author,
+      pinned_by: reply.pinned_by ? normalizeUser(reply.pinned_by) : reply.pinned_by,
+    };
+  };
+
   return {
     ...message,
+    pinned: Boolean(message.pinned || message.pinned_at),
     author: message.author ? normalizeUser(message.author) : message.author,
+    reply_to: normalizeReplyPreview(message.reply_to),
+    pinned_by: message.pinned_by ? normalizeUser(message.pinned_by) : message.pinned_by,
   };
 }
 

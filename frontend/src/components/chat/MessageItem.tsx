@@ -38,6 +38,18 @@ function formatTime(dateStr: string): string {
   return `${date.toLocaleDateString()} ${time}`;
 }
 
+function formatReplySnippet(message?: Message): string {
+  if (!message) return 'Original message unavailable';
+  const content = message.content.trim();
+  if (content) return content.split('\n')[0];
+  if (message.attachments?.length) {
+    return message.attachments.length === 1
+      ? `Attachment: ${message.attachments[0].filename}`
+      : `${message.attachments.length} attachments`;
+  }
+  return 'Original message unavailable';
+}
+
 // Generate a stable pastel accent color from string
 function nameColor(name: string): string {
   const colors = [
@@ -297,6 +309,11 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
     isOwn ||
     (!isDM && !!message.stream_id && hasPermission(hubPermissions, PermManageMessages));
 
+  const canPin =
+    !isDM &&
+    !!message.stream_id &&
+    (isOwn || hasPermission(hubPermissions, PermManageMessages));
+
   const canEdit = isOwn && Boolean((message.content || '').trim());
 
   const color = useMemo(() => nameColor(authorName), [authorName]);
@@ -349,6 +366,14 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
     const re = new RegExp(`@${currentUsername.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w.\\-])`, 'i');
     return re.test(message.content);
   }, [message.content, currentUsername]);
+
+  const handleReplyPreviewClick = useCallback(() => {
+    const replyId = message.reply_to?.id ?? message.reply_to_message_id;
+    if (!replyId) return;
+    const target = document.getElementById(`message-${replyId}`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [message.reply_to?.id, message.reply_to_message_id]);
 
   const handleProfileClick = useCallback((e: React.MouseEvent) => {
     if (interactionsDisabled) return;
@@ -522,6 +547,29 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
       </div>
     ) : (
       <div className={interactionsDisabled ? 'pointer-events-none' : undefined}>
+        {(message.reply_to || message.reply_to_message_id) && (
+          <button
+            type="button"
+            onClick={handleReplyPreviewClick}
+            disabled={!message.reply_to?.id && !message.reply_to_message_id}
+            className="mb-2 flex max-w-[420px] items-start gap-2 rounded-md border-l-2 border-riftapp-accent/60 bg-riftapp-bg/40 px-2.5 py-2 text-left transition-colors hover:bg-riftapp-bg/60 disabled:cursor-default"
+          >
+            <span className="mt-0.5 text-riftapp-text-dim" aria-hidden>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 17 4 12l5-5" />
+                <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+              </svg>
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-[12px] font-semibold text-riftapp-accent-hover">
+                {message.reply_to?.author?.display_name || message.reply_to?.author?.username || 'Reply'}
+              </span>
+              <span className="block truncate text-[12px] text-riftapp-text-dim">
+                {formatReplySnippet(message.reply_to)}
+              </span>
+            </span>
+          </button>
+        )}
         {inlineMedia ? (
           <InlineMediaImage url={inlineMedia.url} type={inlineMedia.type} />
         ) : (
@@ -539,6 +587,7 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
 
   return (
     <div
+      id={`message-${message.id}`}
       onContextMenu={interactionsDisabled ? undefined : handleMessageContextMenu}
       className={isPreview
         ? 'relative rounded-xl'
@@ -598,6 +647,16 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
         </div>
       )}
 
+      {Boolean(message.pinned || message.pinned_at) && (
+        <div className={`mb-1 flex items-center gap-1.5 text-[11px] font-medium text-riftapp-text-dim ${showHeader ? 'pl-[52px]' : 'pl-[52px]'}`}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+            <path d="M14 4v5l3 3v1H7v-1l3-3V4" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M12 13v8" strokeLinecap="round" />
+          </svg>
+          <span>Pinned message</span>
+        </div>
+      )}
+
       {showHeader ? (
         <div className="flex gap-3">
           {/* Avatar */}
@@ -643,6 +702,7 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
           isOwn={isOwn}
           canEdit={canEdit}
           canDelete={canDelete}
+          canPin={canPin}
           mediaUrl={messageMenu.mediaUrl}
           onClose={() => setMessageMenu(null)}
           onEdit={() => {

@@ -2,6 +2,7 @@ export interface User {
   id: string;
   username: string;
   email?: string;
+  is_bot?: boolean;
   display_name: string;
   avatar_url?: string;
   bio?: string;
@@ -66,12 +67,41 @@ export interface Message {
   stream_id?: string;
   conversation_id?: string;
   author_id: string;
+  author_type?: 'user' | 'bot' | 'webhook';
   content: string;
   edited_at?: string;
   created_at: string;
+  reply_to_message_id?: string;
+  webhook_name?: string;
+  webhook_avatar_url?: string;
+  pinned: boolean;
+  pinned_at?: string;
+  pinned_by_id?: string;
   author?: User;
+  reply_to?: Message;
+  pinned_by?: User;
   attachments?: Attachment[];
   reactions?: ReactionAgg[];
+}
+
+export type NotificationLevel = 'all' | 'mentions_only' | 'nothing';
+
+export interface MessageSearchFilters {
+  query?: string;
+  stream_id?: string;
+  author_id?: string;
+  author_type?: 'user' | 'bot' | 'webhook';
+  mentions?: string;
+  has?: 'file' | 'image' | 'video' | 'audio' | 'link';
+  before?: string;
+  after?: string;
+  on?: string;
+  during?: string;
+  pinned?: boolean;
+  link?: boolean;
+  filename?: string;
+  ext?: string;
+  limit?: number;
 }
 
 export interface Attachment {
@@ -104,7 +134,7 @@ export interface HubInvite {
 
 /** Per-user notification preferences for a hub (Discord-style). */
 export interface HubNotificationSettings {
-  notification_level: 'all' | 'mentions_only' | 'nothing';
+  notification_level: NotificationLevel;
   suppress_everyone: boolean;
   suppress_role_mentions: boolean;
   suppress_highlights: boolean;
@@ -112,6 +142,17 @@ export interface HubNotificationSettings {
   mobile_push: boolean;
   hide_muted_channels: boolean;
   server_muted: boolean;
+}
+
+export interface StreamNotificationSettings {
+  notification_level: NotificationLevel;
+  suppress_everyone: boolean;
+  suppress_role_mentions: boolean;
+  suppress_highlights: boolean;
+  mute_events: boolean;
+  mobile_push: boolean;
+  hide_muted_channels: boolean;
+  channel_muted: boolean;
 }
 
 export interface Notification {

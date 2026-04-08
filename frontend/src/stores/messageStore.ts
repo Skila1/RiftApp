@@ -24,11 +24,14 @@ function trimMessages(messages: Message[]): Message[] {
   return sorted.slice(sorted.length - MAX_MESSAGES_PER_STREAM);
 }
 
-function mergeMessageLists(cached: Message[] | undefined, fetched: Message[]): Message[] {
+function mergeMessageLists(cached: Message[] | undefined, fetched: Message[], opts?: { trim?: boolean }): Message[] {
   const map = new Map<string, Message>();
   for (const m of cached ?? []) map.set(m.id, m);
   for (const m of fetched) map.set(m.id, m);
-  return trimMessages([...map.values()]);
+  const merged = sortMessagesAsc([...map.values()]);
+  if (opts?.trim === false) return merged;
+  if (merged.length <= MAX_MESSAGES_PER_STREAM) return merged;
+  return merged.slice(merged.length - MAX_MESSAGES_PER_STREAM);
 }
 
 function pruneStreamCaches(
@@ -46,11 +49,13 @@ function pruneStreamCaches(
 interface MessageState {
   messages: Message[];
   messagesLoading: boolean;
+  pinMutationVersion: number;
   /** Per-stream message history for the session (instant hub/channel switching). */
   streamMessagesCache: Record<string, { messages: Message[]; updatedAt: number }>;
 
   loadMessages: (streamId: string, opts?: { force?: boolean }) => Promise<void>;
-  sendMessage: (content: string, attachmentIds?: string[]) => Promise<void>;
+  ensureMessageLoaded: (streamId: string, messageId: string) => Promise<boolean>;
+  sendMessage: (content: string, attachmentIds?: string[], replyToMessageId?: string) => Promise<void>;
   addMessage: (message: Message) => void;
   updateMessage: (message: Message) => void;
   removeMessage: (messageId: string) => void;
@@ -62,6 +67,9 @@ interface MessageState {
   /** Drop all cached streams + visible messages (logout). */
   clearSessionCaches: () => void;
   patchUser: (user: User) => void;
+
+  pinMessage: (messageId: string) => Promise<Message>;
+  unpinMessage: (messageId: string) => Promise<Message>;
 
   toggleReaction: (messageId: string, emoji: string, emojiId?: string) => Promise<void>;
   applyReactionAdd: (messageId: string, userId: string, emoji: string, isDM?: boolean, emojiId?: string, fileUrl?: string) => void;
@@ -107,6 +115,7 @@ function removeFromAllCaches(
 export const useMessageStore = create<MessageState>((set, get) => ({
   messages: [],
   messagesLoading: false,
+  pinMutationVersion: 0,
   streamMessagesCache: {},
 
   loadMessages: async (streamId, opts) => {
@@ -130,7 +139,9 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     try {
       const fetched = normalizeMessages(await api.getMessages(streamId));
       if (!activeOk()) return;
-      const merged = mergeMessageLists(cachedEntry?.messages, fetched);
+      const merged = mergeMessageLists(cachedEntry?.messages, fetched, {
+        trim: !cachedEntry || cachedEntry.messages.length <= MAX_MESSAGES_PER_STREAM,
+      });
       set((s) => ({
         messages: merged,
         messagesLoading: false,
@@ -149,10 +160,58 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     }
   },
 
-  sendMessage: async (content, attachmentIds) => {
+  ensureMessageLoaded: async (streamId, messageId) => {
+    const isActiveStream = () => useStreamStore.getState().activeStreamId === streamId;
+    let loaded = mergeMessageLists(undefined, get().streamMessagesCache[streamId]?.messages ?? [], { trim: false });
+
+    if (isActiveStream()) {
+      set({ messagesLoading: true });
+    }
+
+    try {
+      if (loaded.length === 0) {
+        loaded = mergeMessageLists(undefined, normalizeMessages(await api.getMessages(streamId, undefined, 100)), { trim: false });
+      }
+
+      let before = loaded[0]?.id;
+      while (!loaded.some((message) => message.id === messageId)) {
+        if (!before) break;
+        const older = normalizeMessages(await api.getMessages(streamId, before, 100));
+        if (older.length === 0) break;
+        const merged = mergeMessageLists(loaded, older, { trim: false });
+        if (merged.length === loaded.length) break;
+        loaded = merged;
+        before = loaded[0]?.id;
+      }
+
+      const found = loaded.some((message) => message.id === messageId);
+      set((s) => {
+        const streamMessagesCache = pruneStreamCaches({
+          ...s.streamMessagesCache,
+          [streamId]: { messages: loaded, updatedAt: Date.now() },
+        });
+        if (isActiveStream()) {
+          return {
+            messages: loaded,
+            messagesLoading: false,
+            streamMessagesCache,
+          };
+        }
+        return { streamMessagesCache };
+      });
+      return found;
+    } catch {
+      if (isActiveStream()) {
+        set({ messagesLoading: false });
+      }
+      return false;
+    }
+  },
+
+  sendMessage: async (content, attachmentIds, replyToMessageId) => {
     const streamId = useStreamStore.getState().activeStreamId;
     if (!streamId) return;
-    const msg = await api.sendMessage(streamId, content, attachmentIds);
+    const msg = await api.sendMessage(streamId, content, attachmentIds, replyToMessageId);
     get().addMessage(msg);
   },
 
@@ -163,24 +222,29 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     if (!sid) return;
 
     const prev = get().streamMessagesCache[sid]?.messages ?? [];
+    const shouldTrim = prev.length <= MAX_MESSAGES_PER_STREAM;
     if (prev.some((m) => m.id === nextMessage.id)) {
       if (sid === activeStreamId && !get().messages.some((m) => m.id === nextMessage.id)) {
         set((s) => ({
-          messages: sortMessagesAsc([...s.messages, nextMessage]).slice(-MAX_MESSAGES_PER_STREAM),
+          messages: shouldTrim
+            ? sortMessagesAsc([...s.messages, nextMessage]).slice(-MAX_MESSAGES_PER_STREAM)
+            : sortMessagesAsc([...s.messages, nextMessage]),
         }));
       }
       return;
     }
 
     set((s) => {
-      const merged = trimMessages([...prev, nextMessage]);
+      const merged = shouldTrim ? trimMessages([...prev, nextMessage]) : sortMessagesAsc([...prev, nextMessage]);
       const streamMessagesCache = pruneStreamCaches({
         ...s.streamMessagesCache,
         [sid]: { messages: merged, updatedAt: Date.now() },
       });
       if (sid === activeStreamId) {
         return {
-          messages: sortMessagesAsc([...s.messages, nextMessage]).slice(-MAX_MESSAGES_PER_STREAM),
+          messages: shouldTrim
+            ? sortMessagesAsc([...s.messages, nextMessage]).slice(-MAX_MESSAGES_PER_STREAM)
+            : sortMessagesAsc([...s.messages, nextMessage]),
           streamMessagesCache,
         };
       }
@@ -244,8 +308,27 @@ export const useMessageStore = create<MessageState>((set, get) => ({
   patchUser: (user) => {
     const nextUser = normalizeUser(user);
     const patchAuthor = (message: Message) => {
-      if (message.author?.id !== nextUser.id) return message;
-      return { ...message, author: { ...message.author, ...nextUser } };
+      let nextMessage = message;
+      if (message.author?.id === nextUser.id) {
+        nextMessage = { ...nextMessage, author: { ...message.author, ...nextUser } };
+      }
+      if (message.pinned_by?.id === nextUser.id) {
+        nextMessage = { ...nextMessage, pinned_by: { ...message.pinned_by, ...nextUser } };
+      }
+      if (message.reply_to) {
+        const reply = message.reply_to;
+        let nextReply = reply;
+        if (reply.author?.id === nextUser.id) {
+          nextReply = { ...nextReply, author: { ...reply.author, ...nextUser } };
+        }
+        if (reply.pinned_by?.id === nextUser.id) {
+          nextReply = { ...nextReply, pinned_by: { ...reply.pinned_by, ...nextUser } };
+        }
+        if (nextReply !== reply) {
+          nextMessage = { ...nextMessage, reply_to: nextReply };
+        }
+      }
+      return nextMessage;
     };
     set((s) => ({
       messages: s.messages.map(patchAuthor),
@@ -259,6 +342,20 @@ export const useMessageStore = create<MessageState>((set, get) => ({
         ]),
       ),
     }));
+  },
+
+  pinMessage: async (messageId) => {
+    const msg = normalizeMessage(await api.pinMessage(messageId));
+    set((s) => ({ pinMutationVersion: s.pinMutationVersion + 1 }));
+    get().updateMessage(msg);
+    return msg;
+  },
+
+  unpinMessage: async (messageId) => {
+    const msg = normalizeMessage(await api.unpinMessage(messageId));
+    set((s) => ({ pinMutationVersion: s.pinMutationVersion + 1 }));
+    get().updateMessage(msg);
+    return msg;
   },
 
   toggleReaction: async (messageId, emoji, emojiId) => {
