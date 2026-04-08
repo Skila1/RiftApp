@@ -17,6 +17,7 @@ import { useFrontendUpdateStore } from '../../stores/frontendUpdateStore';
 import { useAppSettingsStore, type SettingsOverlayTab } from '../../stores/appSettingsStore';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { stripAssetVersion } from '../../utils/entityAssets';
+import { getDesktop } from '../../utils/desktop';
 import {
   AUTO_THRESHOLD_MIN,
   AUTO_THRESHOLD_MAX,
@@ -106,6 +107,7 @@ function SettingsModal() {
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [desktopBuildInfo, setDesktopBuildInfo] = useState<DesktopBuildInfo>(emptyDesktopBuildInfo);
   const [appVersionLabel, setAppVersionLabel] = useState('Web App');
+  const isDesktopApp = useMemo(() => Boolean(getDesktop()), []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -239,7 +241,13 @@ function SettingsModal() {
                     {frontendBuildLabel && <p>{`Build: ${frontendBuildLabel}`}</p>}
                     {desktopBuildInfo.electronVersion ? <p>Electron {desktopBuildInfo.electronVersion}</p> : null}
                     {desktopOsLabel && <p>{desktopOsLabel}</p>}
-                    {frontendUpdateReady ? <p className="font-semibold text-[#3ba55d]">Frontend update ready. Use the green refresh button to apply it.</p> : null}
+                    {frontendUpdateReady ? (
+                      <p className="font-semibold text-[#3ba55d]">
+                        {isDesktopApp
+                          ? 'Frontend update ready. Use the green refresh button to apply it.'
+                          : 'Frontend update ready. Refresh the page to apply it.'}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               </div>

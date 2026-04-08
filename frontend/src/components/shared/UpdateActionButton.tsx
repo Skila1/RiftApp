@@ -47,7 +47,7 @@ export default function UpdateActionButton({ className = '' }: { className?: str
   }, [desktop]);
 
   const desktopUpdateReady = Boolean(desktop && updateStatus.state === 'ready');
-  const showUpdateAction = desktopUpdateReady || frontendUpdateReady;
+  const showUpdateAction = Boolean(desktop) && (desktopUpdateReady || frontendUpdateReady);
   const updateActionLabel = desktopUpdateReady ? 'Restart to update' : 'Refresh to update';
   const updateActionTitle = desktopUpdateReady
     ? 'Restart to install the downloaded desktop update'
