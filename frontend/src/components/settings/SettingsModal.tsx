@@ -9,6 +9,7 @@ import { useVoiceStore, type VoiceMediaDevice } from '../../stores/voiceStore';
 import { useAppSettingsStore, type SettingsOverlayTab } from '../../stores/appSettingsStore';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { stripAssetVersion } from '../../utils/entityAssets';
+import { DEFAULT_MIC_GATE_RELEASE_MS, MicNoiseGateProcessor } from '../../utils/audio/micNoiseGate';
 import type { DesktopBuildInfo } from '../../types/desktop';
 import ModalCloseButton from '@/components/shared/ModalCloseButton';
 
@@ -484,20 +485,37 @@ function MicrophoneTestCard({
   inputDeviceId,
   outputDeviceId,
   outputDeviceSelectionSupported,
+  noiseSuppressionEnabled,
 }: {
   inputDeviceId: string | null;
   outputDeviceId: string | null;
   outputDeviceSelectionSupported: boolean;
+  noiseSuppressionEnabled: boolean;
 }) {
   const [testing, setTesting] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const processorRef = useRef<MicNoiseGateProcessor | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   const stopTest = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+
+    const processor = processorRef.current;
+    processorRef.current = null;
+    if (processor) {
+      void processor.destroy().catch(() => {});
+    }
+
+    const audioContext = audioContextRef.current;
+    audioContextRef.current = null;
+    if (audioContext) {
+      void audioContext.close().catch(() => {});
+    }
+
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.srcObject = null;
@@ -523,19 +541,53 @@ function MicrophoneTestCard({
               deviceId: { exact: inputDeviceId },
               echoCancellation: true,
               autoGainControl: true,
-              noiseSuppression: true,
+              noiseSuppression: false,
             }
           : {
               echoCancellation: true,
               autoGainControl: true,
-              noiseSuppression: true,
+              noiseSuppression: false,
             },
         video: false,
       });
 
       streamRef.current = stream;
+      let playbackStream = stream;
+
+      if (noiseSuppressionEnabled) {
+        try {
+          const inputTrack = stream.getAudioTracks()[0];
+          if (inputTrack) {
+            const audioContext = new AudioContext();
+            const processor = new MicNoiseGateProcessor(
+              {
+                automaticSensitivity: false,
+                manualThreshold: 0,
+                releaseMs: DEFAULT_MIC_GATE_RELEASE_MS,
+                noiseSuppressionEnabled: true,
+              },
+              { onSpeakingStateChange: () => {} },
+            );
+
+            await processor.init({
+              track: inputTrack,
+              audioContext,
+            });
+
+            audioContextRef.current = audioContext;
+            processorRef.current = processor;
+
+            if (processor.processedTrack) {
+              playbackStream = new MediaStream([processor.processedTrack]);
+            }
+          }
+        } catch (processorError) {
+          console.warn('RNNoise microphone test unavailable, falling back to raw microphone audio.', processorError);
+        }
+      }
+
       if (audioRef.current) {
-        audioRef.current.srcObject = stream;
+        audioRef.current.srcObject = playbackStream;
         audioRef.current.autoplay = true;
         audioRef.current.muted = false;
         if (outputDeviceSelectionSupported) {
@@ -571,7 +623,7 @@ function MicrophoneTestCard({
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-riftapp-text">Test Microphone</p>
           <p className="mt-1 text-[13px] leading-snug text-riftapp-text-muted">
-            Plays your selected microphone back through the chosen output device so you can check levels and clarity.
+            Plays your selected microphone back through the chosen output device so you can check levels and, when enabled, the RNNoise cleanup path.
           </p>
         </div>
         <button
@@ -757,8 +809,8 @@ function VoiceVideoSettingsTab() {
           </div>
 
           <SettingToggle
-            label="Noise Suppression"
-            description="Applies browser-level microphone cleanup before the gate so background noise is less likely to open the mic."
+            label="RNNoise Suppression"
+            description="Applies RNNoise denoising before the mic gate so steady background noise is less likely to open the mic."
             enabled={noiseSuppressionEnabled}
             onToggle={() => void setNoiseSuppressionEnabled(!noiseSuppressionEnabled)}
           />
@@ -810,6 +862,7 @@ function VoiceVideoSettingsTab() {
             inputDeviceId={inputDeviceId}
             outputDeviceId={outputDeviceId}
             outputDeviceSelectionSupported={outputDeviceSelectionSupported}
+            noiseSuppressionEnabled={noiseSuppressionEnabled}
           />
         </div>
       </div>

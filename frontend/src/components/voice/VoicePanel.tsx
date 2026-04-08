@@ -311,8 +311,8 @@ export default function VoicePanel({
 
       <div className="mt-2 flex items-center gap-2">
         <UtilityButton
-          label={noiseSuppressionEnabled ? 'Noise Suppression On' : 'Noise Suppression Off'}
-          title="Noise suppression"
+          label={noiseSuppressionEnabled ? 'RNNoise On' : 'RNNoise Off'}
+          title="RNNoise suppression"
           active={noiseSuppressionEnabled}
           onClick={() => void onToggleNoiseSuppression()}
         >

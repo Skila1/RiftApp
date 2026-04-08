@@ -1,3 +1,8 @@
+import { RnnoiseWorkletNode, loadRnnoise } from '@sapphi-red/web-noise-suppressor';
+import rnnoiseWorkletPath from '@sapphi-red/web-noise-suppressor/rnnoiseWorklet.js?url';
+import rnnoiseWasmPath from '@sapphi-red/web-noise-suppressor/rnnoise.wasm?url';
+import rnnoiseSimdWasmPath from '@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url';
+
 const AUTO_THRESHOLD_MULTIPLIER = 1.55;
 const AUTO_THRESHOLD_OFFSET = 0.0025;
 const AUTO_THRESHOLD_MIN = 0.006;
@@ -12,6 +17,7 @@ export interface MicNoiseGateSettings {
   automaticSensitivity: boolean;
   manualThreshold: number;
   releaseMs: number;
+  noiseSuppressionEnabled: boolean;
 }
 
 interface MicNoiseGateCallbacks {
@@ -27,6 +33,40 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+let rnnoiseBinaryPromise: Promise<ArrayBuffer> | null = null;
+const rnnoiseLoadedContexts = new WeakSet<AudioContext>();
+
+async function loadRnnoiseBinary() {
+  if (!rnnoiseBinaryPromise) {
+    rnnoiseBinaryPromise = loadRnnoise({
+      url: rnnoiseWasmPath,
+      simdUrl: rnnoiseSimdWasmPath,
+    }).catch((error) => {
+      rnnoiseBinaryPromise = null;
+      throw error;
+    });
+  }
+
+  return rnnoiseBinaryPromise;
+}
+
+export async function createRnnoiseNode(audioContext: AudioContext, maxChannels = 1) {
+  if (typeof audioContext.audioWorklet?.addModule !== 'function') {
+    throw new Error('AudioWorklet is unavailable.');
+  }
+
+  if (!rnnoiseLoadedContexts.has(audioContext)) {
+    await audioContext.audioWorklet.addModule(rnnoiseWorkletPath);
+    rnnoiseLoadedContexts.add(audioContext);
+  }
+
+  const wasmBinary = await loadRnnoiseBinary();
+  return new RnnoiseWorkletNode(audioContext, {
+    maxChannels,
+    wasmBinary: wasmBinary.slice(0),
+  });
+}
+
 export class MicNoiseGateProcessor {
   name = 'riftapp-mic-noise-gate';
   processedTrack?: MediaStreamTrack;
@@ -40,6 +80,8 @@ export class MicNoiseGateProcessor {
   private analyser: AnalyserNode | null = null;
 
   private gain: GainNode | null = null;
+
+  private rnnoise: RnnoiseWorkletNode | null = null;
 
   private destination: MediaStreamAudioDestinationNode | null = null;
 
@@ -81,8 +123,20 @@ export class MicNoiseGateProcessor {
     this.holdUntil = 0;
     this.speaking = false;
 
-    this.source.connect(this.analyser);
-    this.source.connect(this.gain);
+    let processedSource: AudioNode = this.source;
+
+    if (this.settings.noiseSuppressionEnabled) {
+      try {
+        this.rnnoise = await createRnnoiseNode(audioContext);
+        this.source.connect(this.rnnoise);
+        processedSource = this.rnnoise;
+      } catch (error) {
+        console.warn('RNNoise initialization failed, falling back to raw microphone input.', error);
+      }
+    }
+
+    processedSource.connect(this.analyser);
+    processedSource.connect(this.gain);
     this.gain.connect(this.destination);
 
     this.processedTrack = this.destination.stream.getAudioTracks()[0] ?? track;
@@ -196,11 +250,19 @@ export class MicNoiseGateProcessor {
     this.analyser?.disconnect();
     this.gain?.disconnect();
     this.destination?.disconnect();
+    this.rnnoise?.disconnect();
+
+    try {
+      this.rnnoise?.destroy();
+    } catch {
+      /* ignore RNNoise cleanup failures */
+    }
 
     this.source = null;
     this.analyser = null;
     this.gain = null;
     this.destination = null;
+    this.rnnoise = null;
     this.samples = null;
   }
 }

@@ -71,7 +71,6 @@ const DEFAULT_VOICE_SETTINGS: VoiceSettingsSnapshot = {
 
 type MicCaptureOptionsOverrides = {
   includeDeviceId?: boolean;
-  includeVoiceIsolation?: boolean;
 };
 
 function emptyVoiceMediaDevices(): VoiceMediaDevices {
@@ -268,18 +267,6 @@ interface VoiceStore {
 
 const CONNECT_TIMEOUT_MS = 15_000;
 
-function browserSupportsVoiceIsolation() {
-  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getSupportedConstraints) {
-    return false;
-  }
-
-  const supportedConstraints = navigator.mediaDevices.getSupportedConstraints() as MediaTrackSupportedConstraints & {
-    voiceIsolation?: boolean;
-  };
-
-  return supportedConstraints.voiceIsolation === true;
-}
-
 function micAudioCaptureOptions(
   state: Pick<VoiceStore, 'inputDeviceId' | 'noiseSuppressionEnabled'>,
   processor?: MicNoiseGateProcessor,
@@ -288,7 +275,7 @@ function micAudioCaptureOptions(
   const base: AudioCaptureOptions = {
     echoCancellation: true,
     autoGainControl: true,
-    noiseSuppression: state.noiseSuppressionEnabled,
+    noiseSuppression: false,
     channelCount: 1,
     sampleRate: 48000,
     sampleSize: 16,
@@ -296,18 +283,7 @@ function micAudioCaptureOptions(
     processor,
   };
 
-  if (
-    !state.noiseSuppressionEnabled ||
-    overrides?.includeVoiceIsolation === false ||
-    !browserSupportsVoiceIsolation()
-  ) {
-    return base;
-  }
-
-  return {
-    ...base,
-    voiceIsolation: true,
-  };
+  return base;
 }
 
 function cameraCaptureOptions(cameraDeviceId: string | null) {
@@ -639,6 +615,7 @@ function currentMicGateSettings() {
     automaticSensitivity: state.automaticInputSensitivity,
     manualThreshold: state.manualInputSensitivity,
     releaseMs: DEFAULT_MIC_GATE_RELEASE_MS,
+    noiseSuppressionEnabled: state.noiseSuppressionEnabled,
   };
 }
 
@@ -718,8 +695,8 @@ async function enableLocalMicrophone(room: Room) {
   const identity = room.localParticipant.identity;
   const fallbacks: Array<{ label: string; processor?: MicNoiseGateProcessor; overrides?: MicCaptureOptionsOverrides }> = [
     { label: 'processed-selected-device', processor: createMicGate(identity) },
-    { label: 'raw-selected-device', overrides: { includeVoiceIsolation: false } },
-    { label: 'raw-default-device', overrides: { includeDeviceId: false, includeVoiceIsolation: false } },
+    { label: 'raw-selected-device' },
+    { label: 'raw-default-device', overrides: { includeDeviceId: false } },
   ];
 
   let lastError: unknown = null;

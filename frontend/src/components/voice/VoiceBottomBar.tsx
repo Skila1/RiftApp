@@ -313,7 +313,7 @@ export default function VoiceBottomBar() {
               <SoundboardControlIcon size={20} />
             </VoiceControlBtn>
             <VoiceControlBtn
-              title={voiceNoiseSuppressionEnabled ? 'Disable Noise Suppression' : 'Enable Noise Suppression'}
+              title={voiceNoiseSuppressionEnabled ? 'Disable RNNoise' : 'Enable RNNoise'}
               onClick={() => void voiceToggleNoiseSuppression()}
               active={voiceNoiseSuppressionEnabled}
             >
