@@ -54,28 +54,44 @@ type UploadHandler struct {
 }
 
 func NewUploadHandler(cfg *config.Config, db *pgxpool.Pool) (*UploadHandler, error) {
+	if strings.TrimSpace(cfg.S3Endpoint) == "" {
+		return nil, fmt.Errorf("S3_ENDPOINT is required (e.g. Cloudflare R2 https://<account>.r2.cloudflarestorage.com)")
+	}
+	if strings.TrimSpace(cfg.S3Bucket) == "" {
+		return nil, fmt.Errorf("S3_BUCKET is required")
+	}
+	if strings.TrimSpace(cfg.S3AccessKey) == "" || strings.TrimSpace(cfg.S3SecretKey) == "" {
+		return nil, fmt.Errorf("S3_ACCESS_KEY and S3_SECRET_KEY are required")
+	}
+
 	endpoint := strings.TrimPrefix(strings.TrimPrefix(cfg.S3Endpoint, "http://"), "https://")
 	useSSL := strings.HasPrefix(cfg.S3Endpoint, "https://")
 
-	client, err := minio.New(endpoint, &minio.Options{
+	opts := minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.S3AccessKey, cfg.S3SecretKey, ""),
 		Secure: useSSL,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("minio client: %w", err)
+	}
+	if r := strings.TrimSpace(cfg.S3Region); r != "" {
+		opts.Region = r
 	}
 
-	// Ensure bucket exists
+	client, err := minio.New(endpoint, &opts)
+	if err != nil {
+		return nil, fmt.Errorf("s3 client: %w", err)
+	}
+
 	ctx := context.Background()
 	exists, err := client.BucketExists(ctx, cfg.S3Bucket)
 	if err != nil {
-		return nil, fmt.Errorf("minio bucket check: %w", err)
+		return nil, fmt.Errorf("s3 bucket check: %w", err)
 	}
 	if !exists {
-		if err := client.MakeBucket(ctx, cfg.S3Bucket, minio.MakeBucketOptions{}); err != nil {
-			return nil, fmt.Errorf("minio make bucket: %w", err)
+		if !cfg.S3ManageBucket {
+			return nil, fmt.Errorf("s3 bucket %q does not exist; create it or set S3_MANAGE_BUCKET=true", cfg.S3Bucket)
 		}
-		// Set bucket policy to public read
+		if err := client.MakeBucket(ctx, cfg.S3Bucket, minio.MakeBucketOptions{}); err != nil {
+			return nil, fmt.Errorf("s3 make bucket: %w", err)
+		}
 		policy := fmt.Sprintf(`{
 			"Version":"2012-10-17",
 			"Statement":[{
@@ -86,7 +102,7 @@ func NewUploadHandler(cfg *config.Config, db *pgxpool.Pool) (*UploadHandler, err
 			}]
 		}`, cfg.S3Bucket)
 		if err := client.SetBucketPolicy(ctx, cfg.S3Bucket, policy); err != nil {
-			return nil, fmt.Errorf("minio set policy: %w", err)
+			log.Printf("upload init: set bucket public read policy skipped: %v", err)
 		}
 	}
 
@@ -178,7 +194,7 @@ func (h *UploadHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ServeObject streams a file from MinIO using authenticated access.
+// ServeObject streams a file from S3/R2 using authenticated access.
 // Registered for GET /s3/* and GET /api/s3/* — the chi wildcard gives
 // the "{bucket}/{object}" portion of the path.
 func (h *UploadHandler) ServeObject(w http.ResponseWriter, r *http.Request) {
@@ -226,7 +242,7 @@ func (h *UploadHandler) ServeObject(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, obj)
 }
 
-// DeleteByURL removes an object from MinIO given a public URL like "/s3/{bucket}/{objectName}".
+// DeleteByURL removes an object from S3/R2 given a public URL like "/s3/{bucket}/{objectName}".
 // Implements service.FileDeleter. Best-effort: logs errors but never returns them,
 // so DB deletes are never rolled back because of a missing/already-deleted file.
 func (h *UploadHandler) DeleteByURL(ctx context.Context, fileURL string) error {

@@ -1,7 +1,6 @@
-// Rewrites S3/MinIO storage URLs so they load through the /api proxy.
+// Rewrites S3/R2 storage URLs so they load through the /api proxy.
 // Relative /s3/{bucket}/… paths are ALWAYS rewritten to /api/s3/… because the
-// browser never has direct access to MinIO — requests must go through the
-// Cloudflare Pages function (or Vite/nginx proxy in dev).
+// browser uses the API (or Cloudflare Pages functions) to reach private object storage.
 // External URLs (Discord CDN, etc.) pass through unchanged.
 export function publicAssetUrl(raw: string | undefined | null): string {
   if (raw == null || raw === '') return '';
@@ -35,7 +34,7 @@ export function publicAssetUrl(raw: string | undefined | null): string {
       return pathAndQuery;
     }
 
-    // Internal storage host (MinIO, localhost, staging-backend, etc.)
+    // Internal storage host (legacy MinIO hostname, localhost, staging-backend, etc.)
     // Rewrite to go through the API proxy as well.
     if (isInternalStorageHost(u)) {
       return `/api/s3${pathAndQuery}`;

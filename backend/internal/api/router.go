@@ -67,8 +67,8 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 
 	r.Get("/ws", wsH.Handle)
 
-	// Authenticated S3/MinIO file serving (avatars, attachments).
-	// Uses the MinIO client with credentials instead of an anonymous reverse proxy.
+	// Authenticated S3/R2 file serving (avatars, attachments).
+	// Uses the S3 API client with credentials instead of an anonymous reverse proxy.
 	if deps.UploadHandler != nil {
 		r.Get("/s3/*", deps.UploadHandler.ServeObject)
 		r.Get("/api/s3/*", deps.UploadHandler.ServeObject)

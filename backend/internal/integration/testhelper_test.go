@@ -64,7 +64,7 @@ func runPostgresContainer(ctx context.Context) (_ *postgres.PostgresContainer, e
 	}()
 
 	return postgres.Run(ctx,
-		"postgres:16-alpine",
+		"postgres:17-alpine",
 		postgres.WithDatabase("riftapp_test"),
 		postgres.WithUsername("test"),
 		postgres.WithPassword("test"),

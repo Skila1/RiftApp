@@ -79,7 +79,7 @@ func main() {
 	friendSvc := service.NewFriendService(friendRepo, blockRepo, wsHub)
 	rankSvc := service.NewRankService(rankRepo, hubRepo)
 
-	// Upload handler (MinIO/S3)
+	// Upload handler (S3-compatible storage, e.g. Cloudflare R2)
 	uploadH, err := api.NewUploadHandler(cfg, db)
 	if err != nil {
 		log.Printf("warning: file uploads disabled: %v", err)

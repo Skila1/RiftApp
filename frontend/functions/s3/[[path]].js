@@ -3,7 +3,7 @@
  *
  * This catches any requests for S3 objects that arrive without the /api prefix
  * (e.g. old bookmarks, direct links, URLs that bypassed publicAssetUrl).
- * The backend serves files from MinIO on both /s3/* and /api/s3/*.
+ * The backend serves files from S3/R2 on both /s3/* and /api/s3/*.
  *
  * @param {{ request: Request; env: { BACKEND_URL?: string } }} context
  */
