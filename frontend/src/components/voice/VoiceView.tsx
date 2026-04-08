@@ -4,7 +4,7 @@ import { usePresenceStore } from '../../stores/presenceStore';
 import { useHubStore } from '../../stores/hubStore';
 import { useAppSettingsStore } from '../../stores/appSettingsStore';
 import { useStreamStore } from '../../stores/streamStore';
-import { useVoiceStore, type VoiceParticipant, type ScreenShareFps, type ScreenShareResolution } from '../../stores/voiceStore';
+import { useVoiceStore, type VoiceParticipant, type ScreenShareFps, type ScreenShareNotice, type ScreenShareResolution } from '../../stores/voiceStore';
 import { useVoiceChannelUiStore } from '../../stores/voiceChannelUiStore';
 import type { User } from '../../types';
 import VoiceParticipantContextMenu from './VoiceParticipantContextMenu';
@@ -82,9 +82,42 @@ function useAttachedVideoTrack(track: Track | undefined, enabled = true) {
 
 const ActivitiesIcon = activityIcons.game;
 
+function VoiceNoticeBanner({
+  notice,
+  onDismiss,
+}: {
+  notice: ScreenShareNotice;
+  onDismiss: () => void;
+}) {
+  return (
+    <div
+      className={`mx-auto flex w-full max-w-[440px] items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left text-[13px] shadow-[0_12px_36px_rgba(0,0,0,0.24)] ${
+        notice.tone === 'error'
+          ? 'border-[#f23f42]/25 bg-[#2f1115]/92 text-[#ffb3b5]'
+          : 'border-[#5865f2]/25 bg-[#101630]/92 text-[#cdd3ff]'
+      }`}
+    >
+      <span className="min-w-0 flex-1">{notice.message}</span>
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-riftapp-text-muted transition-colors hover:bg-white/[0.06] hover:text-white"
+        aria-label="Dismiss voice notice"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 export default function VoiceView() {
   const connected = useVoiceStore((s) => s.connected);
   const connecting = useVoiceStore((s) => s.connecting);
+  const voiceNotice = useVoiceStore((s) => s.screenShareNotice);
+  const dismissVoiceNotice = useVoiceStore((s) => s.dismissScreenShareNotice);
   const openSettings = useAppSettingsStore((s) => s.openSettings);
   const participants = useVoiceStore((s) => s.participants);
   const isMuted = useVoiceStore((s) => s.isMuted);
@@ -261,12 +294,17 @@ export default function VoiceView() {
       {/* Stage + grid */}
       <div ref={stageRef} className="flex-1 flex flex-col min-h-0 relative bg-[#000000]">
         {!connected && !connecting ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center animate-fade-in">
-              <div className="w-20 h-20 rounded-full bg-white/[0.04] flex items-center justify-center mx-auto mb-4">
-                <VoiceChannelIcon size={36} className="text-[#949ba4]" />
+          <div className="flex-1 flex items-center justify-center px-4">
+            <div className="w-full max-w-[440px] space-y-4 text-center animate-fade-in">
+              {voiceNotice && (
+                <VoiceNoticeBanner notice={voiceNotice} onDismiss={dismissVoiceNotice} />
+              )}
+              <div>
+                <div className="w-20 h-20 rounded-full bg-white/[0.04] flex items-center justify-center mx-auto mb-4">
+                  <VoiceChannelIcon size={36} className="text-[#949ba4]" />
+                </div>
+                <p className="text-[#949ba4] text-sm">Not connected to this voice channel</p>
               </div>
-              <p className="text-[#949ba4] text-sm">Not connected to this voice channel</p>
             </div>
           </div>
         ) : connecting ? (

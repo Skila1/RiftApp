@@ -47,7 +47,7 @@ export type CameraBackgroundAsset = {
 
 type VoiceDeviceKind = 'audioinput' | 'audiooutput' | 'videoinput';
 
-type ScreenShareNotice = {
+export type ScreenShareNotice = {
   tone: 'info' | 'error';
   message: string;
 };
@@ -538,6 +538,7 @@ function cameraCaptureOptions(
 
 let roomRef: Room | null = null;
 let joiningLock = false;
+let joinCancellationRequested = false;
 let pttModeRef = false;
 let wasMutedBeforeDeafen = false;
 let screenShareNoticeTimer: number | null = null;
@@ -953,6 +954,52 @@ function microphoneFailureNotice(err: unknown): ScreenShareNotice {
   return { tone: 'error', message: 'Unable to start microphone. Connected muted.' };
 }
 
+function voiceJoinFailureNotice(err: unknown): ScreenShareNotice {
+  const name = err instanceof DOMException ? err.name : err instanceof Error ? err.name : '';
+  const rawMessage = err instanceof Error ? err.message.trim() : '';
+  const message = rawMessage.toLowerCase();
+
+  if (
+    name === 'NotAllowedError' ||
+    message.includes('permission denied') ||
+    message.includes('permission')
+  ) {
+    return { tone: 'error', message: 'Microphone permission denied for the desktop app.' };
+  }
+
+  if (
+    name === 'NotFoundError' ||
+    message.includes('device not found') ||
+    message.includes('no microphone')
+  ) {
+    return { tone: 'error', message: 'No microphone was found for the desktop app.' };
+  }
+
+  if (
+    message.includes('failed to fetch') ||
+    message.includes('network error') ||
+    message.includes('networkerror')
+  ) {
+    return {
+      tone: 'error',
+      message: 'Unable to reach the voice service. Check your connection, firewall, or VPN and try again.',
+    };
+  }
+
+  if (message.includes('timed out') || message.includes('timeout')) {
+    return {
+      tone: 'error',
+      message: 'Voice connection timed out. Check your connection, firewall, or VPN and try again.',
+    };
+  }
+
+  if (rawMessage.length > 0 && rawMessage.toLowerCase() !== 'request failed') {
+    return { tone: 'error', message: rawMessage };
+  }
+
+  return { tone: 'error', message: 'Unable to join voice channel.' };
+}
+
 async function disableMicrophoneAfterFailedAttempt(room: Room) {
   stopMicProcessing({ broadcast: false, identity: room.localParticipant.identity });
 
@@ -1063,7 +1110,7 @@ function setScreenShareNotice(notice: ScreenShareNotice | null) {
     screenShareNoticeTimer = window.setTimeout(() => {
       useVoiceStore.setState({ screenShareNotice: null });
       screenShareNoticeTimer = null;
-    }, 3200);
+    }, notice.tone === 'error' ? 5200 : 3200);
   }
 }
 
@@ -1405,7 +1452,9 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   join: async (sid) => {
     if (joiningLock) return;
     joiningLock = true;
+    joinCancellationRequested = false;
     useActiveSpeakerStore.getState().clearActiveSpeaker();
+    setScreenShareNotice(null);
 
     if (roomRef) {
       const old = roomRef;
@@ -1520,16 +1569,24 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
       wsSend('voice_state_update', { stream_id: sid, action: 'join' });
       playJoinSound();
     } catch (err) {
+      const cancelled = joinCancellationRequested;
       console.error('Failed to join voice channel:', err);
       if (roomRef) { roomRef.removeAllListeners(); roomRef.disconnect(); roomRef = null; }
       resetState();
+      if (!cancelled) {
+        setScreenShareNotice(voiceJoinFailureNotice(err));
+      }
     } finally {
       set({ connecting: false });
+      joinCancellationRequested = false;
       joiningLock = false;
     }
   },
 
   leave: async () => {
+    if (get().connecting) {
+      joinCancellationRequested = true;
+    }
     const room = roomRef;
     const sid = get().streamId;
     if (!room) { resetState(); return; }

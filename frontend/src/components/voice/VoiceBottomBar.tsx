@@ -8,6 +8,7 @@ import { useAppSettingsStore } from '../../stores/appSettingsStore';
 import { useHubStore } from '../../stores/hubStore';
 import { useStreamStore } from '../../stores/streamStore';
 import { useVoiceChannelUiStore } from '../../stores/voiceChannelUiStore';
+import type { ScreenShareNotice } from '../../stores/voiceStore';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import StatusDot, { statusLabel } from '../shared/StatusDot';
 import SoundboardPanel from './SoundboardPanel';
@@ -152,6 +153,39 @@ function VoiceControlBtn({
   );
 }
 
+function VoiceNoticeBanner({
+  notice,
+  onDismiss,
+  className,
+}: {
+  notice: ScreenShareNotice;
+  onDismiss: () => void;
+  className: string;
+}) {
+  return (
+    <div
+      className={`${className} flex items-center justify-between gap-2 rounded-lg border px-3 py-1.5 text-[12px] ${
+        notice.tone === 'error'
+          ? 'border-[#f23f42]/30 bg-[#f23f42]/10 text-[#ffb3b5]'
+          : 'border-[#5865f2]/30 bg-[#5865f2]/10 text-[#cdd3ff]'
+      }`}
+    >
+      <span className="truncate">{notice.message}</span>
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="flex-shrink-0 text-riftapp-text-muted transition-colors hover:text-white"
+        aria-label="Dismiss"
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 /* ── Main bottom bar ── */
 
 export default function VoiceBottomBar() {
@@ -255,30 +289,6 @@ export default function VoiceBottomBar() {
             </VoiceControlBtn>
           </div>
 
-          {/* Screen share notice */}
-          {voiceScreenShareNotice && (
-            <div
-              className={`mx-2 mt-0.5 mb-1 flex items-center justify-between gap-2 rounded-lg border px-3 py-1.5 text-[12px] ${
-                voiceScreenShareNotice.tone === 'error'
-                  ? 'border-[#f23f42]/30 bg-[#f23f42]/10 text-[#ffb3b5]'
-                  : 'border-[#5865f2]/30 bg-[#5865f2]/10 text-[#cdd3ff]'
-              }`}
-            >
-              <span className="truncate">{voiceScreenShareNotice.message}</span>
-              <button
-                type="button"
-                onClick={voiceDismissScreenShareNotice}
-                className="flex-shrink-0 text-riftapp-text-muted transition-colors hover:text-white"
-                aria-label="Dismiss"
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-          )}
-
           {/* Voice control buttons row */}
           <div className="flex items-center justify-center gap-1 px-2 pb-2">
             <VoiceControlBtn
@@ -328,6 +338,14 @@ export default function VoiceBottomBar() {
             </div>
           )}
         </>
+      )}
+
+      {voiceScreenShareNotice && (
+        <VoiceNoticeBanner
+          notice={voiceScreenShareNotice}
+          onDismiss={voiceDismissScreenShareNotice}
+          className={inVoice ? 'mx-2 mt-0.5 mb-1' : 'mx-2 mt-1 mb-1'}
+        />
       )}
 
       {/* ── User Bar (always visible) ── */}

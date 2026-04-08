@@ -6,6 +6,7 @@ import {
   nativeImage,
   ipcMain,
   shell,
+  session,
 } from "electron";
 import os from "os";
 import path from "path";
@@ -15,6 +16,18 @@ import { autoUpdater } from "electron-updater";
 const VITE_DEV_URL = "http://localhost:5173";
 const PRODUCTION_WEB_APP_URL = "https://riftapp.io/login";
 const UPDATE_CHECK_INTERVAL_MS = 3 * 60 * 1000;
+const TRUSTED_RENDERER_ORIGINS = new Set<string>([
+  new URL(VITE_DEV_URL).origin,
+  new URL(PRODUCTION_WEB_APP_URL).origin,
+  "https://www.riftapp.io",
+]);
+const ALLOWED_RENDERER_PERMISSIONS = new Set<string>([
+  "media",
+  "display-capture",
+  "speaker-selection",
+  "fullscreen",
+  "clipboard-sanitized-write",
+]);
 
 type DesktopUpdateState = "idle" | "checking" | "downloading" | "ready" | "up-to-date" | "error";
 
@@ -61,6 +74,65 @@ function getPreloadPath(): string {
 
 function getAppIcon(): Electron.NativeImage {
   return nativeImage.createFromPath(getAssetPath("icon.png"));
+}
+
+function isTrustedRendererOrigin(rawUrl: string | null | undefined): boolean {
+  if (!rawUrl) return false;
+
+  try {
+    return TRUSTED_RENDERER_ORIGINS.has(new URL(rawUrl).origin);
+  } catch {
+    return false;
+  }
+}
+
+function shouldAllowRendererPermission(
+  permission: string,
+  requestingOrigin: string | null | undefined,
+  details?: { requestingUrl?: string; securityOrigin?: string },
+): boolean {
+  if (!ALLOWED_RENDERER_PERMISSIONS.has(permission)) {
+    return false;
+  }
+
+  return isTrustedRendererOrigin(requestingOrigin)
+    || isTrustedRendererOrigin(details?.requestingUrl)
+    || isTrustedRendererOrigin(details?.securityOrigin);
+}
+
+function getPermissionRequestOrigin(
+  details?: { requestingUrl?: string; securityOrigin?: string },
+): string | undefined {
+  return details?.requestingUrl ?? details?.securityOrigin;
+}
+
+function configureRendererPermissions(): void {
+  const ses = session.defaultSession;
+
+  ses.setPermissionCheckHandler((_webContents, permission, requestingOrigin, details) => {
+    return shouldAllowRendererPermission(
+      permission,
+      requestingOrigin,
+      details as { requestingUrl?: string; securityOrigin?: string } | undefined,
+    );
+  });
+
+  ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const permissionDetails = details as { requestingUrl?: string; securityOrigin?: string } | undefined;
+    const allowed = shouldAllowRendererPermission(
+      permission,
+      webContents.getURL(),
+      permissionDetails,
+    );
+
+    if (!allowed && (permission === "media" || permission === "display-capture" || permission === "speaker-selection")) {
+      console.warn(
+        `[Rift permissions] Denied ${permission} for ${getPermissionRequestOrigin(permissionDetails) ?? webContents.getURL()}`,
+      );
+    }
+
+    callback(allowed);
+  });
 }
 
 function clearUpdateStatusResetTimer(): void {
@@ -577,6 +649,7 @@ if (!gotLock) {
       Menu.setApplicationMenu(null);
     }
 
+  configureRendererPermissions();
     registerIpc();
 
     if (isDev) {
