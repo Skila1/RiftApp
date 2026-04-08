@@ -28,6 +28,14 @@ const VOICE_SETTINGS_STORAGE_KEY = 'riftapp-voice-settings-v2';
 export type ScreenShareKind = 'screen' | 'window' | 'tab';
 export type ScreenShareFps = 15 | 30 | 60;
 export type ScreenShareResolution = '480p' | '720p' | '1080p' | '1440p' | 'source';
+export type CameraBackgroundMode = 'none' | 'blur' | 'custom';
+export type CameraBackgroundAsset = {
+  kind: 'image' | 'gif' | 'video';
+  url: string;
+  previewUrl?: string;
+  label?: string;
+  source: 'upload' | 'tenor';
+};
 
 type VoiceDeviceKind = 'audioinput' | 'audiooutput' | 'videoinput';
 
@@ -58,6 +66,10 @@ type VoiceSettingsSnapshot = {
   automaticInputSensitivity: boolean;
   manualInputSensitivity: number;
   noiseSuppressionEnabled: boolean;
+  echoCancellationEnabled: boolean;
+  pttMode: boolean;
+  cameraBackgroundMode: CameraBackgroundMode;
+  cameraBackgroundAsset: CameraBackgroundAsset | null;
 };
 
 const DEFAULT_VOICE_SETTINGS: VoiceSettingsSnapshot = {
@@ -67,6 +79,10 @@ const DEFAULT_VOICE_SETTINGS: VoiceSettingsSnapshot = {
   automaticInputSensitivity: true,
   manualInputSensitivity: DEFAULT_MANUAL_MIC_THRESHOLD,
   noiseSuppressionEnabled: true,
+  echoCancellationEnabled: true,
+  pttMode: false,
+  cameraBackgroundMode: 'none',
+  cameraBackgroundAsset: null,
 };
 
 type MicCaptureOptionsOverrides = {
@@ -120,6 +136,36 @@ function loadVoiceSettings(): VoiceSettingsSnapshot {
           : DEFAULT_MANUAL_MIC_THRESHOLD,
       ),
       noiseSuppressionEnabled: parsed.noiseSuppressionEnabled !== false,
+      echoCancellationEnabled: parsed.echoCancellationEnabled !== false,
+      pttMode: parsed.pttMode === true,
+      cameraBackgroundMode:
+        parsed.cameraBackgroundMode === 'blur' || parsed.cameraBackgroundMode === 'custom'
+          ? parsed.cameraBackgroundMode
+          : 'none',
+      cameraBackgroundAsset:
+        parsed.cameraBackgroundAsset
+        && typeof parsed.cameraBackgroundAsset === 'object'
+        && typeof parsed.cameraBackgroundAsset.url === 'string'
+        && typeof parsed.cameraBackgroundAsset.kind === 'string'
+          ? {
+              kind:
+                parsed.cameraBackgroundAsset.kind === 'video'
+                  ? 'video'
+                  : parsed.cameraBackgroundAsset.kind === 'gif'
+                    ? 'gif'
+                    : 'image',
+              url: parsed.cameraBackgroundAsset.url,
+              previewUrl:
+                typeof parsed.cameraBackgroundAsset.previewUrl === 'string'
+                  ? parsed.cameraBackgroundAsset.previewUrl
+                  : undefined,
+              label:
+                typeof parsed.cameraBackgroundAsset.label === 'string'
+                  ? parsed.cameraBackgroundAsset.label
+                  : undefined,
+              source: parsed.cameraBackgroundAsset.source === 'tenor' ? 'tenor' : 'upload',
+            }
+          : null,
     };
   } catch {
     return DEFAULT_VOICE_SETTINGS;
@@ -201,6 +247,7 @@ interface VoiceStore {
   automaticInputSensitivity: boolean;
   manualInputSensitivity: number;
   noiseSuppressionEnabled: boolean;
+  echoCancellationEnabled: boolean;
   mediaDevices: VoiceMediaDevices;
   connected: boolean;
   connecting: boolean;
@@ -215,6 +262,8 @@ interface VoiceStore {
   isScreenSharing: boolean;
   pttActive: boolean;
   pttMode: boolean;
+  cameraBackgroundMode: CameraBackgroundMode;
+  cameraBackgroundAsset: CameraBackgroundAsset | null;
   /** 0–1 per remote identity; used for HTML audio elements tagged with data-riftapp-voice-id */
   participantVolumes: Record<string, number>;
   /** Mutes all remote voice output without changing per-user slider values */
@@ -257,7 +306,11 @@ interface VoiceStore {
   setCameraDeviceId: (deviceId: string | null) => Promise<void>;
   setAutomaticInputSensitivity: (enabled: boolean) => void;
   setManualInputSensitivity: (threshold: number) => void;
+  setEchoCancellationEnabled: (enabled: boolean) => Promise<void>;
   setNoiseSuppressionEnabled: (enabled: boolean) => Promise<void>;
+  setPTTMode: (enabled: boolean) => void;
+  setCameraBackgroundMode: (mode: CameraBackgroundMode) => void;
+  setCameraBackgroundAsset: (asset: CameraBackgroundAsset | null) => void;
   toggleNoiseSuppression: () => Promise<void>;
   moveToStream: (streamId: string) => Promise<void>;
   applySpeakingSignal: (identity: string, speaking: boolean) => void;
@@ -268,12 +321,12 @@ interface VoiceStore {
 const CONNECT_TIMEOUT_MS = 15_000;
 
 function micAudioCaptureOptions(
-  state: Pick<VoiceStore, 'inputDeviceId' | 'noiseSuppressionEnabled'>,
+  state: Pick<VoiceStore, 'inputDeviceId' | 'noiseSuppressionEnabled' | 'echoCancellationEnabled'>,
   processor?: MicNoiseGateProcessor,
   overrides?: MicCaptureOptionsOverrides,
 ): AudioCaptureOptions {
   const base: AudioCaptureOptions = {
-    echoCancellation: true,
+    echoCancellation: state.echoCancellationEnabled,
     autoGainControl: true,
     noiseSuppression: false,
     channelCount: 1,
@@ -567,6 +620,10 @@ function voiceSettingsSnapshot(
     | 'automaticInputSensitivity'
     | 'manualInputSensitivity'
     | 'noiseSuppressionEnabled'
+    | 'echoCancellationEnabled'
+    | 'pttMode'
+    | 'cameraBackgroundMode'
+    | 'cameraBackgroundAsset'
   >,
 ): VoiceSettingsSnapshot {
   return {
@@ -576,6 +633,10 @@ function voiceSettingsSnapshot(
     automaticInputSensitivity: state.automaticInputSensitivity,
     manualInputSensitivity: clampManualInputSensitivity(state.manualInputSensitivity),
     noiseSuppressionEnabled: state.noiseSuppressionEnabled,
+    echoCancellationEnabled: state.echoCancellationEnabled,
+    pttMode: state.pttMode,
+    cameraBackgroundMode: state.cameraBackgroundMode,
+    cameraBackgroundAsset: state.cameraBackgroundAsset,
   };
 }
 
@@ -588,6 +649,10 @@ function persistVoiceSettingsFromStore(
     | 'automaticInputSensitivity'
     | 'manualInputSensitivity'
     | 'noiseSuppressionEnabled'
+    | 'echoCancellationEnabled'
+    | 'pttMode'
+    | 'cameraBackgroundMode'
+    | 'cameraBackgroundAsset'
   >,
 ) {
   persistVoiceSettings(voiceSettingsSnapshot(state));
@@ -1079,6 +1144,7 @@ async function destroyRoom(room: Room) {
 }
 
 const initialVoiceSettings = loadVoiceSettings();
+pttModeRef = initialVoiceSettings.pttMode;
 
 export const useVoiceStore = create<VoiceStore>((set, get) => ({
   inputDeviceId: initialVoiceSettings.inputDeviceId,
@@ -1087,6 +1153,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   automaticInputSensitivity: initialVoiceSettings.automaticInputSensitivity,
   manualInputSensitivity: initialVoiceSettings.manualInputSensitivity,
   noiseSuppressionEnabled: initialVoiceSettings.noiseSuppressionEnabled,
+  echoCancellationEnabled: initialVoiceSettings.echoCancellationEnabled,
   mediaDevices: emptyVoiceMediaDevices(),
   connected: false,
   connecting: false,
@@ -1100,7 +1167,9 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   isCameraOn: false,
   isScreenSharing: false,
   pttActive: false,
-  pttMode: false,
+  pttMode: initialVoiceSettings.pttMode,
+  cameraBackgroundMode: initialVoiceSettings.cameraBackgroundMode,
+  cameraBackgroundAsset: initialVoiceSettings.cameraBackgroundAsset,
   participantVolumes: {},
   voiceOutputMuted: false,
   streamVolumes: {},
@@ -1380,25 +1449,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   },
 
   togglePTT: () => {
-    const next = !get().pttMode;
-    pttModeRef = next;
-    if (roomRef && roomRef.state === ConnectionState.Connected) {
-      const room = roomRef;
-      if (next) {
-        void room.localParticipant.setMicrophoneEnabled(false);
-        stopMicProcessing({ broadcast: true, identity: room.localParticipant.identity });
-        set({ isMuted: true, pttActive: false, pttMode: next });
-      } else {
-        set({ pttMode: next });
-        void enableLocalMicrophone(room).then((microphoneEnabled) => {
-          set({ isMuted: !microphoneEnabled });
-          syncParticipants();
-        });
-      }
-      syncParticipants();
-    } else {
-      set({ pttMode: next });
-    }
+    get().setPTTMode(!get().pttMode);
   },
 
   setParticipantVolume: (identity, volume) => {
@@ -1538,6 +1589,24 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     updateMicGateSettings();
   },
 
+  setEchoCancellationEnabled: async (enabled) => {
+    const current = get();
+    if (current.echoCancellationEnabled === enabled) {
+      return;
+    }
+
+    const nextState = { echoCancellationEnabled: enabled };
+    set(nextState);
+    persistVoiceSettingsFromStore({ ...current, ...nextState });
+
+    const room = roomRef;
+    if (room?.state === ConnectionState.Connected && room.localParticipant.isMicrophoneEnabled) {
+      const microphoneEnabled = await restartLocalMicrophone(room);
+      set({ isMuted: !microphoneEnabled });
+      syncParticipants();
+    }
+  },
+
   setNoiseSuppressionEnabled: async (enabled) => {
     const current = get();
     if (current.noiseSuppressionEnabled === enabled) {
@@ -1558,6 +1627,57 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
 
   toggleNoiseSuppression: async () => {
     await get().setNoiseSuppressionEnabled(!get().noiseSuppressionEnabled);
+  },
+
+  setPTTMode: (enabled) => {
+    const current = get();
+    if (current.pttMode === enabled) {
+      return;
+    }
+
+    pttModeRef = enabled;
+    const nextState = { pttMode: enabled };
+    set(nextState);
+    persistVoiceSettingsFromStore({ ...current, ...nextState });
+
+    if (roomRef && roomRef.state === ConnectionState.Connected) {
+      const room = roomRef;
+      if (enabled) {
+        void room.localParticipant.setMicrophoneEnabled(false);
+        stopMicProcessing({ broadcast: true, identity: room.localParticipant.identity });
+        set({ isMuted: true, pttActive: false });
+      } else {
+        void enableLocalMicrophone(room).then((microphoneEnabled) => {
+          set({ isMuted: !microphoneEnabled });
+          syncParticipants();
+        });
+      }
+      syncParticipants();
+    }
+  },
+
+  setCameraBackgroundMode: (mode) => {
+    const current = get();
+    if (current.cameraBackgroundMode === mode) {
+      return;
+    }
+
+    const nextState = {
+      cameraBackgroundMode: mode,
+      cameraBackgroundAsset: current.cameraBackgroundAsset,
+    };
+    set(nextState);
+    persistVoiceSettingsFromStore({ ...current, ...nextState });
+  },
+
+  setCameraBackgroundAsset: (asset) => {
+    const current = get();
+    const nextState = {
+      cameraBackgroundAsset: asset,
+      cameraBackgroundMode: asset ? 'custom' as CameraBackgroundMode : 'none' as CameraBackgroundMode,
+    };
+    set(nextState);
+    persistVoiceSettingsFromStore({ ...current, ...nextState });
   },
 
   moveToStream: async (sid) => {

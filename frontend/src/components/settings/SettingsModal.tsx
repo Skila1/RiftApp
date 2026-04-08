@@ -1,11 +1,16 @@
-import { useCallback, useEffect, useRef, useState, memo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import { useAuthStore } from '../../stores/auth';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useWsSend } from '../../hooks/useWebSocket';
 import { api } from '../../api/client';
 import { statusColor, statusLabel } from '../shared/StatusDot';
 import ModalOverlay from '../shared/ModalOverlay';
-import { useVoiceStore, type VoiceMediaDevice } from '../../stores/voiceStore';
+import {
+  useVoiceStore,
+  type CameraBackgroundAsset,
+  type CameraBackgroundMode,
+  type VoiceMediaDevice,
+} from '../../stores/voiceStore';
 import { useAppSettingsStore, type SettingsOverlayTab } from '../../stores/appSettingsStore';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { stripAssetVersion } from '../../utils/entityAssets';
@@ -313,7 +318,7 @@ function DeviceSelect({
   disabled = false,
 }: {
   label: string;
-  description: string;
+  description?: string;
   devices: VoiceMediaDevice[];
   value: string | null;
   onChange: (deviceId: string | null) => void | Promise<void>;
@@ -327,7 +332,7 @@ function DeviceSelect({
           value={value ?? ''}
           onChange={(event) => void onChange(event.target.value || null)}
           disabled={disabled}
-          className="settings-input w-full py-2 text-[13px] cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full cursor-pointer rounded-lg border border-white/10 bg-[#111214] px-3 py-2.5 text-[13px] text-white outline-none transition-colors hover:border-white/20 focus:border-[#5865f2] disabled:cursor-not-allowed disabled:opacity-60"
         >
           <option value="">{systemDefaultLabel(kind)}</option>
           {devices.map((device) => (
@@ -336,7 +341,9 @@ function DeviceSelect({
             </option>
           ))}
         </select>
-        <p className="text-[12px] leading-snug text-riftapp-text-dim">{description}</p>
+        {description ? (
+          <p className="text-[12px] leading-snug text-[#9ca3af]">{description}</p>
+        ) : null}
       </div>
     </Field>
   );
@@ -357,18 +364,18 @@ function SettingToggle({
     <button
       type="button"
       onClick={onToggle}
-      className="w-full rounded-xl border border-riftapp-border/40 bg-riftapp-panel/40 px-4 py-3 text-left transition-colors hover:bg-riftapp-panel/60"
+      className="w-full rounded-xl border border-white/10 bg-[#111214] px-4 py-3 text-left transition-colors hover:border-white/15 hover:bg-[#16181c]"
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-riftapp-text">{label}</p>
-          <p className="mt-1 text-[13px] leading-snug text-riftapp-text-muted">{description}</p>
+          <p className="text-sm font-semibold text-white">{label}</p>
+          <p className="mt-1 text-[13px] leading-snug text-[#9ca3af]">{description}</p>
         </div>
         <span
           className={`mt-0.5 inline-flex h-6 w-11 items-center rounded-full border transition-colors ${
             enabled
-              ? 'bg-riftapp-accent border-riftapp-accent'
-              : 'bg-riftapp-bg/70 border-riftapp-border/60'
+              ? 'border-[#5865f2] bg-[#5865f2]'
+              : 'border-white/12 bg-[#0b0c0e]'
           }`}
           aria-hidden="true"
         >
@@ -383,7 +390,404 @@ function SettingToggle({
   );
 }
 
-function CameraTestCard({ deviceId }: { deviceId: string | null }) {
+const TENOR_PUBLIC_KEY = 'LIVDSRZULELA';
+
+type VoiceInputProfile = 'voice-isolation' | 'studio' | 'custom';
+
+type TenorMediaVariant = {
+  url?: string;
+  preview?: string;
+};
+
+type TenorResult = {
+  id: string;
+  title?: string;
+  content_description?: string;
+  media?: Array<{
+    gif?: TenorMediaVariant;
+    tinygif?: TenorMediaVariant;
+    mediumgif?: TenorMediaVariant;
+  }>;
+};
+
+function backgroundPreviewUrl(asset: CameraBackgroundAsset | null) {
+  return publicAssetUrl(asset?.previewUrl ?? asset?.url ?? '');
+}
+
+function backgroundModeTitle(mode: CameraBackgroundMode, asset: CameraBackgroundAsset | null) {
+  if (mode === 'blur') {
+    return 'Blur';
+  }
+
+  if (mode === 'custom') {
+    return asset?.label?.trim() || 'Custom background';
+  }
+
+  return 'None';
+}
+
+function backgroundModeDescription(mode: CameraBackgroundMode, asset: CameraBackgroundAsset | null) {
+  if (mode === 'blur') {
+    return 'Keep the camera clean with a soft background blur.';
+  }
+
+  if (mode === 'custom') {
+    if (asset?.source === 'tenor') {
+      return 'Animated background selected from Tenor.';
+    }
+    return asset?.kind === 'video'
+      ? 'Uploaded motion background ready to use.'
+      : 'Uploaded custom background ready to use.';
+  }
+
+  return 'Use the raw camera feed with no background treatment.';
+}
+
+function detectVoiceInputProfile({
+  automaticInputSensitivity,
+  echoCancellationEnabled,
+  noiseSuppressionEnabled,
+  pttMode,
+}: {
+  automaticInputSensitivity: boolean;
+  echoCancellationEnabled: boolean;
+  noiseSuppressionEnabled: boolean;
+  pttMode: boolean;
+}): VoiceInputProfile {
+  if (noiseSuppressionEnabled && automaticInputSensitivity && echoCancellationEnabled && !pttMode) {
+    return 'voice-isolation';
+  }
+
+  if (!noiseSuppressionEnabled && automaticInputSensitivity && echoCancellationEnabled && !pttMode) {
+    return 'studio';
+  }
+
+  return 'custom';
+}
+
+function mapTenorResultToBackgroundAsset(result: TenorResult): CameraBackgroundAsset | null {
+  const media = result.media?.[0];
+  const gifUrl = media?.gif?.url ?? media?.mediumgif?.url;
+  if (!gifUrl) {
+    return null;
+  }
+
+  const previewUrl = media?.tinygif?.url ?? media?.tinygif?.preview ?? media?.gif?.preview ?? gifUrl;
+  return {
+    kind: 'gif',
+    url: gifUrl,
+    previewUrl,
+    label: result.content_description?.trim() || result.title?.trim() || 'Tenor GIF',
+    source: 'tenor',
+  };
+}
+
+function ChoiceCard({
+  title,
+  description,
+  selected,
+  onClick,
+  children,
+  badge,
+}: {
+  title: string;
+  description: string;
+  selected: boolean;
+  onClick: () => void;
+  children?: React.ReactNode;
+  badge?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group w-full rounded-xl border px-4 py-4 text-left transition-all ${
+        selected
+          ? 'border-[#5865f2] bg-[#1a1f2d] shadow-[0_0_0_1px_rgba(88,101,242,0.2)]'
+          : 'border-white/10 bg-[#111214] hover:border-white/20 hover:bg-[#17191d]'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold text-white">{title}</p>
+            {badge ? (
+              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#cbd0d8]">
+                {badge}
+              </span>
+            ) : null}
+          </div>
+          <p className="text-[13px] leading-snug text-[#9ca3af]">{description}</p>
+        </div>
+        <span
+          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+            selected ? 'border-[#5865f2] bg-[#5865f2]' : 'border-white/15 bg-transparent'
+          }`}
+          aria-hidden="true"
+        >
+          {selected ? <span className="h-2 w-2 rounded-full bg-white" /> : null}
+        </span>
+      </div>
+      {children ? <div className="mt-4">{children}</div> : null}
+    </button>
+  );
+}
+
+function BackgroundPickerModal({
+  isOpen,
+  currentAsset,
+  onClose,
+  onSelectAsset,
+}: {
+  isOpen: boolean;
+  currentAsset: CameraBackgroundAsset | null;
+  onClose: () => void;
+  onSelectAsset: (asset: CameraBackgroundAsset) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<CameraBackgroundAsset[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const gifInputRef = useRef<HTMLInputElement>(null);
+
+  const loadTenorResults = useCallback(async (nextQuery: string) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const trimmedQuery = nextQuery.trim();
+      const endpoint = trimmedQuery ? 'search' : 'trending';
+      const params = new URLSearchParams({
+        key: TENOR_PUBLIC_KEY,
+        limit: '24',
+        contentfilter: 'medium',
+        media_filter: 'minimal',
+      });
+      if (trimmedQuery) {
+        params.set('q', trimmedQuery);
+      }
+
+      const response = await fetch(`https://g.tenor.com/v1/${endpoint}?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error('Tenor results are temporarily unavailable.');
+      }
+
+      const payload = (await response.json()) as { results?: TenorResult[] };
+      const mapped = (payload.results ?? [])
+        .map(mapTenorResultToBackgroundAsset)
+        .filter((asset): asset is CameraBackgroundAsset => asset !== null);
+      setResults(mapped);
+    } catch (loadError) {
+      setResults([]);
+      setError(loadError instanceof Error ? loadError.message : 'Could not load GIF backgrounds.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      void loadTenorResults(query);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [isOpen, loadTenorResults, query]);
+
+  const handleUpload = useCallback(async (file: File) => {
+    setUploading(true);
+    setError(null);
+
+    try {
+      const upload = await api.uploadFile(file);
+      const kind = file.type.startsWith('video/')
+        ? 'video'
+        : file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif')
+          ? 'gif'
+          : 'image';
+
+      onSelectAsset({
+        kind,
+        url: upload.url,
+        previewUrl: upload.url,
+        label: file.name,
+        source: 'upload',
+      });
+      onClose();
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : 'Upload failed.');
+    } finally {
+      setUploading(false);
+      if (uploadInputRef.current) uploadInputRef.current.value = '';
+      if (gifInputRef.current) gifInputRef.current.value = '';
+    }
+  }, [onClose, onSelectAsset]);
+
+  return (
+    <ModalOverlay isOpen={isOpen} onClose={onClose} zIndex={340} className="p-4 sm:p-6">
+      <div className="mx-auto flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#101113] shadow-[0_24px_80px_rgba(0,0,0,0.5)]">
+        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#8e97a8]">Video Background</p>
+            <h3 className="mt-1 text-lg font-semibold text-white">Choose a custom background</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[13px] font-medium text-white transition-colors hover:bg-white/10"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="grid gap-6 px-5 py-5 lg:grid-cols-[260px,minmax(0,1fr)]">
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-white/10 bg-[#16181c] p-4">
+              <p className="text-sm font-semibold text-white">Upload your own</p>
+              <p className="mt-1 text-[13px] leading-snug text-[#9ca3af]">
+                Use a still image, a looping GIF, or a motion background clip.
+              </p>
+              <div className="mt-4 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => uploadInputRef.current?.click()}
+                  disabled={uploading}
+                  className="w-full rounded-lg border border-white/10 bg-[#111214] px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1a1d21] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {uploading ? 'Uploading…' : 'Upload Image or Video'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => gifInputRef.current?.click()}
+                  disabled={uploading}
+                  className="w-full rounded-lg border border-white/10 bg-[#111214] px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1a1d21] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {uploading ? 'Uploading…' : 'Upload GIF'}
+                </button>
+              </div>
+              <input
+                ref={uploadInputRef}
+                type="file"
+                accept="image/*,video/*"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) {
+                    void handleUpload(file);
+                  }
+                }}
+              />
+              <input
+                ref={gifInputRef}
+                type="file"
+                accept="image/gif"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) {
+                    void handleUpload(file);
+                  }
+                }}
+              />
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-[#16181c] p-4">
+              <p className="text-sm font-semibold text-white">Current selection</p>
+              <div className="mt-3 overflow-hidden rounded-xl border border-white/10 bg-[#0d0f12]">
+                {currentAsset ? (
+                  <img
+                    src={backgroundPreviewUrl(currentAsset)}
+                    alt={currentAsset.label ?? 'Current background'}
+                    className="aspect-[4/3] w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex aspect-[4/3] items-center justify-center bg-[radial-gradient(circle_at_top,#20252d,transparent_58%),linear-gradient(135deg,#16181c,#0f1012)] text-[13px] text-[#9ca3af]">
+                    No custom background selected
+                  </div>
+                )}
+              </div>
+              <p className="mt-3 text-[12px] leading-snug text-[#9ca3af]">
+                Powered by Tenor for GIF search.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-white">Browse GIF backgrounds</p>
+                <p className="mt-1 text-[13px] text-[#9ca3af]">Search Tenor or leave the box empty for trending picks.</p>
+              </div>
+              <div className="w-full sm:max-w-sm">
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search GIF backgrounds"
+                  className="w-full rounded-lg border border-white/10 bg-[#111214] px-3 py-2.5 text-[13px] text-white outline-none transition-colors placeholder:text-[#7f8795] focus:border-[#5865f2]"
+                />
+              </div>
+            </div>
+
+            {error ? <p className="text-[13px] text-[#f87171]">{error}</p> : null}
+            {loading ? <p className="text-[13px] text-[#9ca3af]">Loading GIF backgrounds…</p> : null}
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {results.map((asset) => {
+                const selected = currentAsset?.source === asset.source && currentAsset.url === asset.url;
+                return (
+                  <button
+                    key={`${asset.source}-${asset.url}`}
+                    type="button"
+                    onClick={() => {
+                      onSelectAsset(asset);
+                      onClose();
+                    }}
+                    className={`overflow-hidden rounded-xl border text-left transition-all ${
+                      selected
+                        ? 'border-[#5865f2] bg-[#1a1f2d] shadow-[0_0_0_1px_rgba(88,101,242,0.2)]'
+                        : 'border-white/10 bg-[#15171a] hover:border-white/20 hover:bg-[#1a1d21]'
+                    }`}
+                  >
+                    <img
+                      src={backgroundPreviewUrl(asset)}
+                      alt={asset.label ?? 'GIF background'}
+                      className="aspect-[4/3] w-full object-cover"
+                      loading="lazy"
+                    />
+                    <div className="px-3 py-2.5">
+                      <p className="truncate text-sm font-medium text-white">{asset.label ?? 'Tenor GIF'}</p>
+                      <p className="mt-1 text-[12px] text-[#9ca3af]">Use this GIF as your background</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {!loading && !error && results.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-white/10 bg-[#111214] px-4 py-8 text-center text-[13px] text-[#9ca3af]">
+                No GIFs matched that search.
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </ModalOverlay>
+  );
+}
+
+function CameraTestCard({
+  deviceId,
+  backgroundMode,
+  backgroundAsset,
+}: {
+  deviceId: string | null;
+  backgroundMode: CameraBackgroundMode;
+  backgroundAsset: CameraBackgroundAsset | null;
+}) {
   const [previewEnabled, setPreviewEnabled] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -443,40 +847,64 @@ function CameraTestCard({ deviceId }: { deviceId: string | null }) {
     stopPreview();
   }, [stopPreview]);
 
+  const previewUrl = backgroundPreviewUrl(backgroundAsset);
+
   return (
-    <div className="rounded-xl border border-riftapp-border/40 bg-riftapp-panel/40 p-4">
+    <div className="rounded-2xl border border-white/10 bg-[#16181c] p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-riftapp-text">Camera Test</p>
-          <p className="mt-1 text-[13px] leading-snug text-riftapp-text-muted">
-            Preview the selected camera before joining video.
+          <p className="text-sm font-semibold text-white">Test Camera</p>
+          <p className="mt-1 text-[13px] leading-snug text-[#9ca3af]">
+            Preview the selected camera and confirm the saved background mode before you go live.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            if (previewEnabled) {
-              stopPreview();
-            } else {
-              setPreviewEnabled(true);
-            }
-          }}
-          className="rounded-md border border-riftapp-border/50 bg-riftapp-bg/60 px-3 py-2 text-[13px] font-medium text-riftapp-text transition-colors hover:bg-riftapp-bg"
-        >
-          {previewEnabled ? 'Stop Camera Test' : 'Start Camera Test'}
-        </button>
+        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#cbd0d8]">
+          {backgroundModeTitle(backgroundMode, backgroundAsset)}
+        </span>
       </div>
-      <div className="mt-4 overflow-hidden rounded-xl border border-riftapp-border/40 bg-black/30">
+
+      <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-[#0d0f12]">
+        <div className="relative aspect-video">
+          {previewUrl ? (
+            <img
+              src={previewUrl}
+              alt={backgroundAsset?.label ?? 'Selected background'}
+              className="absolute inset-0 h-full w-full object-cover opacity-20"
+            />
+          ) : (
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,#222833,transparent_56%),linear-gradient(135deg,#14161a,#0d0f12)]" />
+          )}
         {previewEnabled ? (
-          <video ref={videoRef} playsInline muted className="aspect-video w-full bg-black object-cover" />
+            <video ref={videoRef} playsInline muted className="relative z-10 h-full w-full bg-black object-cover" />
         ) : (
-          <div className="flex aspect-video items-center justify-center text-[13px] text-riftapp-text-dim">
-            Camera preview is off.
-          </div>
+            <div className="relative z-10 flex h-full items-center justify-center px-6 text-center text-[13px] text-[#c9ced6]">
+              Camera preview is off. Start a test to check framing and lighting.
+            </div>
         )}
+          <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-between gap-3 border-t border-white/10 bg-black/45 px-4 py-3 backdrop-blur-sm">
+            <div>
+              <p className="text-[12px] font-semibold uppercase tracking-[0.18em] text-[#cbd0d8]">Background</p>
+              <p className="mt-1 text-[13px] text-white">{backgroundModeTitle(backgroundMode, backgroundAsset)}</p>
+              <p className="mt-1 text-[12px] text-[#9ca3af]">{backgroundModeDescription(backgroundMode, backgroundAsset)}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (previewEnabled) {
+                  stopPreview();
+                } else {
+                  setPreviewEnabled(true);
+                }
+              }}
+              className="shrink-0 rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-[13px] font-medium text-white transition-colors hover:bg-white/15"
+            >
+              {previewEnabled ? 'Stop Test' : 'Test Camera'}
+            </button>
+          </div>
+        </div>
       </div>
-      {starting && <p className="mt-3 text-[12px] text-riftapp-text-dim">Starting preview…</p>}
-      {error && <p className="mt-3 text-[12px] text-riftapp-danger">{error}</p>}
+      {starting && <p className="mt-3 text-[12px] text-[#9ca3af]">Starting preview…</p>}
+      {error && <p className="mt-3 text-[12px] text-[#f87171]">{error}</p>}
     </div>
   );
 }
@@ -486,11 +914,13 @@ function MicrophoneTestCard({
   outputDeviceId,
   outputDeviceSelectionSupported,
   noiseSuppressionEnabled,
+  echoCancellationEnabled,
 }: {
   inputDeviceId: string | null;
   outputDeviceId: string | null;
   outputDeviceSelectionSupported: boolean;
   noiseSuppressionEnabled: boolean;
+  echoCancellationEnabled: boolean;
 }) {
   const [testing, setTesting] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -539,12 +969,12 @@ function MicrophoneTestCard({
         audio: inputDeviceId
           ? {
               deviceId: { exact: inputDeviceId },
-              echoCancellation: true,
+              echoCancellation: echoCancellationEnabled,
               autoGainControl: true,
               noiseSuppression: false,
             }
           : {
-              echoCancellation: true,
+              echoCancellation: echoCancellationEnabled,
               autoGainControl: true,
               noiseSuppression: false,
             },
@@ -601,7 +1031,7 @@ function MicrophoneTestCard({
     } finally {
       setStarting(false);
     }
-  }, [inputDeviceId, outputDeviceId, outputDeviceSelectionSupported]);
+  }, [echoCancellationEnabled, inputDeviceId, outputDeviceId, outputDeviceSelectionSupported, noiseSuppressionEnabled]);
 
   useEffect(() => {
     if (!testing) {
@@ -617,13 +1047,13 @@ function MicrophoneTestCard({
   }, [stopTest]);
 
   return (
-    <div className="rounded-xl border border-riftapp-border/40 bg-riftapp-panel/40 p-4">
+    <div className="rounded-2xl border border-white/10 bg-[#16181c] p-5">
       <audio ref={audioRef} className="hidden" />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-riftapp-text">Test Microphone</p>
-          <p className="mt-1 text-[13px] leading-snug text-riftapp-text-muted">
-            Plays your selected microphone back through the chosen output device so you can check levels and, when enabled, the RNNoise cleanup path.
+          <p className="text-sm font-semibold text-white">Test Microphone</p>
+          <p className="mt-1 text-[13px] leading-snug text-[#9ca3af]">
+            Route your mic back to your chosen output so you can hear the current voice profile, RNNoise, and echo cancellation settings together.
           </p>
         </div>
         <button
@@ -635,16 +1065,30 @@ function MicrophoneTestCard({
               setTesting(true);
             }
           }}
-          className="rounded-md border border-riftapp-border/50 bg-riftapp-bg/60 px-3 py-2 text-[13px] font-medium text-riftapp-text transition-colors hover:bg-riftapp-bg"
+          className="rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-[13px] font-medium text-white transition-colors hover:bg-white/15"
         >
-          {testing ? 'Stop Mic Test' : 'Start Mic Test'}
+          {testing ? 'Stop Test' : 'Let\'s Check'}
         </button>
       </div>
-      <p className="mt-3 text-[12px] text-riftapp-text-dim">
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-white/10 bg-[#111214] px-3 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8e97a8]">Input Profile</p>
+          <p className="mt-2 text-sm font-medium text-white">{noiseSuppressionEnabled ? 'Voice Isolation' : 'Studio / Custom'}</p>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-[#111214] px-3 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8e97a8]">RNNoise</p>
+          <p className="mt-2 text-sm font-medium text-white">{noiseSuppressionEnabled ? 'Enabled' : 'Disabled'}</p>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-[#111214] px-3 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8e97a8]">Echo Cancellation</p>
+          <p className="mt-2 text-sm font-medium text-white">{echoCancellationEnabled ? 'Enabled' : 'Disabled'}</p>
+        </div>
+      </div>
+      <p className="mt-4 text-[12px] text-[#9ca3af]">
         Use headphones if possible to avoid feedback while the test is active.
       </p>
-      {starting && <p className="mt-3 text-[12px] text-riftapp-text-dim">Starting microphone test…</p>}
-      {error && <p className="mt-3 text-[12px] text-riftapp-danger">{error}</p>}
+      {starting && <p className="mt-3 text-[12px] text-[#9ca3af]">Starting microphone test…</p>}
+      {error && <p className="mt-3 text-[12px] text-[#f87171]">{error}</p>}
     </div>
   );
 }
@@ -755,6 +1199,10 @@ function VoiceVideoSettingsTab() {
   const automaticInputSensitivity = useVoiceStore((s) => s.automaticInputSensitivity);
   const manualInputSensitivity = useVoiceStore((s) => s.manualInputSensitivity);
   const noiseSuppressionEnabled = useVoiceStore((s) => s.noiseSuppressionEnabled);
+  const echoCancellationEnabled = useVoiceStore((s) => s.echoCancellationEnabled);
+  const pttMode = useVoiceStore((s) => s.pttMode);
+  const cameraBackgroundMode = useVoiceStore((s) => s.cameraBackgroundMode);
+  const cameraBackgroundAsset = useVoiceStore((s) => s.cameraBackgroundAsset);
   const mediaDevices = useVoiceStore((s) => s.mediaDevices);
   const refreshMediaDevices = useVoiceStore((s) => s.refreshMediaDevices);
   const setInputDeviceId = useVoiceStore((s) => s.setInputDeviceId);
@@ -762,9 +1210,31 @@ function VoiceVideoSettingsTab() {
   const setCameraDeviceId = useVoiceStore((s) => s.setCameraDeviceId);
   const setAutomaticInputSensitivity = useVoiceStore((s) => s.setAutomaticInputSensitivity);
   const setManualInputSensitivity = useVoiceStore((s) => s.setManualInputSensitivity);
+  const setEchoCancellationEnabled = useVoiceStore((s) => s.setEchoCancellationEnabled);
   const setNoiseSuppressionEnabled = useVoiceStore((s) => s.setNoiseSuppressionEnabled);
+  const setPTTMode = useVoiceStore((s) => s.setPTTMode);
+  const setCameraBackgroundMode = useVoiceStore((s) => s.setCameraBackgroundMode);
+  const setCameraBackgroundAsset = useVoiceStore((s) => s.setCameraBackgroundAsset);
 
   const outputDeviceSelectionSupported = supportsAudioOutputSelection();
+  const [backgroundPickerOpen, setBackgroundPickerOpen] = useState(false);
+
+  const detectedProfile = useMemo<VoiceInputProfile>(
+    () => detectVoiceInputProfile({
+      automaticInputSensitivity,
+      echoCancellationEnabled,
+      noiseSuppressionEnabled,
+      pttMode,
+    }),
+    [automaticInputSensitivity, echoCancellationEnabled, noiseSuppressionEnabled, pttMode],
+  );
+  const [selectedProfile, setSelectedProfile] = useState<VoiceInputProfile>(detectedProfile);
+
+  useEffect(() => {
+    if (detectedProfile === 'custom' || selectedProfile !== 'custom') {
+      setSelectedProfile(detectedProfile);
+    }
+  }, [detectedProfile, selectedProfile]);
 
   useEffect(() => {
     void refreshMediaDevices();
@@ -779,13 +1249,76 @@ function VoiceVideoSettingsTab() {
     };
   }, [refreshMediaDevices]);
 
+  const applyProfile = useCallback(async (profile: VoiceInputProfile) => {
+    setSelectedProfile(profile);
+    if (profile === 'custom') {
+      return;
+    }
+
+    const enableRnnoise = profile === 'voice-isolation';
+    await setNoiseSuppressionEnabled(enableRnnoise);
+    await setEchoCancellationEnabled(true);
+    setAutomaticInputSensitivity(true);
+    setPTTMode(false);
+  }, [setAutomaticInputSensitivity, setEchoCancellationEnabled, setNoiseSuppressionEnabled, setPTTMode]);
+
+  const showCustomControls = selectedProfile === 'custom';
+  const customBackgroundPreview = backgroundPreviewUrl(cameraBackgroundAsset);
+
   return (
     <div className="space-y-8">
-      <div>
-        <h3 className="mb-4 text-xs font-bold uppercase tracking-wide text-riftapp-text-dim">Voice</h3>
-        <div className="space-y-4">
-          <div className="rounded-xl border border-riftapp-border/40 bg-riftapp-panel/40 p-4">
-            <div className="grid gap-4 md:grid-cols-2">
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-xs font-bold uppercase tracking-[0.24em] text-[#8e97a8]">Voice</h3>
+          <p className="mt-2 max-w-2xl text-[13px] leading-snug text-[#9ca3af]">
+            Pick an input profile first, then fine-tune the mic path only when you need a custom setup.
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-[#16181c] p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-white">Input Profile</p>
+              <p className="mt-1 text-[13px] leading-snug text-[#9ca3af]">
+                Voice Isolation keeps RNNoise on, Studio keeps it off, and Custom exposes the raw controls.
+              </p>
+            </div>
+            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#cbd0d8]">
+              {selectedProfile === 'voice-isolation'
+                ? 'Voice Isolation'
+                : selectedProfile === 'studio'
+                  ? 'Studio'
+                  : 'Custom'}
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 xl:grid-cols-3">
+            <ChoiceCard
+              title="Voice Isolation"
+              description="RNNoise on, echo cancellation on, and automatic sensitivity for everyday rooms."
+              selected={selectedProfile === 'voice-isolation'}
+              onClick={() => void applyProfile('voice-isolation')}
+              badge="RNNoise On"
+            />
+            <ChoiceCard
+              title="Studio"
+              description="RNNoise off with automatic sensitivity so your voice stays more natural and open."
+              selected={selectedProfile === 'studio'}
+              onClick={() => void applyProfile('studio')}
+              badge="RNNoise Off"
+            />
+            <ChoiceCard
+              title="Custom"
+              description="Manually tune push-to-talk, voice activity, RNNoise, echo cancellation, and sensitivity."
+              selected={selectedProfile === 'custom'}
+              onClick={() => void applyProfile('custom')}
+              badge="Advanced"
+            />
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-[#16181c] p-5">
+          <div className="grid gap-4 md:grid-cols-2">
               <DeviceSelect
                 label="Input Device"
                 description="Switch microphones without leaving the call."
@@ -805,72 +1338,136 @@ function VoiceVideoSettingsTab() {
                 kind="audiooutput"
                 disabled={!outputDeviceSelectionSupported}
               />
+          </div>
+        </div>
+
+        {showCustomControls ? (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-white/10 bg-[#16181c] p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-white">Input Mode</p>
+                  <p className="mt-1 text-[13px] leading-snug text-[#9ca3af]">
+                    Push to Talk uses the existing space bar bind. Voice Activity follows your live threshold.
+                  </p>
+                </div>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#cbd0d8]">
+                  {pttMode ? 'Push to Talk' : 'Voice Activity'}
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <ChoiceCard
+                  title="Voice Activity"
+                  description="Open the mic automatically when you cross the selected threshold."
+                  selected={!pttMode}
+                  onClick={() => setPTTMode(false)}
+                />
+                <ChoiceCard
+                  title="Push to Talk"
+                  description="Hold space to transmit. This is useful if your room changes a lot during the day."
+                  selected={pttMode}
+                  onClick={() => setPTTMode(true)}
+                  badge="Space"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-2">
+              <SettingToggle
+                label="RNNoise Suppression"
+                description="Runs RNNoise before the mic gate so steady fan or room noise is less likely to open the mic."
+                enabled={noiseSuppressionEnabled}
+                onToggle={() => void setNoiseSuppressionEnabled(!noiseSuppressionEnabled)}
+              />
+
+              <SettingToggle
+                label="Echo Cancellation"
+                description="Cuts speaker bleed and room reflections before the mic test or live capture gets sent."
+                enabled={echoCancellationEnabled}
+                onToggle={() => void setEchoCancellationEnabled(!echoCancellationEnabled)}
+              />
+
+              <SettingToggle
+                label="Automatically Determine Input Sensitivity"
+                description="Let Rift keep the threshold in sync with the room, or turn it off for a fixed manual threshold."
+                enabled={automaticInputSensitivity}
+                onToggle={() => setAutomaticInputSensitivity(!automaticInputSensitivity)}
+              />
+            </div>
+
+            <div className={`rounded-2xl border border-white/10 bg-[#16181c] p-5 ${automaticInputSensitivity || pttMode ? 'opacity-70' : ''}`}>
+              <Field label="Manual Input Sensitivity">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3 text-[13px] text-white">
+                    <span>
+                      {pttMode
+                        ? 'Push to Talk bypasses the voice activity threshold'
+                        : automaticInputSensitivity
+                          ? 'Automatic sensitivity is active'
+                          : formatSensitivity(manualInputSensitivity)}
+                    </span>
+                    {!automaticInputSensitivity && !pttMode ? (
+                      <span className="text-[#8e97a8]">Set to 0 to keep the mic open</span>
+                    ) : null}
+                  </div>
+
+                  <div className="relative">
+                    <SensitivityMeter
+                      deviceId={inputDeviceId}
+                      threshold={manualInputSensitivity}
+                      max={MANUAL_SENSITIVITY_MAX}
+                      disabled={automaticInputSensitivity || pttMode}
+                    />
+                    <input
+                      type="range"
+                      min={MANUAL_SENSITIVITY_MIN}
+                      max={MANUAL_SENSITIVITY_MAX}
+                      step={MANUAL_SENSITIVITY_STEP}
+                      value={manualInputSensitivity}
+                      disabled={automaticInputSensitivity || pttMode}
+                      onChange={(event) => setManualInputSensitivity(Number(event.target.value))}
+                      className="relative z-10 w-full bg-transparent accent-[#5865f2] disabled:cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-[#8e97a8]">
+                    <span>More sensitive</span>
+                    <span>Less sensitive</span>
+                  </div>
+
+                  <p className="text-[12px] leading-snug text-[#9ca3af]">
+                    One threshold controls both the speaking ring and the outgoing mic gate, so the indicator matches what actually leaves your mic.
+                  </p>
+                </div>
+              </Field>
             </div>
           </div>
-
-          <SettingToggle
-            label="RNNoise Suppression"
-            description="Applies RNNoise denoising before the mic gate so steady background noise is less likely to open the mic."
-            enabled={noiseSuppressionEnabled}
-            onToggle={() => void setNoiseSuppressionEnabled(!noiseSuppressionEnabled)}
-          />
-
-          <SettingToggle
-            label="Automatically Determine Input Sensitivity"
-            description="Continuously adapts the mic gate to your room noise. Turn this off to use a fixed threshold instead."
-            enabled={automaticInputSensitivity}
-            onToggle={() => setAutomaticInputSensitivity(!automaticInputSensitivity)}
-          />
-
-          <div className={`rounded-xl border border-riftapp-border/40 bg-riftapp-panel/40 p-4 ${automaticInputSensitivity ? 'opacity-70' : ''}`}>
-            <Field label="Manual Input Sensitivity">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-[13px] text-riftapp-text">
-                  <span>{automaticInputSensitivity ? 'Automatic sensitivity is active' : formatSensitivity(manualInputSensitivity)}</span>
-                  {!automaticInputSensitivity && <span className="text-riftapp-text-dim">Set to 0 to keep the mic open</span>}
-                </div>
-                <div className="relative">
-                  <SensitivityMeter
-                    deviceId={inputDeviceId}
-                    threshold={manualInputSensitivity}
-                    max={MANUAL_SENSITIVITY_MAX}
-                    disabled={automaticInputSensitivity}
-                  />
-                  <input
-                    type="range"
-                    min={MANUAL_SENSITIVITY_MIN}
-                    max={MANUAL_SENSITIVITY_MAX}
-                    step={MANUAL_SENSITIVITY_STEP}
-                    value={manualInputSensitivity}
-                    disabled={automaticInputSensitivity}
-                    onChange={(event) => setManualInputSensitivity(Number(event.target.value))}
-                    className="w-full accent-riftapp-accent disabled:cursor-not-allowed relative z-10 bg-transparent"
-                  />
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-riftapp-text-dim">
-                  <span>More sensitive</span>
-                  <span>Less sensitive</span>
-                </div>
-                <p className="text-[12px] leading-snug text-riftapp-text-dim">
-                  One threshold controls both the speaking ring and whether audio is transmitted, so the indicator always matches what leaves your mic.
-                </p>
-              </div>
-            </Field>
+        ) : (
+          <div className="rounded-2xl border border-white/10 bg-[#16181c] px-5 py-4 text-[13px] leading-snug text-[#9ca3af]">
+            Switch to Custom when you want to adjust input mode, manual sensitivity, or echo cancellation directly.
           </div>
+        )}
 
-          <MicrophoneTestCard
-            inputDeviceId={inputDeviceId}
-            outputDeviceId={outputDeviceId}
-            outputDeviceSelectionSupported={outputDeviceSelectionSupported}
-            noiseSuppressionEnabled={noiseSuppressionEnabled}
-          />
+        <MicrophoneTestCard
+          inputDeviceId={inputDeviceId}
+          outputDeviceId={outputDeviceId}
+          outputDeviceSelectionSupported={outputDeviceSelectionSupported}
+          noiseSuppressionEnabled={noiseSuppressionEnabled}
+          echoCancellationEnabled={echoCancellationEnabled}
+        />
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-xs font-bold uppercase tracking-[0.24em] text-[#8e97a8]">Video</h3>
+          <p className="mt-2 max-w-2xl text-[13px] leading-snug text-[#9ca3af]">
+            Pick the camera you want to use, then choose whether to keep the feed raw, blurred, or backed by a custom asset.
+          </p>
         </div>
-      </div>
 
-      <div>
-        <h3 className="mb-4 text-xs font-bold uppercase tracking-wide text-riftapp-text-dim">Video</h3>
-        <div className="space-y-4">
-          <div className="rounded-xl border border-riftapp-border/40 bg-riftapp-panel/40 p-4">
+        <div className="rounded-2xl border border-white/10 bg-[#16181c] p-5">
+          <div className="grid gap-4 lg:grid-cols-2">
             <DeviceSelect
               label="Camera Device"
               description="Choose which camera to use when you turn video on."
@@ -880,9 +1477,102 @@ function VoiceVideoSettingsTab() {
               kind="videoinput"
             />
           </div>
-          <CameraTestCard deviceId={cameraDeviceId} />
         </div>
-      </div>
+
+        <div className="rounded-2xl border border-white/10 bg-[#16181c] p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-white">Video Background</p>
+              <p className="mt-1 text-[13px] leading-snug text-[#9ca3af]">
+                Choose None, Blur, or Custom. Custom opens the background picker for uploads and GIFs.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setBackgroundPickerOpen(true)}
+              className="rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-[13px] font-medium text-white transition-colors hover:bg-white/15"
+            >
+              {cameraBackgroundMode === 'custom' ? 'Edit Custom' : 'Browse Custom'}
+            </button>
+          </div>
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            <ChoiceCard
+              title="None"
+              description="Keep the regular camera feed with no extra background treatment."
+              selected={cameraBackgroundMode === 'none'}
+              onClick={() => setCameraBackgroundMode('none')}
+            >
+              <div className="overflow-hidden rounded-xl border border-white/10 bg-[radial-gradient(circle_at_top,#232831,transparent_56%),linear-gradient(135deg,#17191d,#0f1012)]">
+                <div className="aspect-[16/9] px-4 py-4 text-[12px] text-[#cbd0d8]">Raw camera preview</div>
+              </div>
+            </ChoiceCard>
+
+            <ChoiceCard
+              title="Blur"
+              description="Keep the focus on your face with a softer, less distracting backdrop."
+              selected={cameraBackgroundMode === 'blur'}
+              onClick={() => setCameraBackgroundMode('blur')}
+            >
+              <div className="overflow-hidden rounded-xl border border-white/10 bg-[#111214]">
+                <div className="relative aspect-[16/9]">
+                  <div
+                    className="absolute inset-0 scale-110 bg-cover bg-center opacity-80 blur-sm"
+                    style={{
+                      backgroundImage:
+                        'url(https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=900&q=80)',
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="h-16 w-16 rounded-full bg-white/15 ring-1 ring-white/20" />
+                  </div>
+                </div>
+              </div>
+            </ChoiceCard>
+
+            <ChoiceCard
+              title="Custom"
+              description="Upload an image, upload a GIF, or pick a GIF from Tenor for your saved background."
+              selected={cameraBackgroundMode === 'custom'}
+              onClick={() => {
+                if (cameraBackgroundAsset) {
+                  setCameraBackgroundMode('custom');
+                } else {
+                  setBackgroundPickerOpen(true);
+                }
+              }}
+            >
+              <div className="overflow-hidden rounded-xl border border-white/10 bg-[#111214]">
+                {customBackgroundPreview ? (
+                  <img
+                    src={customBackgroundPreview}
+                    alt={cameraBackgroundAsset?.label ?? 'Custom background'}
+                    className="aspect-[16/9] w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex aspect-[16/9] items-center justify-center bg-[radial-gradient(circle_at_top,#2a1d2b,transparent_58%),linear-gradient(135deg,#17191d,#0f1012)] px-4 text-center text-[12px] text-[#cbd0d8]">
+                    No custom background selected yet
+                  </div>
+                )}
+              </div>
+            </ChoiceCard>
+          </div>
+        </div>
+
+        <CameraTestCard
+          deviceId={cameraDeviceId}
+          backgroundMode={cameraBackgroundMode}
+          backgroundAsset={cameraBackgroundAsset}
+        />
+
+        <BackgroundPickerModal
+          isOpen={backgroundPickerOpen}
+          currentAsset={cameraBackgroundAsset}
+          onClose={() => setBackgroundPickerOpen(false)}
+          onSelectAsset={(asset) => setCameraBackgroundAsset(asset)}
+        />
+      </section>
     </div>
   );
 }
