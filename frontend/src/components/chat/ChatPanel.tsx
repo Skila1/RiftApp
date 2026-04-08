@@ -237,12 +237,12 @@ function IconClose(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-function IconDownload(props: SVGProps<SVGSVGElement>) {
+function IconUpdateAction(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M12 3v12" />
-      <path d="m7 10 5 5 5-5" />
-      <path d="M5 21h14" />
+      <path d="M12 3.5v10.75" />
+      <path d="m8.25 10.75 3.75 3.75 3.75-3.75" />
+      <path d="M5 16.75v1.5A1.75 1.75 0 0 0 6.75 20h10.5A1.75 1.75 0 0 0 19 18.25v-1.5" />
     </svg>
   );
 }
@@ -1194,7 +1194,7 @@ export default function ChatPanel({
                     applyFrontendUpdate();
                   }}
                 >
-                  {desktopUpdateReady ? <IconDownload className="h-4 w-4" /> : <IconRefresh className="h-4 w-4" />}
+                  <IconUpdateAction className="h-4 w-4" />
                 </HeaderIconButton>
               ) : null}
             </div>
