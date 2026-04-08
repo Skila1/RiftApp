@@ -470,20 +470,12 @@ export default function MessageInput({
       )}
 
       {replyTo && (
-        <div className="mb-2 flex items-center gap-2 px-1 py-1 text-[12px]">
-          <span className="h-5 w-5 flex-shrink-0 rounded-tl-xl border-l-2 border-t-2 border-riftapp-border/70" aria-hidden />
+        <div className="mb-2 flex items-center gap-2 px-1 py-0.5 text-[12px] leading-4 text-riftapp-text-dim/85">
           <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-            <span className="flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-riftapp-content-elevated ring-1 ring-white/10">
-              {replyTo.author?.avatar_url ? (
-                <img src={publicAssetUrl(replyTo.author.avatar_url)} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <span className="text-[8px] font-bold uppercase text-riftapp-text-dim">
-                  {replyAuthorLabel.slice(0, 1)}
-                </span>
-              )}
+            <span className="max-w-[42%] shrink-0 truncate font-semibold text-riftapp-accent-hover">
+              @{replyAuthorLabel}
             </span>
-            <span className="shrink-0 font-medium text-riftapp-accent-hover">{replyAuthorLabel}</span>
-            <span className={`min-w-0 truncate ${replyPreview.tone === 'default' ? 'text-riftapp-text-dim' : 'italic text-riftapp-text-dim/80'}`}>
+            <span className={`min-w-0 truncate ${replyPreview.tone === 'default' ? 'text-riftapp-text-dim' : 'text-riftapp-text-dim/75'}`}>
               {replyPreview.text}
             </span>
           </div>
