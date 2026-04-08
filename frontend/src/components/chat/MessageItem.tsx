@@ -539,7 +539,7 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
               setEditing(false);
               setEditDraft(message.content);
             }}
-            className="px-3 py-1.5 rounded-md text-sm text-riftapp-text-dim hover:text-riftapp-text hover:bg-riftapp-surface-hover"
+            className="px-3 py-1.5 rounded-md text-sm text-riftapp-text-dim hover:text-riftapp-text hover:bg-riftapp-content-elevated"
           >
             Cancel
           </button>
@@ -594,7 +594,7 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
         : `group relative py-0.5 -mx-4 px-4 transition-colors duration-100 ${
             mentionsSelf
               ? 'bg-riftapp-mention-highlight-bg border-l-[3px] border-riftapp-mention-highlight-border hover:bg-riftapp-mention-highlight-hover'
-              : 'hover:bg-riftapp-surface/20'
+              : 'hover:bg-riftapp-content-elevated/60'
           } ${
             showHeader ? 'mt-[17px]' : ''
           }`}
@@ -604,10 +604,10 @@ const MessageItem = memo(function MessageItem({ message, showHeader, isOwn, isDM
       {/* Hover action bar */}
       {!isPreview && (
         <div className="absolute -top-3 right-4 opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200 ease-out z-10">
-          <div className="flex items-center bg-riftapp-surface border border-riftapp-border/60 rounded-lg shadow-elevation-low">
+          <div className="flex items-center bg-riftapp-content-elevated border border-riftapp-border/60 rounded-lg shadow-elevation-low">
             <button
               onClick={() => setPickerOpen((v) => !v)}
-              className="px-2 py-1 text-riftapp-text-dim hover:text-riftapp-text hover:bg-riftapp-surface-hover rounded-lg transition-colors duration-100"
+              className="px-2 py-1 text-riftapp-text-dim hover:text-riftapp-text hover:bg-riftapp-content-elevated rounded-lg transition-colors duration-100"
               title="Add Reaction"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -822,7 +822,7 @@ function LinkEmbeds({ urls }: { urls: ParsedEmbed[] }) {
 
 /* ─── Shared embed card wrapper ──────────────────────────────────────── */
 const EMBED_CARD =
-  'mt-1.5 max-w-[420px] rounded-xl overflow-hidden border border-riftapp-border/40 bg-riftapp-surface transition-all duration-200 hover:brightness-110 hover:shadow-elevation-md';
+  'mt-1.5 max-w-[420px] rounded-xl overflow-hidden border border-riftapp-border/40 bg-riftapp-content-elevated transition-all duration-200 hover:brightness-110 hover:shadow-elevation-md';
 
 /* ─── YouTube Embed ──────────────────────────────────────────────────── */
 function YouTubeEmbed({ videoId }: { videoId: string }) {
@@ -1345,7 +1345,7 @@ function InlineMediaImage({ url, type }: { url: string; type: 'gif' | 'sticker' 
           transition-all duration-200`}
       >
         {!loaded && !isSticker && (
-          <div className="absolute inset-0 bg-riftapp-surface animate-pulse-soft rounded-xl" />
+          <div className="absolute inset-0 bg-riftapp-content-elevated animate-pulse-soft rounded-xl" />
         )}
         <img
           src={url}
@@ -1382,7 +1382,7 @@ function ImageThumb({
     >
       {/* Skeleton placeholder */}
       {!loaded && (
-        <div className="absolute inset-0 bg-riftapp-surface animate-pulse-soft rounded-xl" />
+        <div className="absolute inset-0 bg-riftapp-content-elevated animate-pulse-soft rounded-xl" />
       )}
       <img
         src={src}
@@ -1506,7 +1506,7 @@ function ReactionPills({
             className={`inline-flex items-center gap-1.5 h-6 min-w-[42px] px-1.5 rounded-full text-xs font-medium border transition-colors duration-150 cursor-pointer select-none ${
               reacted
                 ? 'bg-riftapp-accent/15 border-riftapp-accent/50 text-riftapp-accent'
-                : 'bg-riftapp-surface border-riftapp-border/50 text-riftapp-text-dim hover:border-riftapp-border hover:bg-riftapp-surface-hover'
+                : 'bg-riftapp-content-elevated border-riftapp-border/50 text-riftapp-text-dim hover:border-riftapp-border hover:bg-riftapp-content-elevated'
             }`}
           >
             {isCustom ? (
@@ -1639,8 +1639,8 @@ function Attachments({ message }: { message: Message }) {
               href={fileUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-3 bg-riftapp-surface border border-riftapp-border/50 rounded-xl px-4 py-3
-                hover:bg-riftapp-surface-hover hover:border-riftapp-border transition-all duration-150 max-w-[380px] group/file"
+              className="inline-flex items-center gap-3 bg-riftapp-content-elevated border border-riftapp-border/50 rounded-xl px-4 py-3
+                hover:bg-riftapp-content-elevated hover:border-riftapp-border transition-all duration-150 max-w-[380px] group/file"
             >
               <div className="w-10 h-10 rounded-lg bg-riftapp-accent/10 flex items-center justify-center flex-shrink-0">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-riftapp-accent">

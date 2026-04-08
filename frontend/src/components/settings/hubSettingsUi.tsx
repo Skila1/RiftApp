@@ -115,7 +115,7 @@ export function SelectField({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full max-w-md cursor-pointer appearance-none rounded-[4px] border border-riftapp-border/60 bg-riftapp-surface px-3 py-2.5 text-[13px] text-riftapp-text focus:outline-none focus:ring-1 focus:ring-[#5865f2]"
+        className="w-full max-w-md cursor-pointer appearance-none rounded-[4px] border border-riftapp-border/60 bg-riftapp-content-elevated px-3 py-2.5 text-[13px] text-riftapp-text focus:outline-none focus:ring-1 focus:ring-[#5865f2]"
         style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23949ba4' viewBox='0 0 24 24'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', paddingRight: '36px' }}
       >
         {options.map((o) => (

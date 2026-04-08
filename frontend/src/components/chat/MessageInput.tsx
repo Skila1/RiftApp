@@ -427,7 +427,7 @@ export default function MessageInput({
           {pendingFiles.map((pf, i) => (
             <div
               key={i}
-              className="relative bg-riftapp-surface border border-riftapp-border/60 rounded-xl p-2.5 flex items-center gap-2.5 max-w-[220px] shadow-elevation-low group/file"
+              className="relative bg-riftapp-content-elevated border border-riftapp-border/60 rounded-xl p-2.5 flex items-center gap-2.5 max-w-[220px] shadow-elevation-low group/file"
             >
               {pf.preview ? (
                 <img src={pf.preview} alt="" className="w-12 h-12 rounded-lg object-cover" />
@@ -475,7 +475,7 @@ export default function MessageInput({
           <button
             type="button"
             onClick={() => setReplyTo(null)}
-            className="text-riftapp-text-dim hover:text-riftapp-text p-1 rounded-md hover:bg-riftapp-surface-hover flex-shrink-0"
+            className="text-riftapp-text-dim hover:text-riftapp-text p-1 rounded-md hover:bg-riftapp-content-elevated flex-shrink-0"
             aria-label="Cancel reply"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -506,13 +506,13 @@ export default function MessageInput({
                 className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-[14px] transition-colors ${
                   i === mentionIndex
                     ? 'bg-riftapp-accent/15 text-riftapp-text'
-                    : 'text-riftapp-text-muted hover:bg-riftapp-surface-hover'
+                    : 'text-riftapp-text-muted hover:bg-riftapp-content-elevated'
                 }`}
               >
                 {user.avatar_url ? (
                   <img src={publicAssetUrl(user.avatar_url)} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
                 ) : (
-                  <div className="w-6 h-6 rounded-full bg-riftapp-surface flex items-center justify-center text-[10px] font-bold text-riftapp-text-dim flex-shrink-0">
+                  <div className="w-6 h-6 rounded-full bg-riftapp-content-elevated flex items-center justify-center text-[10px] font-bold text-riftapp-text-dim flex-shrink-0">
                     {(user.display_name || user.username).slice(0, 2).toUpperCase()}
                   </div>
                 )}
@@ -538,7 +538,7 @@ export default function MessageInput({
                 className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-[14px] transition-colors ${
                   i === emojiIndex
                     ? 'bg-riftapp-accent/15 text-riftapp-text'
-                    : 'text-riftapp-text-muted hover:bg-riftapp-surface-hover'
+                    : 'text-riftapp-text-muted hover:bg-riftapp-content-elevated'
                 }`}
               >
                 {result.isCustom && result.fileUrl ? (

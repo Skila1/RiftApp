@@ -45,7 +45,7 @@ export default function AuthPage() {
         {/* Form */}
         <form
           onSubmit={handleSubmit}
-          className="bg-riftapp-surface rounded-xl p-6 border border-riftapp-border/60 shadow-elevation-md"
+          className="bg-riftapp-content-elevated rounded-xl p-6 border border-riftapp-border/60 shadow-elevation-md"
         >
           <h2 className="text-lg font-bold mb-4 tracking-tight">
             {isLogin ? 'Welcome back' : 'Create account'}

@@ -41,18 +41,18 @@ function UserRow({ user }: { user: User }) {
   }, [user, openContextMenu]);
 
   return (
-    <div onClick={handleClick} onContextMenu={handleContextMenu} className={`flex items-center gap-2.5 px-2 py-1.5 rounded-md transition-colors group cursor-pointer ${isOffline ? 'opacity-40 hover:bg-[#202227]' : 'hover:bg-[#202227]'}`}>
+    <div onClick={handleClick} onContextMenu={handleContextMenu} className={`flex items-center gap-2.5 px-2 py-1.5 rounded-md transition-colors group cursor-pointer ${isOffline ? 'opacity-40 hover:bg-riftapp-content-elevated' : 'hover:bg-riftapp-content-elevated'}`}>
       <div className="relative flex-shrink-0">
         {user.avatar_url ? (
           <img src={publicAssetUrl(user.avatar_url)} alt="" className="w-8 h-8 rounded-full object-cover" />
         ) : (
-          <div className="w-8 h-8 rounded-full bg-[#262a33] flex items-center justify-center">
+          <div className="w-8 h-8 rounded-full bg-riftapp-content-elevated flex items-center justify-center">
             <span className="text-xs font-semibold text-[#c7ced9] uppercase">
               {user.display_name?.[0] || user.username[0]}
             </span>
           </div>
         )}
-        <div className="absolute -bottom-0.5 -right-0.5 border-2 border-[#17181c] rounded-full">
+        <div className="absolute -bottom-0.5 -right-0.5 border-2 border-riftapp-content rounded-full">
           <StatusDot userId={user.id} fallbackStatus={user.status} size="sm" />
         </div>
       </div>
@@ -104,9 +104,9 @@ export default function MemberList() {
   if (Object.keys(hubMembers).length === 0) return null;
 
   return (
-    <div className="w-60 border-l border-[#272a31] bg-[#17181c] flex flex-col overflow-hidden flex-shrink-0">
-      <div className="border-b border-[#272a31] bg-[#18191c] px-3 py-3">
-        <div className="flex items-center gap-2 rounded-md border border-[#2e3138] bg-[#111214] px-2.5 text-[#aeb4bf] focus-within:border-[#3a3d45] focus-within:text-[#f2f3f5]">
+    <div className="w-60 bg-riftapp-content flex flex-col overflow-hidden flex-shrink-0">
+      <div className="bg-riftapp-content px-3 py-3">
+        <div className="flex items-center gap-2 rounded-md border border-[#2e3138] bg-riftapp-content-elevated px-2.5 text-[#aeb4bf] focus-within:border-[#3a3d45] focus-within:text-[#f2f3f5]">
           <SearchIcon className="h-4 w-4 shrink-0" />
           <input
             type="text"
@@ -130,7 +130,7 @@ export default function MemberList() {
           <button
             type="button"
             onClick={() => dispatchChatSearchRequest({ query: messageSearch, run: true })}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#8d94a0] transition-colors hover:bg-[#23262d] hover:text-[#f2f3f5]"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#8d94a0] transition-colors hover:bg-riftapp-content-elevated hover:text-[#f2f3f5]"
             aria-label="Open advanced search"
           >
             <FilterIcon className="h-3.5 w-3.5" />

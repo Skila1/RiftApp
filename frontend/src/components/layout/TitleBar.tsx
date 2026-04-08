@@ -79,7 +79,7 @@ function TitleBar() {
 
   return (
     <div
-      className="titlebar flex h-8 items-center justify-between select-none shrink-0 border-b border-white/[0.05] bg-[#202227]/95 pl-3.5"
+      className="titlebar flex h-8 items-center justify-between select-none shrink-0 bg-riftapp-chrome/95 pl-3.5 backdrop-blur-xs"
       style={
         {
           WebkitAppRegion: 'drag',

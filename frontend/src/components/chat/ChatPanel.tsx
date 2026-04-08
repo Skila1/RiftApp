@@ -301,8 +301,8 @@ function HeaderIconButton({
         success
           ? 'border-[#2f8555] bg-[#248046] text-white hover:bg-[#2d9d58]'
           : active
-            ? 'border-[#2e3138] bg-[#23262d] text-[#f2f3f5]'
-            : 'border-transparent bg-transparent text-[#aeb4bf] hover:bg-[#23262d] hover:text-[#f2f3f5]'
+            ? 'border-riftapp-border-light bg-riftapp-content-elevated text-[#f2f3f5]'
+            : 'border-transparent bg-transparent text-[#aeb4bf] hover:bg-riftapp-content-elevated hover:text-[#f2f3f5]'
       }`}
     >
       <span className="inline-flex items-center justify-center">{children}</span>
@@ -1118,12 +1118,12 @@ export default function ChatPanel({
     : 'Refresh to load the latest frontend build';
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-[#111214] min-w-0 relative">
+    <div className="flex-1 min-h-0 flex flex-col bg-riftapp-content min-w-0 relative">
       {/* Header */}
       {!showWelcome && (
         <div
           ref={headerRef}
-          className="flex h-12 items-center gap-3 border-b border-[#272a31] bg-[#18191c] px-4 shadow-[0_1px_0_rgba(0,0,0,0.35)] flex-shrink-0"
+          className="flex h-12 items-center gap-3 bg-riftapp-content px-4 shadow-[0_1px_0_rgba(255,255,255,0.03)] flex-shrink-0"
         >
           <div className="flex min-w-0 flex-1 items-center gap-3">
             {isDMMode ? (
@@ -1697,9 +1697,9 @@ export default function ChatPanel({
         ) : null}
 
         {showWelcome && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#111214]">
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-riftapp-content">
             <div className="text-center animate-fade-in max-w-sm px-6">
-              <div className="w-16 h-16 rounded-3xl bg-riftapp-surface flex items-center justify-center mx-auto mb-5">
+              <div className="w-16 h-16 rounded-3xl bg-riftapp-content-elevated flex items-center justify-center mx-auto mb-5">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-riftapp-text-dim">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
@@ -1742,17 +1742,17 @@ export default function ChatPanel({
             {[...Array(6)].map((_, i) => (
               <div key={i} className="flex gap-3">
                 {/* Avatar skeleton */}
-                <div className="w-9 h-9 rounded-full bg-riftapp-surface/60 flex-shrink-0 animate-pulse" />
+                <div className="w-9 h-9 rounded-full bg-riftapp-content-elevated/60 flex-shrink-0 animate-pulse" />
                 <div className="flex-1 space-y-1.5 pt-0.5">
                   {/* Name + timestamp */}
                   <div className="flex items-center gap-2">
-                    <div className="h-3 rounded-full bg-riftapp-surface/80 animate-pulse" style={{ width: `${60 + (i % 3) * 20}px` }} />
-                    <div className="h-2.5 rounded-full bg-riftapp-surface/50 animate-pulse w-10" />
+                    <div className="h-3 rounded-full bg-riftapp-content-elevated/80 animate-pulse" style={{ width: `${60 + (i % 3) * 20}px` }} />
+                    <div className="h-2.5 rounded-full bg-riftapp-content-elevated/50 animate-pulse w-10" />
                   </div>
                   {/* Message lines */}
-                  <div className="h-3 rounded-full bg-riftapp-surface/60 animate-pulse" style={{ width: `${50 + ((i * 37) % 40)}%` }} />
+                  <div className="h-3 rounded-full bg-riftapp-content-elevated/60 animate-pulse" style={{ width: `${50 + ((i * 37) % 40)}%` }} />
                   {i % 3 === 0 && (
-                    <div className="h-3 rounded-full bg-riftapp-surface/40 animate-pulse" style={{ width: `${30 + ((i * 17) % 30)}%` }} />
+                    <div className="h-3 rounded-full bg-riftapp-content-elevated/40 animate-pulse" style={{ width: `${30 + ((i * 17) % 30)}%` }} />
                   )}
                 </div>
               </div>
@@ -1761,7 +1761,7 @@ export default function ChatPanel({
         ) : displayMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full animate-fade-in">
             <div className="text-center px-8">
-              <div className="w-16 h-16 rounded-full bg-riftapp-surface flex items-center justify-center mx-auto mb-4">
+              <div className="w-16 h-16 rounded-full bg-riftapp-content-elevated flex items-center justify-center mx-auto mb-4">
                 <span className="text-3xl font-bold text-riftapp-text-dim">{isDMMode ? '@' : '#'}</span>
               </div>
               {isDMMode ? (

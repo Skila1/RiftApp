@@ -33,7 +33,7 @@ function MenuRow({
           ? 'text-[#5c5e66] cursor-not-allowed opacity-60'
           : danger
             ? 'text-[#f23f42] hover:bg-[#f23f42]/10'
-        : 'text-riftapp-text hover:bg-riftapp-surface hover:text-white'
+        : 'text-riftapp-text hover:bg-riftapp-chrome-hover hover:text-white'
       }`}
     >
       {children}
@@ -49,7 +49,7 @@ function CheckboxMark({ checked }: { checked: boolean }) {
   return (
     <span
       className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 ${
-        checked ? 'bg-[#5865f2] border-[#5865f2]' : 'border-riftapp-border-light bg-riftapp-bg-alt'
+        checked ? 'bg-[#5865f2] border-[#5865f2]' : 'border-riftapp-border-light bg-riftapp-content-elevated'
       }`}
     >
       {checked && (

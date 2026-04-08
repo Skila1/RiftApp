@@ -164,7 +164,7 @@ export default function FullProfileModal() {
       transition={{ duration: 0.15 }}
     >
       <motion.div
-        className="w-full max-w-[720px] rounded-2xl border border-riftapp-border/50 bg-riftapp-surface shadow-modal overflow-hidden"
+        className="w-full max-w-[720px] rounded-2xl border border-riftapp-border/50 bg-riftapp-content-elevated shadow-modal overflow-hidden"
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
@@ -172,7 +172,7 @@ export default function FullProfileModal() {
         <div className="h-36 relative" style={{ background: `linear-gradient(135deg, ${accent} 0%, ${accent}99 100%)` }}>
           <ModalCloseButton onClick={closeModal} variant="overlay" className="absolute right-4 top-4" />
           <div className="absolute -bottom-14 left-8">
-            <div className="relative w-28 h-28 rounded-full border-[6px] border-riftapp-surface bg-black/20 overflow-hidden flex items-center justify-center">
+            <div className="relative w-28 h-28 rounded-full border-[6px] border-riftapp-content-elevated bg-black/20 overflow-hidden flex items-center justify-center">
               {user.avatar_url ? (
                 <img src={publicAssetUrl(user.avatar_url)} alt="" className="w-full h-full object-cover" />
               ) : (
@@ -181,7 +181,7 @@ export default function FullProfileModal() {
                 </span>
               )}
             </div>
-            <div className="absolute bottom-[6px] right-[6px] rounded-full border-[4px] border-riftapp-surface bg-riftapp-surface">
+            <div className="absolute bottom-[6px] right-[6px] rounded-full border-[4px] border-riftapp-content-elevated bg-riftapp-content-elevated">
               <StatusDot userId={user.id} fallbackStatus={user.status} size="lg" />
             </div>
           </div>

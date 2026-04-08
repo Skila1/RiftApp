@@ -65,7 +65,7 @@ export default function EditCategoryModal({ hubId, category, onClose }: Props) {
           {error && <p className="text-sm text-riftapp-danger mt-3">{error}</p>}
         </div>
         <div className="px-6 py-4 bg-riftapp-bg/40 flex justify-end gap-2 border-t border-riftapp-border/40">
-          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-riftapp-surface-hover transition-colors">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-riftapp-content-elevated transition-colors">
             Cancel
           </button>
           <button

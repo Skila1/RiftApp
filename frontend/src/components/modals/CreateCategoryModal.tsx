@@ -51,7 +51,7 @@ export default function CreateCategoryModal({ hubId, onClose }: Props) {
           />
         </div>
 
-        <div className="bg-riftapp-surface px-6 py-4 flex justify-end gap-3">
+        <div className="bg-riftapp-content-elevated px-6 py-4 flex justify-end gap-3">
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-riftapp-text-dim hover:text-riftapp-text transition-colors">
             Cancel
           </button>

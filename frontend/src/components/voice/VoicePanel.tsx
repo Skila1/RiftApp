@@ -71,7 +71,7 @@ function ConnectionQualityIndicator() {
   return (
     <div className="relative group">
       <div
-        className={`h-9 w-9 rounded-xl border border-riftapp-border/40 bg-riftapp-surface/80 flex items-center justify-center transition-colors duration-150 group-hover:bg-riftapp-surface-hover ${toneClass}`}
+        className={`h-9 w-9 rounded-xl border border-riftapp-border/40 bg-riftapp-chrome-hover/80 flex items-center justify-center transition-colors duration-150 group-hover:bg-riftapp-chrome-hover ${toneClass}`}
         aria-label="Voice connection quality"
       >
         <div className={`flex h-[14px] items-end gap-[2px] ${reconnecting ? 'animate-pulse-soft' : ''}`}>
@@ -89,7 +89,7 @@ function ConnectionQualityIndicator() {
       </div>
 
       <div
-        className="pointer-events-none absolute bottom-full right-0 z-50 mb-2 w-max min-w-[180px] rounded-lg border border-riftapp-border/60 bg-riftapp-bg-alt px-3 py-2 text-[12px] leading-snug text-riftapp-text shadow-[0_4px_16px_rgba(0,0,0,0.5)] opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+        className="pointer-events-none absolute bottom-full right-0 z-50 mb-2 w-max min-w-[180px] rounded-lg border border-riftapp-border/60 bg-riftapp-chrome px-3 py-2 text-[12px] leading-snug text-riftapp-text shadow-[0_4px_16px_rgba(0,0,0,0.5)] opacity-0 transition-opacity duration-150 group-hover:opacity-100"
         role="tooltip"
       >
         <div className="font-semibold text-white">Connection Quality</div>
@@ -111,7 +111,7 @@ function ConnectionQualityIndicator() {
           </div>
         )}
         <div
-          className="absolute right-4 top-full h-0 w-0 border-x-[6px] border-x-transparent border-t-[6px] border-t-riftapp-bg-alt"
+          className="absolute right-4 top-full h-0 w-0 border-x-[6px] border-x-transparent border-t-[6px] border-t-riftapp-chrome"
           aria-hidden
         />
       </div>
@@ -143,7 +143,7 @@ function SecondaryControlButton({
       className={`flex h-[56px] flex-col items-center justify-center gap-1 rounded-xl border px-2 text-center transition-all duration-150 active:scale-[0.97] ${
         active
           ? 'border-riftapp-accent/55 bg-riftapp-accent/15 text-riftapp-text'
-          : 'border-riftapp-border/40 bg-riftapp-surface/70 text-riftapp-text-dim hover:bg-riftapp-surface-hover hover:text-riftapp-text'
+            : 'border-riftapp-border/40 bg-riftapp-chrome-hover/70 text-riftapp-text-dim hover:bg-riftapp-chrome-hover hover:text-riftapp-text'
       } disabled:cursor-not-allowed disabled:opacity-50`}
     >
       {children}
@@ -171,7 +171,7 @@ function UtilityButton({
     ? 'border-riftapp-danger/35 bg-riftapp-danger/10 text-riftapp-danger hover:bg-riftapp-danger/15'
     : active
       ? 'border-riftapp-accent/45 bg-riftapp-accent/12 text-riftapp-text hover:bg-riftapp-accent/18'
-      : 'border-riftapp-border/40 bg-riftapp-surface/70 text-riftapp-text-dim hover:bg-riftapp-surface-hover hover:text-riftapp-text';
+      : 'border-riftapp-border/40 bg-riftapp-chrome-hover/70 text-riftapp-text-dim hover:bg-riftapp-chrome-hover hover:text-riftapp-text';
 
   return (
     <button

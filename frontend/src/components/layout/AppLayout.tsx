@@ -100,9 +100,9 @@ export default function AppLayout() {
   }, [activeConversationId, activeHubId, voiceUiOpen]);
 
   return (
-    <div className="app-root h-full min-h-0 flex overflow-hidden">
+    <div className="app-root h-full min-h-0 flex overflow-hidden bg-riftapp-content">
       {/* Left sidebar group: server list + channel list + bottom voice/user bar */}
-      <div className="flex-shrink-0 flex flex-col h-full">
+      <div className="flex-shrink-0 flex flex-col h-full bg-riftapp-chrome">
         <div className="flex flex-1 min-h-0">
           <HubSidebar />
           {!activeHubId ? <DMSidebar /> : <StreamSidebar />}

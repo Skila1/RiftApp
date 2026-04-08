@@ -66,12 +66,12 @@ export default function VoiceUserItem({
         onContextMenu={handleContextMenu}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
-        className={`w-full flex items-center gap-2 px-2 py-1 rounded-md hover:bg-riftapp-surface-hover/50 transition-colors group text-left ${
+        className={`w-full flex items-center gap-2 px-2 py-1 rounded-md hover:bg-riftapp-chrome-hover/50 transition-colors group text-left ${
           draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
         } ${isDragging ? 'opacity-40' : ''}`}
         title={draggable ? 'Drag to move user' : name}
       >
-        <div className={`w-6 h-6 rounded-full flex-shrink-0 overflow-hidden ${participant.isSpeaking ? 'ring-2 ring-riftapp-success ring-offset-1 ring-offset-riftapp-surface' : ''}`}>
+        <div className={`w-6 h-6 rounded-full flex-shrink-0 overflow-hidden ${participant.isSpeaking ? 'ring-2 ring-riftapp-success ring-offset-1 ring-offset-riftapp-content-elevated' : ''}`}>
           {avatarUrl ? (
             <img src={publicAssetUrl(avatarUrl)} alt={name} className="w-full h-full object-cover" />
           ) : (

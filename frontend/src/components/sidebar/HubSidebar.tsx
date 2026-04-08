@@ -139,7 +139,7 @@ export default function HubSidebar() {
   };
 
   return (
-    <div className="flex w-[72px] flex-shrink-0 flex-col items-center gap-2 overflow-y-auto bg-riftapp-bg-alt py-3">
+    <div className="flex w-[72px] flex-shrink-0 flex-col items-center gap-2 overflow-y-auto bg-riftapp-chrome py-3">
       {/* DM Button */}
       <div
         className="relative flex items-center justify-center w-full"
@@ -258,7 +258,7 @@ export default function HubSidebar() {
       <div className="relative flex items-center justify-center w-full">
         <button
           onClick={() => setShowAddServer(true)}
-          className="hub-icon rounded-3xl bg-riftapp-surface text-riftapp-success hover:rounded-2xl hover:bg-riftapp-success hover:text-white transition-all duration-300"
+          className="hub-icon rounded-3xl bg-riftapp-chrome-hover text-riftapp-success hover:rounded-2xl hover:bg-riftapp-success hover:text-white transition-all duration-300"
           title="Add a server"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -295,7 +295,7 @@ export default function HubSidebar() {
                   } catch { /* ignore */ }
                   setContextMenu(null);
                 }}
-                className="flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-surface mx-1"
+                className="flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover mx-1"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-riftapp-text-dim shrink-0">
                   <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
@@ -310,7 +310,7 @@ export default function HubSidebar() {
                   setInviteHub(contextMenu.hub);
                   setContextMenu(null);
                 }}
-                className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-surface"
+                className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-riftapp-text-dim shrink-0">
                   <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -341,7 +341,7 @@ export default function HubSidebar() {
                     }
                   }
                 }}
-                className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-surface disabled:opacity-50"
+                className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover disabled:opacity-50"
               >
                 <span className="w-4 shrink-0" aria-hidden />
                 {hubNotifSettings?.server_muted ? 'Unmute Server' : 'Mute Server'}
@@ -353,7 +353,7 @@ export default function HubSidebar() {
                 onMouseLeave={() => setNotifSubmenuOpen(false)}
               >
                 <div
-                  className={`flex items-center gap-2 rounded px-2 py-1.5 cursor-default ${notifSubmenuOpen ? 'bg-riftapp-surface' : 'hover:bg-riftapp-surface'}`}
+                  className={`flex items-center gap-2 rounded px-2 py-1.5 cursor-default ${notifSubmenuOpen ? 'bg-riftapp-chrome-hover' : 'hover:bg-riftapp-chrome-hover'}`}
                 >
                   <span className="w-4 shrink-0" aria-hidden />
                   <div className="flex-1 min-w-0">
@@ -390,7 +390,7 @@ export default function HubSidebar() {
                               } catch { /* ignore */ }
                             }
                           }}
-                          className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-left hover:bg-riftapp-surface"
+                          className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-left hover:bg-riftapp-chrome-hover"
                         >
                           <span
                             className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
@@ -433,7 +433,7 @@ export default function HubSidebar() {
                               } catch { /* ignore */ }
                             }
                           }}
-                          className="mx-1 flex w-[calc(100%-8px)] items-center justify-between gap-2 rounded-sm px-2.5 py-1.5 text-left hover:bg-riftapp-surface"
+                          className="mx-1 flex w-[calc(100%-8px)] items-center justify-between gap-2 rounded-sm px-2.5 py-1.5 text-left hover:bg-riftapp-chrome-hover"
                         >
                           <span>{label}</span>
                           <span
@@ -469,7 +469,7 @@ export default function HubSidebar() {
                             } catch { /* ignore */ }
                           }
                         }}
-                        className="mx-1 flex w-[calc(100%-8px)] items-center justify-between gap-2 rounded-sm px-2.5 py-1.5 text-left hover:bg-riftapp-surface"
+                        className="mx-1 flex w-[calc(100%-8px)] items-center justify-between gap-2 rounded-sm px-2.5 py-1.5 text-left hover:bg-riftapp-chrome-hover"
                       >
                         <span>Mobile Push Notifications</span>
                         <span
@@ -509,7 +509,7 @@ export default function HubSidebar() {
                     }
                   }
                 }}
-                className="mx-1 flex w-[calc(100%-8px)] items-center justify-between gap-2 rounded px-2 py-1.5 text-left hover:bg-riftapp-surface disabled:opacity-50"
+                className="mx-1 flex w-[calc(100%-8px)] items-center justify-between gap-2 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover disabled:opacity-50"
               >
                 <span className="pl-6">Hide Muted Channels</span>
                 <span
@@ -535,7 +535,7 @@ export default function HubSidebar() {
                   navigator.clipboard.writeText(contextMenu.hub.id);
                   setContextMenu(null);
                 }}
-                className="mx-1 flex w-[calc(100%-8px)] items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-riftapp-text-dim hover:bg-riftapp-surface hover:text-riftapp-text"
+                className="mx-1 flex w-[calc(100%-8px)] items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-riftapp-text-dim hover:bg-riftapp-chrome-hover hover:text-riftapp-text"
               >
                 <span className="flex items-center gap-2.5">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="shrink-0 opacity-70">

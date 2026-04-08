@@ -22,10 +22,10 @@ export const HS = {
 } as const;
 
 export const hsTw = {
-  main: 'bg-riftapp-bg-alt',
-  sidebar: 'bg-riftapp-panel',
-  card: 'rounded-lg border border-riftapp-border/60 bg-riftapp-panel',
-  input: 'w-full rounded-[4px] bg-riftapp-surface px-3 py-2.5 text-[15px] text-white border-none focus:outline-none focus:ring-1 focus:ring-[#5865f2]',
+  main: 'bg-riftapp-content',
+  sidebar: 'bg-riftapp-chrome',
+  card: 'rounded-lg border border-riftapp-border/60 bg-riftapp-content-elevated',
+  input: 'w-full rounded-[4px] bg-riftapp-content-elevated px-3 py-2.5 text-[15px] text-white border-none focus:outline-none focus:ring-1 focus:ring-[#5865f2]',
   btnPrimary: 'px-4 py-2 rounded-[4px] bg-[#5865f2] text-white text-[13px] font-medium hover:bg-[#4752c4] transition-colors disabled:opacity-40',
   btnDanger: 'px-4 py-2 rounded-[4px] border border-[#ed4245] text-[#ed4245] hover:bg-[#ed4245] hover:text-white text-[13px] font-medium transition-colors',
   title: 'text-[20px] font-bold text-white tracking-tight',

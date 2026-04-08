@@ -21,7 +21,7 @@ const sizeClassMap = {
 
 const variantClassMap = {
   default: 'border border-riftapp-border/70 bg-riftapp-panel/60 text-riftapp-text-muted hover:border-riftapp-text-dim hover:bg-riftapp-danger/10 hover:text-riftapp-text',
-  overlay: 'border border-riftapp-border/70 bg-riftapp-bg/85 text-riftapp-text-muted hover:border-riftapp-border-light hover:bg-riftapp-surface hover:text-riftapp-text',
+  overlay: 'border border-riftapp-border/70 bg-riftapp-bg/85 text-riftapp-text-muted hover:border-riftapp-border-light hover:bg-riftapp-content-elevated hover:text-riftapp-text',
 } as const;
 
 export default function ModalCloseButton({

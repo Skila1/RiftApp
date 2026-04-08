@@ -54,12 +54,12 @@ export default function InviteEmbed({ code }: { code: string }) {
   if (error) return null;
   if (!info) {
     return (
-      <div className="mt-2 w-[380px] h-[72px] rounded-xl bg-riftapp-surface border border-riftapp-border/40 animate-pulse" />
+      <div className="mt-2 w-[380px] h-[72px] rounded-xl bg-riftapp-content-elevated border border-riftapp-border/40 animate-pulse" />
     );
   }
 
   return (
-    <div className="mt-2 w-[380px] rounded-xl bg-riftapp-surface border border-riftapp-border/40 p-4 flex items-center gap-3">
+    <div className="mt-2 w-[380px] rounded-xl bg-riftapp-content-elevated border border-riftapp-border/40 p-4 flex items-center gap-3">
       {/* Hub icon */}
       <div className="w-12 h-12 rounded-2xl bg-riftapp-panel flex items-center justify-center flex-shrink-0 overflow-hidden">
         {info.hub_icon_url ? (

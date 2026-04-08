@@ -76,7 +76,7 @@ export default function ScreenShareModal() {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-riftapp-border/60 bg-riftapp-bg-alt px-5 py-4">
+        <div className="flex items-center justify-between border-t border-riftapp-border/60 bg-riftapp-content-elevated px-5 py-4">
           <p className="text-[13px] text-riftapp-text-muted">
             You are sharing your {(surfaceLabel ?? 'screen').toLowerCase()}.
           </p>

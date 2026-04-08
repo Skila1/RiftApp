@@ -20,7 +20,7 @@ function Row({
       disabled={disabled}
       onClick={onClick}
       className={`w-full text-left px-3 py-2.5 rounded-md text-[14px] flex items-center justify-between gap-3 transition-colors ${
-        disabled ? 'text-[#5c5e66] cursor-not-allowed opacity-60' : 'text-riftapp-text hover:bg-riftapp-surface hover:text-white'
+        disabled ? 'text-[#5c5e66] cursor-not-allowed opacity-60' : 'text-riftapp-text hover:bg-riftapp-chrome-hover hover:text-white'
       }`}
     >
       <div className="min-w-0 flex-1 text-left">{children}</div>
@@ -47,7 +47,7 @@ function CheckboxMark({ checked }: { checked: boolean }) {
   return (
     <span
       className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 ${
-        checked ? 'bg-[#5865f2] border-[#5865f2]' : 'border-riftapp-border-light bg-riftapp-bg-alt'
+        checked ? 'bg-[#5865f2] border-[#5865f2]' : 'border-riftapp-border-light bg-riftapp-content-elevated'
       }`}
     >
       {checked && (
@@ -126,7 +126,7 @@ export default function VoiceStreamContextMenu({
   return (
     <MenuOverlay x={x} y={y} onClose={onClose}>
       <div
-        className="min-w-[240px] max-w-[280px] rounded-md border border-riftapp-border/60 bg-riftapp-bg-alt py-1 shadow-modal"
+        className="min-w-[240px] max-w-[280px] rounded-md border border-riftapp-border/60 bg-riftapp-chrome py-1 shadow-modal"
         onContextMenu={(e) => e.preventDefault()}
       >
         <div className="px-1">

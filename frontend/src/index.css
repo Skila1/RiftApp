@@ -70,7 +70,7 @@
   }
 
   .hub-icon-idle {
-    @apply rounded-3xl bg-riftapp-surface text-riftapp-text-muted;
+    @apply rounded-3xl bg-riftapp-chrome-hover text-riftapp-text-muted;
   }
 
   .hub-icon-idle:hover {
@@ -101,11 +101,11 @@
   }
 
   .channel-item-idle:hover {
-    @apply text-riftapp-text bg-riftapp-panel/60;
+    @apply text-riftapp-text bg-riftapp-chrome-hover;
   }
 
   .channel-item-active {
-    @apply bg-riftapp-panel/80 text-riftapp-text font-medium;
+    @apply bg-riftapp-chrome-hover text-riftapp-text font-medium;
   }
 
   /* Modal backdrop with fade */
@@ -115,7 +115,7 @@
 
   /* Modal content with scale animation */
   .modal-content {
-    @apply bg-riftapp-surface rounded-xl shadow-modal border border-riftapp-border/50 overflow-hidden;
+    @apply bg-riftapp-content-elevated rounded-xl shadow-modal border border-riftapp-border/50 overflow-hidden;
   }
 
   /* Button base styles */

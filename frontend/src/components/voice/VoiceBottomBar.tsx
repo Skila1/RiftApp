@@ -66,7 +66,7 @@ function ConnectionQualityIndicator() {
   return (
     <div className="relative group">
       <div
-        className={`h-7 w-7 rounded-md border border-riftapp-border/50 bg-riftapp-surface/80 flex items-center justify-center transition-colors duration-150 hover:bg-riftapp-surface-hover ${toneClass}`}
+        className={`h-7 w-7 rounded-md border border-riftapp-border/50 bg-riftapp-chrome-hover/80 flex items-center justify-center transition-colors duration-150 hover:bg-riftapp-chrome-hover ${toneClass}`}
         aria-label="Voice connection quality"
       >
         <div className={`flex h-[12px] items-end gap-[1.5px] ${reconnecting ? 'animate-pulse-soft' : ''}`}>
@@ -84,7 +84,7 @@ function ConnectionQualityIndicator() {
       </div>
 
       <div
-        className="pointer-events-none absolute bottom-full right-0 z-50 mb-2 w-max min-w-[180px] rounded-lg border border-riftapp-border/60 bg-riftapp-bg-alt px-3 py-2 text-[12px] leading-snug text-riftapp-text shadow-[0_4px_16px_rgba(0,0,0,0.5)] opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+        className="pointer-events-none absolute bottom-full right-0 z-50 mb-2 w-max min-w-[180px] rounded-lg border border-riftapp-border/60 bg-riftapp-chrome px-3 py-2 text-[12px] leading-snug text-riftapp-text shadow-[0_4px_16px_rgba(0,0,0,0.5)] opacity-0 transition-opacity duration-150 group-hover:opacity-100"
         role="tooltip"
       >
         <div className="font-semibold text-white">Connection Quality</div>
@@ -106,7 +106,7 @@ function ConnectionQualityIndicator() {
           </div>
         )}
         <div
-          className="absolute right-4 top-full h-0 w-0 border-x-[6px] border-x-transparent border-t-[6px] border-t-riftapp-bg-alt"
+          className="absolute right-4 top-full h-0 w-0 border-x-[6px] border-x-transparent border-t-[6px] border-t-riftapp-chrome"
           aria-hidden
         />
       </div>
@@ -143,7 +143,7 @@ function VoiceControlBtn({
             ? 'bg-[#ed4245]/20 text-[#ed4245] hover:bg-[#ed4245]/30'
             : active
               ? 'text-white bg-white/[0.15] hover:bg-white/[0.22]'
-                : 'text-riftapp-text-muted hover:text-riftapp-text hover:bg-riftapp-surface/80'
+                : 'text-riftapp-text-muted hover:text-riftapp-text hover:bg-riftapp-chrome-hover/80'
         }
         disabled:opacity-40 disabled:cursor-not-allowed`}
     >
@@ -233,12 +233,12 @@ export default function VoiceBottomBar() {
     : '';
 
   return (
-    <div className="flex-shrink-0 bg-riftapp-bg-alt">
+    <div className="flex-shrink-0 bg-riftapp-chrome">
       {/* ── Voice Connected Section (above user bar) ── */}
       {inVoice && (
         <>
           {/* Status row */}
-          <div className="flex items-center gap-2 border-t border-riftapp-border/60 px-3 pb-1.5 pt-2">
+          <div className="flex items-center gap-2 px-3 pb-1.5 pt-2">
             <div className="flex-1 min-w-0">
               <p className={`text-[13px] font-semibold leading-tight ${voiceStatus.className}`}>
                 {voiceStatus.label}
@@ -331,16 +331,16 @@ export default function VoiceBottomBar() {
       )}
 
       {/* ── User Bar (always visible) ── */}
-      <div className="flex h-[52px] items-center border-t border-riftapp-border/60 px-1.5">
+      <div className="flex h-[52px] items-center px-1.5">
         {/* Avatar + name */}
         <button
           onClick={handleAvatarClick}
-          className="group flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 transition-all duration-150 hover:bg-riftapp-surface/70"
+          className="group flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 transition-all duration-150 hover:bg-riftapp-chrome-hover/70"
           title="View Profile"
         >
           <div className="relative flex-shrink-0">
             <div className={`w-8 h-8 rounded-full bg-[#5865f2] flex items-center justify-center text-xs font-semibold text-white overflow-hidden ${
-              voiceIsSpeaking ? 'ring-2 ring-riftapp-success ring-offset-1 ring-offset-riftapp-bg-alt' : ''
+              voiceIsSpeaking ? 'ring-2 ring-riftapp-success ring-offset-1 ring-offset-riftapp-chrome' : ''
             }`}>
               {user.avatar_url ? (
                 <img src={publicAssetUrl(user.avatar_url)} alt="" className="w-full h-full object-cover" />
@@ -352,7 +352,7 @@ export default function VoiceBottomBar() {
               userId={user.id}
               fallbackStatus={user.status}
               size="lg"
-              className="absolute -bottom-0.5 -right-0.5 border-[2.5px] border-riftapp-bg-alt"
+              className="absolute -bottom-0.5 -right-0.5 border-[2.5px] border-riftapp-chrome"
             />
           </div>
           <div className="flex-1 min-w-0 text-left">
@@ -369,7 +369,7 @@ export default function VoiceBottomBar() {
             className={`w-8 h-8 rounded-md flex items-center justify-center transition-all duration-150 active:scale-90 ${
               voiceIsMuted
                 ? 'text-[#ed4245] hover:bg-[#ed4245]/10'
-                : 'text-riftapp-text-muted hover:text-riftapp-text hover:bg-riftapp-surface/70'
+                : 'text-riftapp-text-muted hover:text-riftapp-text hover:bg-riftapp-chrome-hover/70'
             }`}
           >
             <MicIcon muted={voiceIsMuted} size={18} />
@@ -380,7 +380,7 @@ export default function VoiceBottomBar() {
             className={`w-8 h-8 rounded-md flex items-center justify-center transition-all duration-150 active:scale-90 ${
               voiceIsDeafened
                 ? 'text-[#ed4245] hover:bg-[#ed4245]/10'
-                : 'text-riftapp-text-muted hover:text-riftapp-text hover:bg-riftapp-surface/70'
+                : 'text-riftapp-text-muted hover:text-riftapp-text hover:bg-riftapp-chrome-hover/70'
             }`}
           >
             <HeadphonesIcon deafened={voiceIsDeafened} size={18} />
@@ -389,7 +389,7 @@ export default function VoiceBottomBar() {
             onClick={() => openSettings('profile')}
             title="User Settings"
             className="flex h-8 w-8 items-center justify-center rounded-md text-riftapp-text-muted
-              transition-all duration-150 active:scale-90 hover:bg-riftapp-surface/70 hover:text-riftapp-text"
+              transition-all duration-150 active:scale-90 hover:bg-riftapp-chrome-hover/70 hover:text-riftapp-text"
           >
             <SettingsIcon size={18} />
           </button>

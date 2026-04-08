@@ -8,6 +8,10 @@ export default {
         riftapp: {
           bg: '#111214',
           'bg-alt': '#15171a',
+          chrome: '#1f2125',
+          'chrome-hover': '#2a2d33',
+          content: '#15171a',
+          'content-elevated': '#1b1d22',
           surface: '#1a1c20',
           'surface-hover': '#23262b',
           panel: '#1f2125',

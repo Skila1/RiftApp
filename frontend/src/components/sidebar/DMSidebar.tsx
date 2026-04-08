@@ -83,12 +83,12 @@ export default function DMSidebar() {
   };
 
   return (
-    <div className="w-60 flex-shrink-0 bg-riftapp-surface flex flex-col">
+    <div className="w-60 flex-shrink-0 bg-riftapp-chrome flex flex-col">
       {/* Search bar */}
-      <div className="h-12 flex items-center px-3 border-b border-riftapp-border/60 flex-shrink-0 shadow-[0_1px_0_rgba(0,0,0,0.1)]">
+      <div className="h-12 flex items-center px-3 flex-shrink-0">
         <button
           onClick={handleSearchToggle}
-          className="w-full h-[28px] flex items-center gap-2 px-2 rounded bg-riftapp-bg/80 text-riftapp-text-dim text-[13px] hover:bg-riftapp-bg transition-colors"
+          className="w-full h-[28px] flex items-center gap-2 px-2 rounded bg-riftapp-chrome-hover/80 text-riftapp-text-dim text-[13px] hover:bg-riftapp-chrome-hover transition-colors"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="flex-shrink-0 opacity-60">
             <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -99,7 +99,7 @@ export default function DMSidebar() {
 
       {/* New DM search panel */}
       {showSearch && (
-        <div className="px-3 py-2.5 border-b border-riftapp-border/40 bg-riftapp-bg/30 animate-fade-in">
+        <div className="px-3 py-2.5 animate-fade-in">
           <form onSubmit={handleSearchSubmit} className="flex gap-1.5">
             <input
               ref={searchInputRef}
@@ -127,7 +127,7 @@ export default function DMSidebar() {
             <button
               onClick={() => handleOpenDM(searchResult.id)}
               disabled={opening}
-              className="w-full flex items-center gap-2.5 mt-2 px-2.5 py-2 rounded-lg bg-riftapp-surface hover:bg-riftapp-surface-hover border border-riftapp-border/40 transition-all duration-150 active:scale-[0.98]"
+              className="w-full flex items-center gap-2.5 mt-2 px-2.5 py-2 rounded-lg bg-riftapp-chrome-hover hover:bg-riftapp-chrome-hover/90 border border-riftapp-border/40 transition-all duration-150 active:scale-[0.98]"
             >
               <div className="w-7 h-7 rounded-full bg-riftapp-accent/20 flex items-center justify-center text-[10px] font-semibold text-riftapp-accent flex-shrink-0">
                 {searchResult.display_name.slice(0, 2).toUpperCase()}
@@ -150,8 +150,8 @@ export default function DMSidebar() {
           onClick={() => useDMStore.getState().clearActive()}
           className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-md transition-colors ${
             !activeConversationId
-              ? 'bg-riftapp-surface-hover text-riftapp-text'
-              : 'text-riftapp-text-muted hover:bg-riftapp-surface-hover/50 hover:text-riftapp-text'
+              ? 'bg-riftapp-chrome-hover text-riftapp-text'
+              : 'text-riftapp-text-muted hover:bg-riftapp-chrome-hover/80 hover:text-riftapp-text'
           }`}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -211,8 +211,8 @@ export default function DMSidebar() {
                   }}
                   className={`w-full flex items-center gap-2.5 px-2 py-2 rounded-md transition-colors ${
                     isActive
-                      ? 'bg-riftapp-surface-hover text-riftapp-text'
-                      : 'text-riftapp-text-muted hover:bg-riftapp-surface-hover/50 hover:text-riftapp-text'
+                      ? 'bg-riftapp-chrome-hover text-riftapp-text'
+                      : 'text-riftapp-text-muted hover:bg-riftapp-chrome-hover/80 hover:text-riftapp-text'
                   }`}
                 >
                   {/* Avatar */}
@@ -231,7 +231,7 @@ export default function DMSidebar() {
                     <StatusDot
                       userId={conv.recipient.id}
                       fallbackStatus={recipientStatus}
-                      className="absolute -bottom-0.5 -right-0.5 ring-2 ring-riftapp-surface"
+                      className="absolute -bottom-0.5 -right-0.5 ring-2 ring-riftapp-chrome"
                     />
                   </div>
 

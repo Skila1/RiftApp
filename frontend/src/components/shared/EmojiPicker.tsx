@@ -104,8 +104,8 @@ export default function EmojiPicker({ hubId, onSelect, onClose }: EmojiPickerPro
             onClick={() => setActiveTab('unicode')}
             className={`px-3 py-1.5 text-xs font-medium rounded-t-lg transition-colors ${
               activeTab === 'unicode'
-                ? 'bg-riftapp-surface text-riftapp-text border-b-2 border-riftapp-accent'
-                : 'text-riftapp-text-dim hover:text-riftapp-text hover:bg-riftapp-surface-hover'
+                ? 'bg-riftapp-content-elevated text-riftapp-text border-b-2 border-riftapp-accent'
+                : 'text-riftapp-text-dim hover:text-riftapp-text hover:bg-riftapp-content-elevated'
             }`}
           >
             Unicode
@@ -115,8 +115,8 @@ export default function EmojiPicker({ hubId, onSelect, onClose }: EmojiPickerPro
             onClick={() => setActiveTab('custom')}
             className={`px-3 py-1.5 text-xs font-medium rounded-t-lg transition-colors ${
               activeTab === 'custom'
-                ? 'bg-riftapp-surface text-riftapp-text border-b-2 border-riftapp-accent'
-                : 'text-riftapp-text-dim hover:text-riftapp-text hover:bg-riftapp-surface-hover'
+                ? 'bg-riftapp-content-elevated text-riftapp-text border-b-2 border-riftapp-accent'
+                : 'text-riftapp-text-dim hover:text-riftapp-text hover:bg-riftapp-content-elevated'
             }`}
           >
             Server
@@ -157,7 +157,7 @@ function UnicodeGrid({ search, onSelect }: { search: string; onSelect: (emoji: s
                   key={emoji}
                   type="button"
                   onClick={() => onSelect(emoji)}
-                  className="w-9 h-9 flex items-center justify-center text-xl rounded-lg hover:bg-riftapp-surface-hover active:bg-riftapp-panel transition-colors duration-100"
+                  className="w-9 h-9 flex items-center justify-center text-xl rounded-lg hover:bg-riftapp-content-elevated active:bg-riftapp-content-elevated transition-colors duration-100"
                 >
                   {emoji}
                 </button>
@@ -173,7 +173,7 @@ function UnicodeGrid({ search, onSelect }: { search: string; onSelect: (emoji: s
               key={emoji}
               type="button"
               onClick={() => onSelect(emoji)}
-              className="w-9 h-9 flex items-center justify-center text-xl rounded-lg hover:bg-riftapp-surface-hover active:bg-riftapp-panel transition-colors duration-100"
+              className="w-9 h-9 flex items-center justify-center text-xl rounded-lg hover:bg-riftapp-content-elevated active:bg-riftapp-content-elevated transition-colors duration-100"
             >
               {emoji}
             </button>
@@ -195,7 +195,7 @@ function CustomGrid({ emojis, onSelect }: { emojis: HubEmoji[]; onSelect: (e: Hu
           key={e.id}
           type="button"
           onClick={() => onSelect(e)}
-          className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-riftapp-surface-hover active:bg-riftapp-panel transition-colors duration-100 group/emoji"
+          className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-riftapp-content-elevated active:bg-riftapp-content-elevated transition-colors duration-100 group/emoji"
           title={`:${e.name}:`}
         >
           <img

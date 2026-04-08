@@ -40,7 +40,7 @@ export default function DeleteMessageModal({ message, onConfirm, onCancel }: Pro
       loading={deleting}
       allowBackdropClose
     >
-      <div className="rounded-xl border border-riftapp-border/50 bg-riftapp-surface/70 p-3 shadow-elevation-low">
+      <div className="rounded-xl border border-riftapp-border/50 bg-riftapp-content-elevated/70 p-3 shadow-elevation-low">
         <div className="max-h-[52vh] overflow-y-auto pr-1">
           <MessageItem
             message={message}

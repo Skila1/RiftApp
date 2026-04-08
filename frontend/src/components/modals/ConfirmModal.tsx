@@ -108,7 +108,7 @@ export default function ConfirmModal({
 
         {children && <div className="px-5 pb-4">{children}</div>}
 
-        <div className="flex items-center justify-end gap-3 border-t border-riftapp-border/60 bg-riftapp-bg-alt px-5 py-4">
+        <div className="flex items-center justify-end gap-3 border-t border-riftapp-border/60 bg-riftapp-content-elevated px-5 py-4">
           {cancelText ? (
             <button
               type="button"

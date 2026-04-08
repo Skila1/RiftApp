@@ -344,7 +344,7 @@ function VoiceSelectControl({
         value={value ?? ''}
         onChange={(event) => void onChange(event.target.value || null)}
         disabled={disabled}
-        className="h-9 w-full cursor-pointer rounded-[10px] border border-riftapp-border/70 bg-riftapp-surface px-3 text-[14px] font-medium text-riftapp-text outline-none transition-colors hover:border-riftapp-border-light focus:border-[#5865f2] disabled:cursor-not-allowed disabled:opacity-60"
+        className="h-9 w-full cursor-pointer rounded-[10px] border border-riftapp-border/70 bg-riftapp-content-elevated px-3 text-[14px] font-medium text-riftapp-text outline-none transition-colors hover:border-riftapp-border-light focus:border-[#5865f2] disabled:cursor-not-allowed disabled:opacity-60"
       >
         <option value="">{systemDefaultLabel(kind)}</option>
         {devices.map((device) => (
@@ -457,7 +457,7 @@ function CameraSelectControl({
         <select
           value={value ?? ''}
           onChange={(event) => void onChange(event.target.value || null)}
-          className="h-9 w-full cursor-pointer rounded-[10px] border border-riftapp-border/70 bg-riftapp-surface pl-10 pr-10 text-[14px] font-medium text-riftapp-text outline-none transition-colors hover:border-riftapp-border-light focus:border-[#5865f2]"
+          className="h-9 w-full cursor-pointer rounded-[10px] border border-riftapp-border/70 bg-riftapp-content-elevated pl-10 pr-10 text-[14px] font-medium text-riftapp-text outline-none transition-colors hover:border-riftapp-border-light focus:border-[#5865f2]"
         >
           <option value="">{systemDefaultLabel('videoinput')}</option>
           {devices.map((device) => (
@@ -1351,7 +1351,7 @@ function BackgroundPickerModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-riftapp-border/60 bg-riftapp-surface px-3 py-2 text-[13px] font-medium text-riftapp-text transition-colors hover:bg-riftapp-surface-hover"
+            className="rounded-lg border border-riftapp-border/60 bg-riftapp-content-elevated px-3 py-2 text-[13px] font-medium text-riftapp-text transition-colors hover:bg-riftapp-content-elevated"
           >
             Close
           </button>
@@ -1369,7 +1369,7 @@ function BackgroundPickerModal({
                   type="button"
                   onClick={() => uploadInputRef.current?.click()}
                   disabled={uploading}
-                  className="w-full rounded-lg border border-riftapp-border/60 bg-riftapp-surface px-3 py-2.5 text-sm font-medium text-riftapp-text transition-colors hover:bg-riftapp-surface-hover disabled:cursor-not-allowed disabled:opacity-60"
+                  className="w-full rounded-lg border border-riftapp-border/60 bg-riftapp-content-elevated px-3 py-2.5 text-sm font-medium text-riftapp-text transition-colors hover:bg-riftapp-content-elevated disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {uploading ? 'Uploading…' : 'Upload Image'}
                 </button>
@@ -1377,7 +1377,7 @@ function BackgroundPickerModal({
                   type="button"
                   onClick={() => gifInputRef.current?.click()}
                   disabled={uploading}
-                  className="w-full rounded-lg border border-riftapp-border/60 bg-riftapp-surface px-3 py-2.5 text-sm font-medium text-riftapp-text transition-colors hover:bg-riftapp-surface-hover disabled:cursor-not-allowed disabled:opacity-60"
+                  className="w-full rounded-lg border border-riftapp-border/60 bg-riftapp-content-elevated px-3 py-2.5 text-sm font-medium text-riftapp-text transition-colors hover:bg-riftapp-content-elevated disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {uploading ? 'Uploading…' : 'Upload GIF'}
                 </button>
@@ -1442,7 +1442,7 @@ function BackgroundPickerModal({
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Search GIF backgrounds"
-                  className="w-full rounded-lg border border-riftapp-border/60 bg-riftapp-surface px-3 py-2.5 text-[13px] text-white outline-none transition-colors placeholder:text-riftapp-text-dim focus:border-[#5865f2]"
+                  className="w-full rounded-lg border border-riftapp-border/60 bg-riftapp-content-elevated px-3 py-2.5 text-[13px] text-white outline-none transition-colors placeholder:text-riftapp-text-dim focus:border-[#5865f2]"
                 />
               </div>
             </div>
@@ -1483,7 +1483,7 @@ function BackgroundPickerModal({
             </div>
 
             {!loading && !error && results.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-riftapp-border/60 bg-riftapp-surface px-4 py-8 text-center text-[13px] text-riftapp-text-muted">
+              <div className="rounded-xl border border-dashed border-riftapp-border/60 bg-riftapp-content-elevated px-4 py-8 text-center text-[13px] text-riftapp-text-muted">
                 No GIFs matched that search.
               </div>
             ) : null}

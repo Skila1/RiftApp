@@ -171,11 +171,11 @@ export default function MiniProfilePopover() {
         pointerEvents: visible ? 'auto' : 'none',
       }}
     >
-      <div className="bg-riftapp-surface rounded-xl border border-riftapp-border/50 shadow-modal overflow-hidden">
+      <div className="bg-riftapp-content-elevated rounded-xl border border-riftapp-border/50 shadow-modal overflow-hidden">
         <div className="h-16 relative" style={{ backgroundColor: `${accent}40` }}>
           <div className="absolute -bottom-8 left-4">
             <div
-              className="w-[72px] h-[72px] rounded-full border-[4px] border-riftapp-surface flex items-center justify-center overflow-hidden"
+              className="w-[72px] h-[72px] rounded-full border-[4px] border-riftapp-content-elevated flex items-center justify-center overflow-hidden"
               style={{ backgroundColor: accent }}
             >
               {user.avatar_url ? (
@@ -186,7 +186,7 @@ export default function MiniProfilePopover() {
                 </span>
               )}
             </div>
-            <div className="absolute bottom-[2px] right-[2px] border-[3px] border-riftapp-surface rounded-full">
+            <div className="absolute bottom-[2px] right-[2px] border-[3px] border-riftapp-content-elevated rounded-full">
               <StatusDot userId={user.id} fallbackStatus={user.status} size="lg" />
             </div>
           </div>
@@ -242,7 +242,7 @@ export default function MiniProfilePopover() {
                 </button>
               )}
               {relationship === 'pending_outgoing' && (
-                <button disabled className="flex-1 py-1.5 text-sm font-medium rounded-lg bg-riftapp-surface text-riftapp-text-dim cursor-default border border-riftapp-border/40">
+                <button disabled className="flex-1 py-1.5 text-sm font-medium rounded-lg bg-riftapp-content-elevated text-riftapp-text-dim cursor-default border border-riftapp-border/40">
                   Pending
                 </button>
               )}
@@ -252,7 +252,7 @@ export default function MiniProfilePopover() {
                 </button>
               )}
               {relationship === 'blocked' ? (
-                <button onClick={handleUnblock} disabled={relLoading} className="py-1.5 px-3 text-sm font-medium rounded-lg bg-riftapp-surface text-riftapp-text-dim hover:text-riftapp-text border border-riftapp-border/40 transition-colors">
+                <button onClick={handleUnblock} disabled={relLoading} className="py-1.5 px-3 text-sm font-medium rounded-lg bg-riftapp-content-elevated text-riftapp-text-dim hover:text-riftapp-text border border-riftapp-border/40 transition-colors">
                   {relLoading ? '...' : 'Unblock'}
                 </button>
               ) : (

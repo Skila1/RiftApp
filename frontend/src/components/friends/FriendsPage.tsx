@@ -42,9 +42,9 @@ export default function FriendsPage() {
   ];
 
   return (
-    <div className="flex-1 flex flex-col bg-riftapp-bg min-w-0">
+    <div className="flex-1 flex flex-col bg-riftapp-content min-w-0">
       {/* Header bar */}
-      <div className="h-12 flex items-center gap-1 px-4 border-b border-riftapp-border/60 flex-shrink-0">
+      <div className="h-12 flex items-center gap-1 px-4 flex-shrink-0 bg-riftapp-content">
         <div className="flex items-center gap-2 mr-4">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-riftapp-text-dim">
             <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
@@ -65,14 +65,14 @@ export default function FriendsPage() {
                   ? 'bg-transparent text-riftapp-success'
                   : 'bg-riftapp-success/20 text-riftapp-success hover:bg-riftapp-success/30'
                 : tab === t.key
-                  ? 'bg-riftapp-surface-hover text-riftapp-text'
-                  : 'text-riftapp-text-muted hover:bg-riftapp-surface-hover/50 hover:text-riftapp-text'
+                  ? 'bg-riftapp-content-elevated text-riftapp-text'
+                  : 'text-riftapp-text-muted hover:bg-riftapp-content-elevated/80 hover:text-riftapp-text'
             }`}
           >
             {t.label}
             {t.count !== undefined && t.count > 0 && (
               <span className={`ml-1.5 min-w-[18px] h-[16px] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold leading-none ${
-                t.key === 'pending' ? 'bg-riftapp-danger text-white' : 'bg-riftapp-surface text-riftapp-text-dim'
+                t.key === 'pending' ? 'bg-riftapp-danger text-white' : 'bg-riftapp-content-elevated text-riftapp-text-dim'
               }`}>
                 {t.count}
               </span>
@@ -188,7 +188,7 @@ function BlockedList({ blocked }: { blocked: Block[] }) {
         {blocked.map((b) => {
           const user = b.user!;
           return (
-            <div key={user.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-riftapp-surface/60 transition-colors group">
+            <div key={user.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-riftapp-content-elevated/80 transition-colors group">
               <div className="w-9 h-9 rounded-full bg-riftapp-panel flex items-center justify-center text-sm font-semibold text-riftapp-text-dim flex-shrink-0 overflow-hidden">
                 {user.avatar_url ? (
                   <img src={publicAssetUrl(user.avatar_url)} alt="" className="w-full h-full object-cover" />
@@ -202,7 +202,7 @@ function BlockedList({ blocked }: { blocked: Block[] }) {
               </div>
               <button
                 onClick={() => unblockUser(user.id)}
-                className="px-3 py-1 rounded text-xs font-medium bg-riftapp-surface hover:bg-riftapp-surface-hover border border-riftapp-border/40 text-riftapp-text-muted hover:text-riftapp-text transition-colors opacity-0 group-hover:opacity-100"
+                className="px-3 py-1 rounded text-xs font-medium bg-riftapp-content-elevated hover:bg-riftapp-content-elevated border border-riftapp-border/40 text-riftapp-text-muted hover:text-riftapp-text transition-colors opacity-0 group-hover:opacity-100"
               >
                 Unblock
               </button>
@@ -290,7 +290,7 @@ function AddFriend() {
       </form>
 
       {foundUser && (
-        <div className="mt-4 flex items-center gap-3 p-3 rounded-xl bg-riftapp-surface border border-riftapp-border/40">
+        <div className="mt-4 flex items-center gap-3 p-3 rounded-xl bg-riftapp-content-elevated border border-riftapp-border/40">
           <div className="relative flex-shrink-0">
             <div className="w-10 h-10 rounded-full bg-riftapp-accent/20 flex items-center justify-center text-sm font-semibold text-riftapp-accent overflow-hidden">
               {foundUser.avatar_url ? (
@@ -299,7 +299,7 @@ function AddFriend() {
                 foundUser.display_name.slice(0, 2).toUpperCase()
               )}
             </div>
-            <StatusDot userId={foundUser.id} fallbackStatus={foundUser.status} className="absolute -bottom-0.5 -right-0.5 ring-2 ring-riftapp-surface" />
+            <StatusDot userId={foundUser.id} fallbackStatus={foundUser.status} className="absolute -bottom-0.5 -right-0.5 ring-2 ring-riftapp-content-elevated" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold truncate">{foundUser.display_name}</p>
@@ -320,7 +320,7 @@ function AddFriend() {
 
 function FriendRow({ user, subtitle, children }: { user: User; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-riftapp-surface/60 transition-colors group">
+    <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-riftapp-content-elevated/80 transition-colors group">
       <div className="relative flex-shrink-0">
         <div className="w-9 h-9 rounded-full bg-riftapp-accent/20 flex items-center justify-center text-sm font-semibold text-riftapp-accent overflow-hidden">
           {user.avatar_url ? (
@@ -343,12 +343,12 @@ function FriendRow({ user, subtitle, children }: { user: User; subtitle?: string
 }
 
 function ActionBtn({ icon, title, onClick, danger, success }: { icon: string; title: string; onClick: () => void; danger?: boolean; success?: boolean }) {
-  const color = danger ? 'text-riftapp-danger hover:bg-riftapp-danger/20' : success ? 'text-riftapp-success hover:bg-riftapp-success/20' : 'text-riftapp-text-muted hover:bg-riftapp-surface-hover';
+  const color = danger ? 'text-riftapp-danger hover:bg-riftapp-danger/20' : success ? 'text-riftapp-success hover:bg-riftapp-success/20' : 'text-riftapp-text-muted hover:bg-riftapp-content-elevated';
   return (
     <button
       onClick={onClick}
       title={title}
-      className={`w-8 h-8 rounded-full bg-riftapp-surface border border-riftapp-border/40 flex items-center justify-center transition-colors ${color}`}
+      className={`w-8 h-8 rounded-full bg-riftapp-content-elevated border border-riftapp-border/40 flex items-center justify-center transition-colors ${color}`}
     >
       {icon === 'message' && (
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">

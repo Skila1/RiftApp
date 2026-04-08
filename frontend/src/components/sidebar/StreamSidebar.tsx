@@ -211,7 +211,7 @@ export default function StreamSidebar() {
 
   if (!activeHubId) {
     return (
-      <div className="sidebar w-60 min-h-0 overflow-hidden flex-shrink-0 bg-riftapp-surface flex flex-col">
+      <div className="sidebar w-60 min-h-0 overflow-hidden flex-shrink-0 bg-riftapp-chrome flex flex-col">
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center px-6">
             <div className="w-12 h-12 rounded-2xl bg-riftapp-panel flex items-center justify-center mx-auto mb-3">
@@ -229,17 +229,17 @@ export default function StreamSidebar() {
   }
 
   return (
-    <div className="sidebar w-60 min-h-0 overflow-hidden flex-shrink-0 bg-riftapp-surface flex flex-col">
+    <div className="sidebar w-60 min-h-0 overflow-hidden flex-shrink-0 bg-riftapp-chrome flex flex-col">
       {/* Hub header */}
       <div
-        className="h-12 flex items-center border-b border-riftapp-border/60 flex-shrink-0"
+        className="h-12 flex items-center flex-shrink-0"
         onContextMenu={handleHeaderContext}
       >
         <button
           onClick={() => setShowHubSettings(true)}
           title="Hub settings"
           className="flex-1 flex items-center justify-between px-4 h-full
-            hover:bg-riftapp-surface-hover active:bg-riftapp-panel transition-colors duration-150 group min-w-0"
+            hover:bg-riftapp-chrome-hover active:bg-riftapp-chrome-hover transition-colors duration-150 group min-w-0"
         >
           <h2 className="font-semibold text-[14px] truncate">{activeHub?.name}</h2>
           <svg
@@ -252,10 +252,10 @@ export default function StreamSidebar() {
         <button
           onClick={() => setShowInviteModal(true)}
           title="Invite people to this hub"
-          className={`w-10 h-full flex items-center justify-center border-l border-riftapp-border/40 transition-all duration-150 active:scale-95 flex-shrink-0 ${
+          className={`w-10 h-full flex items-center justify-center transition-all duration-150 active:scale-95 flex-shrink-0 ${
             showInviteModal
               ? 'bg-riftapp-accent/15 text-riftapp-accent'
-              : 'text-riftapp-text-dim hover:text-riftapp-text hover:bg-riftapp-surface-hover'
+              : 'text-riftapp-text-dim hover:text-riftapp-text hover:bg-riftapp-chrome-hover'
           }`}
           aria-label="Invite people"
         >
@@ -283,7 +283,7 @@ export default function StreamSidebar() {
                 setShowCreateChannel(true);
                 setHeaderMenu(null);
               }}
-              className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-surface"
+              className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#949ba4] shrink-0">
                 <line x1="12" y1="5" x2="12" y2="19" />
@@ -297,7 +297,7 @@ export default function StreamSidebar() {
                 setShowCreateCategory(true);
                 setHeaderMenu(null);
               }}
-              className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-surface"
+              className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#949ba4] shrink-0">
                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
@@ -311,7 +311,7 @@ export default function StreamSidebar() {
                 setShowInviteModal(true);
                 setHeaderMenu(null);
               }}
-              className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-surface"
+              className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#949ba4] shrink-0">
                 <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -330,10 +330,10 @@ export default function StreamSidebar() {
                     void navigator.clipboard.writeText(activeHubId);
                     setHeaderMenu(null);
                   }}
-                  className="mx-1 flex w-[calc(100%-8px)] items-center justify-between gap-2 rounded px-2 py-1.5 text-left hover:bg-riftapp-surface"
+                  className="mx-1 flex w-[calc(100%-8px)] items-center justify-between gap-2 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover"
                 >
                   <span>Copy Server ID</span>
-                  <span className="rounded border border-riftapp-border/60 bg-riftapp-bg-alt px-1 py-0.5 text-[10px] font-mono font-semibold text-riftapp-text-muted">ID</span>
+                  <span className="rounded border border-riftapp-border/60 bg-riftapp-chrome-hover px-1 py-0.5 text-[10px] font-mono font-semibold text-riftapp-text-muted">ID</span>
                 </button>
               </>
             )}
@@ -399,7 +399,7 @@ export default function StreamSidebar() {
                 setShowCreateChannel(true);
                 setBlankSpaceMenu(null);
               }}
-              className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-surface"
+              className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#949ba4] shrink-0">
                 <line x1="12" y1="5" x2="12" y2="19" />
@@ -413,7 +413,7 @@ export default function StreamSidebar() {
                 setShowCreateCategory(true);
                 setBlankSpaceMenu(null);
               }}
-              className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-surface"
+              className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#949ba4] shrink-0">
                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
@@ -427,7 +427,7 @@ export default function StreamSidebar() {
                 setShowInviteModal(true);
                 setBlankSpaceMenu(null);
               }}
-              className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-surface"
+              className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#949ba4] shrink-0">
                 <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -884,7 +884,7 @@ function DndChannelList({
           </div>
         )}
         {activeCategory && (
-          <div className="flex items-center gap-0.5 section-label px-1 bg-riftapp-surface shadow-elevation-md rounded-md opacity-90 pointer-events-none py-1">
+          <div className="flex items-center gap-0.5 section-label px-1 bg-riftapp-chrome-hover shadow-elevation-md rounded-md opacity-90 pointer-events-none py-1">
             <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="opacity-60">
               <polyline points="6 9 12 15 18 9" />
             </svg>

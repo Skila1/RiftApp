@@ -82,8 +82,8 @@ export default function CreateChannelModal({ hubId, categoryId, initialType, onC
                 onClick={() => setType(ct.value)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
                   type === ct.value
-                    ? 'bg-riftapp-surface-hover ring-1 ring-riftapp-accent/50'
-                    : 'bg-riftapp-surface hover:bg-riftapp-surface-hover'
+                    ? 'bg-riftapp-chrome-hover ring-1 ring-riftapp-accent/50'
+                    : 'bg-riftapp-content-elevated hover:bg-riftapp-chrome-hover'
                 }`}
               >
                 <div className={`flex-shrink-0 ${type === ct.value ? 'text-riftapp-text' : 'text-riftapp-text-dim'}`}>
@@ -152,7 +152,7 @@ export default function CreateChannelModal({ hubId, categoryId, initialType, onC
         </div>
 
         {/* Footer */}
-        <div className="bg-riftapp-surface px-6 py-4 flex justify-end gap-3">
+        <div className="bg-riftapp-content-elevated px-6 py-4 flex justify-end gap-3">
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-riftapp-text-dim hover:text-riftapp-text transition-colors">
             Cancel
           </button>

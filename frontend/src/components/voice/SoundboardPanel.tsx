@@ -95,7 +95,7 @@ export default function SoundboardPanel({ hubId, onClose }: SoundboardPanelProps
                   className={`flex items-center gap-2 px-2.5 py-2 rounded-lg text-left transition-all duration-150 active:scale-95 ${
                     isPlaying
                       ? 'bg-riftapp-accent/20 border border-riftapp-accent/40 text-riftapp-accent'
-                      : 'bg-riftapp-surface hover:bg-riftapp-surface-hover border border-transparent text-riftapp-text-muted hover:text-riftapp-text'
+                      : 'bg-riftapp-content-elevated hover:bg-riftapp-chrome-hover border border-transparent text-riftapp-text-muted hover:text-riftapp-text'
                   } ${playingId && !isPlaying ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   {isPlaying ? (

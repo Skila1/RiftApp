@@ -184,7 +184,7 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search for friends"
-              className="w-full rounded-lg border border-riftapp-border/60 bg-riftapp-surface py-2.5 pl-10 pr-3 text-sm text-white
+              className="w-full rounded-lg border border-riftapp-border/60 bg-riftapp-content-elevated py-2.5 pl-10 pr-3 text-sm text-white
                 transition-all placeholder:text-riftapp-text-dim focus:outline-none focus:ring-1 focus:ring-[#5865f2]"
             />
           </div>
@@ -214,7 +214,7 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
               >
                 {/* Avatar */}
                 <div className="relative flex-shrink-0">
-                  <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-riftapp-bg-alt">
+                  <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-riftapp-content-elevated">
                     {u.avatar_url ? (
                       <img src={publicAssetUrl(u.avatar_url)} alt="" className="w-full h-full object-cover" />
                     ) : (
@@ -272,7 +272,7 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
             Or send a server invite link
           </p>
           <div className="flex gap-2">
-            <div className="flex-1 truncate rounded-[4px] bg-riftapp-surface px-3 py-2.5 font-mono text-sm text-riftapp-text select-all">
+            <div className="flex-1 truncate rounded-[4px] bg-riftapp-content-elevated px-3 py-2.5 font-mono text-sm text-riftapp-text select-all">
               {generating ? (
                 <span className="text-riftapp-text-dim">Generating...</span>
               ) : inviteUrl || (
@@ -347,7 +347,7 @@ function InviteSettingsModal({
           <div className="flex items-center gap-2.5">
             <button
               onClick={onBack}
-              className="-ml-1 rounded-md p-1 text-riftapp-text-muted transition-colors hover:bg-riftapp-surface/70 hover:text-white"
+              className="-ml-1 rounded-md p-1 text-riftapp-text-muted transition-colors hover:bg-riftapp-content-elevated/80 hover:text-white"
               title="Back"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -373,7 +373,7 @@ function InviteSettingsModal({
             <select
               value={expire}
               onChange={(e) => setExpire(Number(e.target.value))}
-              className="w-full rounded-[4px] bg-riftapp-surface px-3 py-2.5 text-sm text-riftapp-text border-none
+              className="w-full rounded-[4px] bg-riftapp-content-elevated px-3 py-2.5 text-sm text-riftapp-text border-none
                 focus:outline-none focus:ring-1 focus:ring-[#5865f2] appearance-none cursor-pointer"
             >
               {EXPIRE_OPTIONS.map((opt) => (
@@ -392,7 +392,7 @@ function InviteSettingsModal({
             <select
               value={maxUses}
               onChange={(e) => setMaxUses(Number(e.target.value))}
-              className="w-full rounded-[4px] bg-riftapp-surface px-3 py-2.5 text-sm text-riftapp-text border-none
+              className="w-full rounded-[4px] bg-riftapp-content-elevated px-3 py-2.5 text-sm text-riftapp-text border-none
                 focus:outline-none focus:ring-1 focus:ring-[#5865f2] appearance-none cursor-pointer"
             >
               {MAX_USES_OPTIONS.map((opt) => (
@@ -429,7 +429,7 @@ function InviteSettingsModal({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center justify-end gap-3 border-t border-riftapp-border/60 bg-riftapp-bg-alt px-5 py-4">
+        <div className="flex items-center justify-end gap-3 border-t border-riftapp-border/60 bg-riftapp-content-elevated px-5 py-4">
           <button
             onClick={onBack}
             className="px-4 py-2 text-[13px] font-medium text-riftapp-text hover:underline"
