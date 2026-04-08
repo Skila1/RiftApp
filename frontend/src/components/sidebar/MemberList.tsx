@@ -25,6 +25,28 @@ function FilterIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+function HeaderActionButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-transparent bg-transparent text-[#aeb4bf] transition-colors hover:bg-riftapp-content-elevated hover:text-[#f2f3f5]"
+    >
+      {children}
+    </button>
+  );
+}
+
 function UserRow({ user }: { user: User }) {
   const status = usePresenceStore((s) => s.presence[user.id]) ?? user.status;
   const isOffline = status === 0;
@@ -105,36 +127,36 @@ export default function MemberList() {
 
   return (
     <div className="w-60 border-l border-riftapp-border/60 bg-riftapp-content flex flex-col overflow-hidden flex-shrink-0">
-      <div className="border-b border-riftapp-border/50 bg-riftapp-content px-3 py-3">
-        <div className="flex items-center gap-2 rounded-md border border-[#2e3138] bg-riftapp-content-elevated px-2.5 text-[#aeb4bf] focus-within:border-[#3a3d45] focus-within:text-[#f2f3f5]">
-          <SearchIcon className="h-4 w-4 shrink-0" />
-          <input
-            type="text"
-            value={messageSearch}
-            onFocus={() => dispatchChatSearchRequest({ query: messageSearch })}
-            onChange={(event) => {
-              const nextValue = event.target.value;
-              setMessageSearch(nextValue);
-              dispatchChatSearchRequest({ query: nextValue });
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                dispatchChatSearchRequest({ query: messageSearch, run: true });
-              }
-            }}
-            placeholder={activeStream ? `Search #${activeStream.name}` : 'Search messages'}
-            className="w-full bg-transparent py-2 text-sm text-[#f2f3f5] outline-none placeholder:text-[#7b818e]"
-            aria-label="Search messages"
-          />
-          <button
-            type="button"
+      <div className="border-b border-riftapp-border/50 bg-riftapp-content px-3">
+        <div className="flex h-12 items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-[#2e3138] bg-riftapp-content-elevated px-2.5 text-[#aeb4bf] transition-colors focus-within:border-[#3a3d45] focus-within:text-[#f2f3f5]">
+            <SearchIcon className="h-4 w-4 shrink-0" />
+            <input
+              type="text"
+              value={messageSearch}
+              onFocus={() => dispatchChatSearchRequest({ query: messageSearch })}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                setMessageSearch(nextValue);
+                dispatchChatSearchRequest({ query: nextValue });
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  dispatchChatSearchRequest({ query: messageSearch, run: true });
+                }
+              }}
+              placeholder={activeStream ? `Search #${activeStream.name}` : 'Search messages'}
+              className="min-w-0 flex-1 bg-transparent py-0 text-[13px] text-[#f2f3f5] outline-none placeholder:text-[#7b818e]"
+              aria-label="Search messages"
+            />
+          </div>
+          <HeaderActionButton
+            label="Open advanced search"
             onClick={() => dispatchChatSearchRequest({ query: messageSearch, run: true })}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#8d94a0] transition-colors hover:bg-riftapp-content-elevated hover:text-[#f2f3f5]"
-            aria-label="Open advanced search"
           >
             <FilterIcon className="h-3.5 w-3.5" />
-          </button>
+          </HeaderActionButton>
         </div>
       </div>
 
