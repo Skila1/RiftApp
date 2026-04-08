@@ -468,7 +468,7 @@ function PinnedMessageCard({
       tabIndex={0}
       onClick={onOpen}
       onKeyDown={handleKeyDown}
-      className="group rounded-xl border border-white/6 bg-[#17181c] px-3 py-3 text-left transition-colors hover:bg-[#1d1f24] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865f2]/40"
+      className="group rounded-xl bg-[#17181c] px-3 py-3 text-left transition-colors hover:bg-[#1d1f24] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865f2]/40"
     >
       <div className="pointer-events-none">
         <MessageItem
