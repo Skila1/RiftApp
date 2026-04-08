@@ -186,52 +186,53 @@
     opacity: 0.45;
   }
 
-  .voice-sensitivity-slider {
-    @apply h-1 w-full appearance-none rounded-full cursor-pointer;
-    background: linear-gradient(90deg, #23a55a 0%, #f0b232 54%, #ed4245 100%);
+  .voice-threshold-slider {
+    @apply h-6 w-full appearance-none cursor-pointer bg-transparent;
   }
 
-  .voice-sensitivity-slider::-webkit-slider-runnable-track {
-    height: 4px;
+  .voice-threshold-slider::-webkit-slider-runnable-track {
+    height: 24px;
     border-radius: 9999px;
     background: transparent;
   }
 
-  .voice-sensitivity-slider::-webkit-slider-thumb {
+  .voice-threshold-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    margin-top: -6px;
+    margin-top: 4px;
     height: 16px;
     width: 16px;
-    border: 0;
+    border: 2px solid var(--threshold-thumb-border, rgba(255, 255, 255, 0.92));
     border-radius: 9999px;
     background: #ffffff;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    box-shadow: var(--threshold-thumb-shadow, 0 1px 2px rgba(0, 0, 0, 0.35));
+    transition: box-shadow 120ms ease, border-color 120ms ease;
   }
 
-  .voice-sensitivity-slider::-moz-range-track {
-    height: 4px;
+  .voice-threshold-slider::-moz-range-track {
+    height: 24px;
     border: 0;
-    border-radius: 9999px;
-    background: linear-gradient(90deg, #23a55a 0%, #f0b232 54%, #ed4245 100%);
-  }
-
-  .voice-sensitivity-slider::-moz-range-progress {
-    height: 4px;
     border-radius: 9999px;
     background: transparent;
   }
 
-  .voice-sensitivity-slider::-moz-range-thumb {
-    height: 16px;
-    width: 16px;
-    border: 0;
+  .voice-threshold-slider::-moz-range-progress {
+    height: 24px;
     border-radius: 9999px;
-    background: #ffffff;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    background: transparent;
   }
 
-  .voice-sensitivity-slider:disabled {
+  .voice-threshold-slider::-moz-range-thumb {
+    height: 16px;
+    width: 16px;
+    border: 2px solid var(--threshold-thumb-border, rgba(255, 255, 255, 0.92));
+    border-radius: 9999px;
+    background: #ffffff;
+    box-shadow: var(--threshold-thumb-shadow, 0 1px 2px rgba(0, 0, 0, 0.35));
+    transition: box-shadow 120ms ease, border-color 120ms ease;
+  }
+
+  .voice-threshold-slider:disabled {
     cursor: not-allowed;
     opacity: 1;
   }

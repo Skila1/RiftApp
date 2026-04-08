@@ -21,8 +21,16 @@ export interface MicNoiseGateSettings {
   inputVolume: number;
 }
 
+export interface MicNoiseGateMetrics {
+  level: number;
+  threshold: number;
+  aboveThreshold: boolean;
+  speaking: boolean;
+}
+
 interface MicNoiseGateCallbacks {
   onSpeakingStateChange: (speaking: boolean) => void;
+  onMetricsChange?: (metrics: MicNoiseGateMetrics) => void;
 }
 
 interface MicNoiseGateInitOptions {
@@ -55,6 +63,10 @@ export function updateAutomaticMicNoiseFloor(noiseFloor: number, level: number) 
     AUTO_THRESHOLD_MIN * 0.5,
     AUTO_THRESHOLD_MAX,
   );
+}
+
+export function normalizeMicMeterLevel(level: number) {
+  return clamp(level / AUTO_THRESHOLD_MAX, 0, 1);
 }
 
 let rnnoiseBinaryPromise: Promise<ArrayBuffer> | null = null;
@@ -121,6 +133,10 @@ export class MicNoiseGateProcessor {
 
   private rnnoise: RnnoiseWorkletNode | null = null;
 
+  private stereoSplitter: ChannelSplitterNode | null = null;
+
+  private stereoMerger: ChannelMergerNode | null = null;
+
   private destination: MediaStreamAudioDestinationNode | null = null;
 
   private samples: Uint8Array<ArrayBuffer> | null = null;
@@ -132,6 +148,8 @@ export class MicNoiseGateProcessor {
   private holdUntil = 0;
 
   private noiseFloor = AUTO_THRESHOLD_MIN;
+
+  private lastLevel = 0;
 
   constructor(settings: MicNoiseGateSettings, callbacks: MicNoiseGateCallbacks) {
     this.settings = settings;
@@ -149,11 +167,14 @@ export class MicNoiseGateProcessor {
       this.setSpeaking(true);
       this.setGain(this.getOpenGain());
     }
+
+    this.emitMetrics(this.lastLevel, this.getThreshold(), this.lastLevel >= this.getThreshold());
   }
 
   async init({ track, audioContext }: MicNoiseGateInitOptions) {
     this.teardownGraph();
 
+    const inputChannelCount = clamp(Math.round(track.getSettings().channelCount ?? 1), 1, 2);
     this.source = audioContext.createMediaStreamSource(new MediaStream([track]));
     this.analyser = audioContext.createAnalyser();
     this.analyser.fftSize = 256;
@@ -169,7 +190,7 @@ export class MicNoiseGateProcessor {
 
     if (this.settings.noiseSuppressionEnabled) {
       try {
-        this.rnnoise = await createRnnoiseNode(audioContext);
+        this.rnnoise = await createRnnoiseNode(audioContext, inputChannelCount);
         this.source.connect(this.rnnoise);
         processedSource = this.rnnoise;
       } catch (error) {
@@ -178,7 +199,12 @@ export class MicNoiseGateProcessor {
     }
 
     processedSource.connect(this.analyser);
-    processedSource.connect(this.gain);
+    this.stereoSplitter = audioContext.createChannelSplitter(2);
+    this.stereoMerger = audioContext.createChannelMerger(2);
+    processedSource.connect(this.stereoSplitter);
+    this.stereoSplitter.connect(this.stereoMerger, 0, 0);
+    this.stereoSplitter.connect(this.stereoMerger, inputChannelCount > 1 ? 1 : 0, 1);
+    this.stereoMerger.connect(this.gain);
     this.gain.connect(this.destination);
 
     this.processedTrack = this.destination.stream.getAudioTracks()[0] ?? track;
@@ -189,6 +215,8 @@ export class MicNoiseGateProcessor {
     } else {
       this.setGain(0);
     }
+
+    this.emitMetrics(0, this.getThreshold(), false);
 
     try {
       if (audioContext.state === 'suspended') {
@@ -229,6 +257,7 @@ export class MicNoiseGateProcessor {
     }
 
     const level = Math.sqrt(sumSquares / this.samples.length);
+    this.lastLevel = level;
     const now = performance.now();
     const threshold = this.getThreshold();
     const shouldOpen = threshold <= 0 || level >= threshold;
@@ -245,6 +274,9 @@ export class MicNoiseGateProcessor {
     if (this.settings.automaticSensitivity && !this.speaking && threshold > 0) {
       this.updateNoiseFloor(level);
     }
+
+    const currentThreshold = this.getThreshold();
+    this.emitMetrics(level, currentThreshold, level >= currentThreshold);
   }
 
   private getThreshold() {
@@ -280,6 +312,15 @@ export class MicNoiseGateProcessor {
     this.callbacks.onSpeakingStateChange(speaking);
   }
 
+  private emitMetrics(level: number, threshold: number, aboveThreshold: boolean) {
+    this.callbacks.onMetricsChange?.({
+      level,
+      threshold,
+      aboveThreshold,
+      speaking: this.speaking,
+    });
+  }
+
   private teardownGraph() {
     if (this.frame != null) {
       clearInterval(this.frame);
@@ -289,6 +330,8 @@ export class MicNoiseGateProcessor {
     this.source?.disconnect();
     this.analyser?.disconnect();
     this.gain?.disconnect();
+    this.stereoSplitter?.disconnect();
+    this.stereoMerger?.disconnect();
     this.destination?.disconnect();
     this.rnnoise?.disconnect();
 
@@ -301,6 +344,8 @@ export class MicNoiseGateProcessor {
     this.source = null;
     this.analyser = null;
     this.gain = null;
+    this.stereoSplitter = null;
+    this.stereoMerger = null;
     this.destination = null;
     this.rnnoise = null;
     this.samples = null;

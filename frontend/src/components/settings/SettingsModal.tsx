@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, memo, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, memo, type CSSProperties, type RefObject } from 'react';
 import { LocalVideoTrack } from 'livekit-client';
 import type { BackgroundProcessorWrapper, SwitchBackgroundProcessorOptions } from '@livekit/track-processors';
 import { useAuthStore } from '../../stores/auth';
@@ -18,13 +18,13 @@ import { useAppSettingsStore, type SettingsOverlayTab } from '../../stores/appSe
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { stripAssetVersion } from '../../utils/entityAssets';
 import {
-  AUTO_THRESHOLD_MAX,
   AUTO_THRESHOLD_MIN,
-  DEFAULT_MANUAL_MIC_THRESHOLD,
+  AUTO_THRESHOLD_MAX,
   DEFAULT_MIC_GATE_RELEASE_MS,
-  MicNoiseGateProcessor,
   estimateAutomaticMicThreshold,
-  updateAutomaticMicNoiseFloor,
+  type MicNoiseGateMetrics,
+  MicNoiseGateProcessor,
+  normalizeMicMeterLevel,
 } from '../../utils/audio/micNoiseGate';
 import type { DesktopBuildInfo } from '../../types/desktop';
 import ModalCloseButton from '@/components/shared/ModalCloseButton';
@@ -609,21 +609,52 @@ function VoiceStackedSetting({
   );
 }
 
-function useAutomaticSensitivityThresholdPreview(deviceId: string | null, enabled: boolean) {
-  const [threshold, setThreshold] = useState(DEFAULT_MANUAL_MIC_THRESHOLD);
+function useVoiceSensitivityMonitor({
+  deviceId,
+  automaticInputSensitivity,
+  manualInputSensitivity,
+  noiseSuppressionEnabled,
+  echoCancellationEnabled,
+  inputVolume,
+}: {
+  deviceId: string | null;
+  automaticInputSensitivity: boolean;
+  manualInputSensitivity: number;
+  noiseSuppressionEnabled: boolean;
+  echoCancellationEnabled: boolean;
+  inputVolume: number;
+}) {
+  const [metrics, setMetrics] = useState<MicNoiseGateMetrics>({
+    level: 0,
+    threshold: manualInputSensitivity,
+    aboveThreshold: false,
+    speaking: false,
+  });
+  const processorRef = useRef<MicNoiseGateProcessor | null>(null);
 
   useEffect(() => {
-    if (!enabled || !navigator.mediaDevices?.getUserMedia) {
+    if (!processorRef.current) {
+      setMetrics((current) => ({
+        ...current,
+        threshold: automaticInputSensitivity ? current.threshold : manualInputSensitivity,
+      }));
+    }
+
+    processorRef.current?.updateSettings({
+      automaticSensitivity: automaticInputSensitivity,
+      manualThreshold: manualInputSensitivity,
+      inputVolume,
+    });
+  }, [automaticInputSensitivity, inputVolume, manualInputSensitivity]);
+
+  useEffect(() => {
+    if (!navigator.mediaDevices?.getUserMedia) {
       return undefined;
     }
 
     let cancelled = false;
     let stream: MediaStream | null = null;
     let audioContext: AudioContext | null = null;
-    let source: MediaStreamAudioSourceNode | null = null;
-    let analyser: AnalyserNode | null = null;
-    let frame: number | null = null;
-    let noiseFloor = AUTO_THRESHOLD_MIN;
 
     void (async () => {
       try {
@@ -631,12 +662,12 @@ function useAutomaticSensitivityThresholdPreview(deviceId: string | null, enable
           audio: deviceId
             ? {
                 deviceId: { exact: deviceId },
-                echoCancellation: false,
+                echoCancellation: echoCancellationEnabled,
                 autoGainControl: false,
                 noiseSuppression: false,
               }
             : {
-                echoCancellation: false,
+                echoCancellation: echoCancellationEnabled,
                 autoGainControl: false,
                 noiseSuppression: false,
               },
@@ -648,91 +679,441 @@ function useAutomaticSensitivityThresholdPreview(deviceId: string | null, enable
           return;
         }
 
-        audioContext = new AudioContext();
-        source = audioContext.createMediaStreamSource(stream);
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256;
-        analyser.smoothingTimeConstant = 0.08;
-        source.connect(analyser);
-        const samples = new Uint8Array(new ArrayBuffer(analyser.fftSize));
-
-        try {
-          if (audioContext.state === 'suspended') {
-            await audioContext.resume();
-          }
-        } catch {
-          /* ignore audio context resume failures */
+        const inputTrack = stream.getAudioTracks()[0];
+        if (!inputTrack) {
+          throw new Error('Microphone track unavailable.');
         }
 
-        const tick = () => {
-          if (cancelled || !analyser) {
-            return;
-          }
+        audioContext = new AudioContext();
+        const nextProcessor = new MicNoiseGateProcessor(
+          {
+            automaticSensitivity: automaticInputSensitivity,
+            manualThreshold: manualInputSensitivity,
+            releaseMs: DEFAULT_MIC_GATE_RELEASE_MS,
+            noiseSuppressionEnabled,
+            inputVolume,
+          },
+          {
+            onSpeakingStateChange: () => {},
+            onMetricsChange: (nextMetrics) => {
+              if (cancelled) {
+                return;
+              }
 
-          analyser.getByteTimeDomainData(samples);
-          let sumSquares = 0;
-          for (let index = 0; index < samples.length; index += 1) {
-            const sample = (samples[index] - 128) / 128;
-            sumSquares += sample * sample;
-          }
+              setMetrics((current) => {
+                const smoothing = nextMetrics.level > current.level ? 0.22 : 0.14;
+                const smoothedLevel = current.level + (nextMetrics.level - current.level) * smoothing;
+                return {
+                  level: smoothedLevel,
+                  threshold: nextMetrics.threshold,
+                  aboveThreshold: nextMetrics.aboveThreshold,
+                  speaking: nextMetrics.speaking,
+                };
+              });
+            },
+          },
+        );
+        processorRef.current = nextProcessor;
 
-          const level = Math.sqrt(sumSquares / samples.length);
-          const currentThreshold = estimateAutomaticMicThreshold(noiseFloor);
-          if (level < currentThreshold) {
-            noiseFloor = updateAutomaticMicNoiseFloor(noiseFloor, level);
-          }
-
-          const nextThreshold = estimateAutomaticMicThreshold(noiseFloor);
-          setThreshold((current) => (
-            Math.abs(current - nextThreshold) >= MANUAL_SENSITIVITY_STEP ? nextThreshold : current
-          ));
-
-          frame = requestAnimationFrame(tick);
-        };
-
-        tick();
+        await nextProcessor.init({
+          track: inputTrack,
+          audioContext,
+        });
       } catch {
-        setThreshold(DEFAULT_MANUAL_MIC_THRESHOLD);
+        if (!cancelled) {
+          setMetrics({
+            level: 0,
+            threshold: manualInputSensitivity,
+            aboveThreshold: false,
+            speaking: false,
+          });
+        }
       }
     })();
 
     return () => {
       cancelled = true;
-      if (frame != null) {
-        cancelAnimationFrame(frame);
+      const processor = processorRef.current;
+      processorRef.current = null;
+      if (processor) {
+        void processor.destroy().catch(() => {});
       }
-      source?.disconnect();
-      analyser?.disconnect();
       stream?.getTracks().forEach((track) => track.stop());
       if (audioContext && audioContext.state !== 'closed') {
         void audioContext.close().catch(() => {});
       }
     };
-  }, [deviceId, enabled]);
+  }, [deviceId, echoCancellationEnabled, noiseSuppressionEnabled]);
 
-  return threshold;
+  return metrics;
+}
+
+function useAutomaticVoiceSensitivityMeter({
+  deviceId,
+  manualInputSensitivity,
+  noiseSuppressionEnabled,
+  echoCancellationEnabled,
+  inputVolume,
+  fillRef,
+  thresholdRef,
+}: {
+  deviceId: string | null;
+  manualInputSensitivity: number;
+  noiseSuppressionEnabled: boolean;
+  echoCancellationEnabled: boolean;
+  inputVolume: number;
+  fillRef: RefObject<HTMLDivElement | null>;
+  thresholdRef: RefObject<HTMLDivElement | null>;
+}) {
+  const processorRef = useRef<MicNoiseGateProcessor | null>(null);
+  const frameRef = useRef<number | null>(null);
+  const inputVolumeRef = useRef(inputVolume);
+  const manualThresholdRef = useRef(manualInputSensitivity);
+  const targetLevelRef = useRef(0);
+  const renderedLevelRef = useRef(0);
+  const initialThreshold = normalizeMicMeterLevel(estimateAutomaticMicThreshold(AUTO_THRESHOLD_MIN));
+  const targetThresholdRef = useRef(initialThreshold);
+  const renderedThresholdRef = useRef(initialThreshold);
+  const speakingRef = useRef(false);
+
+  const applyIndicatorStyles = useCallback((level: number, threshold: number, speaking: boolean) => {
+    const fillElement = fillRef.current;
+    if (fillElement) {
+      fillElement.style.transform = `scaleX(${level.toFixed(4)})`;
+      fillElement.style.opacity = level > 0.002 ? '1' : '0';
+      fillElement.style.boxShadow = speaking && level >= threshold
+        ? '0 0 12px rgba(59,165,93,0.28)'
+        : 'none';
+      fillElement.style.backgroundColor = speaking ? 'rgba(72, 183, 106, 0.98)' : 'rgba(59, 165, 93, 0.94)';
+    }
+
+    const thresholdElement = thresholdRef.current;
+    if (thresholdElement) {
+      thresholdElement.style.left = `${(threshold * 100).toFixed(2)}%`;
+      thresholdElement.style.opacity = speaking ? '0.58' : '0.3';
+      thresholdElement.style.boxShadow = speaking ? '0 0 8px rgba(59,165,93,0.18)' : 'none';
+    }
+  }, [fillRef, thresholdRef]);
+
+  const resetIndicator = useCallback(() => {
+    targetLevelRef.current = 0;
+    renderedLevelRef.current = 0;
+    speakingRef.current = false;
+    targetThresholdRef.current = initialThreshold;
+    renderedThresholdRef.current = initialThreshold;
+    applyIndicatorStyles(0, initialThreshold, false);
+  }, [applyIndicatorStyles, initialThreshold]);
+
+  const animateIndicator = useCallback(() => {
+    const levelDelta = targetLevelRef.current - renderedLevelRef.current;
+    const thresholdDelta = targetThresholdRef.current - renderedThresholdRef.current;
+
+    renderedLevelRef.current = Math.abs(levelDelta) < 0.0015
+      ? targetLevelRef.current
+      : renderedLevelRef.current + levelDelta * (levelDelta > 0 ? 0.34 : 0.16);
+    renderedThresholdRef.current = Math.abs(thresholdDelta) < 0.001
+      ? targetThresholdRef.current
+      : renderedThresholdRef.current + thresholdDelta * 0.18;
+
+    const nextLevel = Math.min(1, Math.max(0, renderedLevelRef.current < 0.001 ? 0 : renderedLevelRef.current));
+    const nextThreshold = Math.min(1, Math.max(0, renderedThresholdRef.current));
+    renderedLevelRef.current = nextLevel;
+    renderedThresholdRef.current = nextThreshold;
+    applyIndicatorStyles(nextLevel, nextThreshold, speakingRef.current);
+
+    if (
+      Math.abs(targetLevelRef.current - nextLevel) > 0.0015
+      || Math.abs(targetThresholdRef.current - nextThreshold) > 0.001
+      || nextLevel > 0.0015
+    ) {
+      frameRef.current = requestAnimationFrame(animateIndicator);
+      return;
+    }
+
+    frameRef.current = null;
+  }, [applyIndicatorStyles]);
+
+  const scheduleIndicator = useCallback(() => {
+    if (frameRef.current == null) {
+      frameRef.current = requestAnimationFrame(animateIndicator);
+    }
+  }, [animateIndicator]);
+
+  useEffect(() => {
+    inputVolumeRef.current = inputVolume;
+    manualThresholdRef.current = manualInputSensitivity;
+    processorRef.current?.updateSettings({
+      automaticSensitivity: true,
+      manualThreshold: manualInputSensitivity,
+      inputVolume,
+    });
+
+    if (!processorRef.current) {
+      resetIndicator();
+    }
+  }, [inputVolume, manualInputSensitivity, resetIndicator]);
+
+  useEffect(() => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      resetIndicator();
+      return undefined;
+    }
+
+    let cancelled = false;
+    let stream: MediaStream | null = null;
+    let audioContext: AudioContext | null = null;
+
+    resetIndicator();
+
+    void (async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: deviceId
+            ? {
+                deviceId: { exact: deviceId },
+                echoCancellation: echoCancellationEnabled,
+                autoGainControl: false,
+                noiseSuppression: false,
+              }
+            : {
+                echoCancellation: echoCancellationEnabled,
+                autoGainControl: false,
+                noiseSuppression: false,
+              },
+          video: false,
+        });
+
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        const inputTrack = stream.getAudioTracks()[0];
+        if (!inputTrack) {
+          throw new Error('Microphone track unavailable.');
+        }
+
+        audioContext = new AudioContext();
+        const processor = new MicNoiseGateProcessor(
+          {
+            automaticSensitivity: true,
+            manualThreshold: manualThresholdRef.current,
+            releaseMs: DEFAULT_MIC_GATE_RELEASE_MS,
+            noiseSuppressionEnabled,
+            inputVolume: inputVolumeRef.current,
+          },
+          {
+            onSpeakingStateChange: () => {},
+            onMetricsChange: (nextMetrics) => {
+              if (cancelled) {
+                return;
+              }
+
+              const threshold = normalizeMicMeterLevel(nextMetrics.threshold);
+              const liveLevel = normalizeMicMeterLevel(nextMetrics.level);
+              const idleFloor = Math.min(0.08, threshold * 0.45);
+
+              targetThresholdRef.current = threshold;
+              targetLevelRef.current = liveLevel <= idleFloor ? 0 : liveLevel;
+              speakingRef.current = nextMetrics.aboveThreshold || nextMetrics.speaking;
+              scheduleIndicator();
+            },
+          },
+        );
+
+        processorRef.current = processor;
+        await processor.init({
+          track: inputTrack,
+          audioContext,
+        });
+      } catch {
+        if (!cancelled) {
+          resetIndicator();
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (frameRef.current != null) {
+        cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+      }
+
+      const processor = processorRef.current;
+      processorRef.current = null;
+      if (processor) {
+        void processor.destroy().catch(() => {});
+      }
+      stream?.getTracks().forEach((track) => track.stop());
+      if (audioContext && audioContext.state !== 'closed') {
+        void audioContext.close().catch(() => {});
+      }
+      resetIndicator();
+    };
+  }, [
+    deviceId,
+    echoCancellationEnabled,
+    noiseSuppressionEnabled,
+    resetIndicator,
+    scheduleIndicator,
+  ]);
+}
+
+function AutomaticVoiceSensitivityIndicator({
+  deviceId,
+  manualInputSensitivity,
+  noiseSuppressionEnabled,
+  echoCancellationEnabled,
+  inputVolume,
+}: {
+  deviceId: string | null;
+  manualInputSensitivity: number;
+  noiseSuppressionEnabled: boolean;
+  echoCancellationEnabled: boolean;
+  inputVolume: number;
+}) {
+  const fillRef = useRef<HTMLDivElement | null>(null);
+  const thresholdRef = useRef<HTMLDivElement | null>(null);
+
+  useAutomaticVoiceSensitivityMeter({
+    deviceId,
+    manualInputSensitivity,
+    noiseSuppressionEnabled,
+    echoCancellationEnabled,
+    inputVolume,
+    fillRef,
+    thresholdRef,
+  });
+
+  return (
+    <div className="relative h-6 w-full">
+      <div className="pointer-events-none absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 overflow-hidden rounded-full bg-[#4a4d57] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+        <div
+          ref={fillRef}
+          className="absolute inset-y-0 left-0 rounded-full bg-[#3ba55d]"
+          style={{
+            opacity: 0,
+            transform: 'scaleX(0)',
+            transformOrigin: 'left center',
+            willChange: 'transform, opacity',
+          }}
+        />
+        <div
+          ref={thresholdRef}
+          className="absolute top-1/2 h-4 w-px -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/25"
+          style={{ left: `${(normalizeMicMeterLevel(estimateAutomaticMicThreshold(AUTO_THRESHOLD_MIN)) * 100).toFixed(2)}%` }}
+        />
+      </div>
+      <input
+        type="range"
+        min={MANUAL_SENSITIVITY_MIN}
+        max={MANUAL_SENSITIVITY_MAX}
+        step={MANUAL_SENSITIVITY_STEP}
+        value={manualInputSensitivity}
+        disabled
+        tabIndex={-1}
+        aria-label="Automatic input sensitivity indicator"
+        className="pointer-events-none absolute inset-0 h-6 w-full appearance-none opacity-0"
+      />
+    </div>
+  );
+}
+
+function ManualVoiceSensitivityIndicator({
+  deviceId,
+  manualInputSensitivity,
+  noiseSuppressionEnabled,
+  echoCancellationEnabled,
+  inputVolume,
+  onManualChange,
+}: {
+  deviceId: string | null;
+  manualInputSensitivity: number;
+  noiseSuppressionEnabled: boolean;
+  echoCancellationEnabled: boolean;
+  inputVolume: number;
+  onManualChange: (threshold: number) => void;
+}) {
+  const { level, aboveThreshold, speaking } = useVoiceSensitivityMonitor({
+    deviceId,
+    automaticInputSensitivity: false,
+    manualInputSensitivity,
+    noiseSuppressionEnabled,
+    echoCancellationEnabled,
+    inputVolume,
+  });
+  const thresholdPercent = Math.min(100, Math.max(0, (manualInputSensitivity / MANUAL_SENSITIVITY_MAX) * 100));
+  const inputLevelPercent = Math.min(100, Math.max(0, (level / MANUAL_SENSITIVITY_MAX) * 100));
+  const sliderStyle = {
+    '--threshold-thumb-shadow': speaking
+      ? '0 0 0 4px rgba(59,165,93,0.22), 0 0 14px rgba(59,165,93,0.34), 0 1px 2px rgba(0,0,0,0.35)'
+      : '0 1px 2px rgba(0,0,0,0.35)',
+    '--threshold-thumb-border': speaking ? 'rgba(59,165,93,0.95)' : 'rgba(255,255,255,0.92)',
+  } as CSSProperties;
+
+  return (
+    <div className="relative h-6 w-full">
+      <div className="pointer-events-none absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-full bg-[#2b2d31]">
+        <div
+          className="absolute inset-y-0 left-0 bg-[#d18a2a]"
+          style={{ width: `${thresholdPercent}%` }}
+        />
+        <div
+          className="absolute inset-y-0 bg-[#3ba55d]"
+          style={{ left: `${thresholdPercent}%`, right: 0 }}
+        />
+        <div
+          className={`absolute inset-y-0 left-0 rounded-full transition-[width,background-color] duration-75 ${
+            aboveThreshold ? 'bg-[#1f7a46]' : 'bg-[#8d5e1b]'
+          }`}
+          style={{ width: `${inputLevelPercent}%` }}
+        />
+        <div
+          className={`absolute top-1/2 h-3 w-[2px] -translate-y-1/2 rounded-full transition-colors ${
+            speaking ? 'bg-white/90 shadow-[0_0_10px_rgba(59,165,93,0.45)]' : 'bg-white/35'
+          }`}
+          style={{ left: `calc(${thresholdPercent}% - 1px)` }}
+        />
+      </div>
+      <input
+        type="range"
+        min={MANUAL_SENSITIVITY_MIN}
+        max={MANUAL_SENSITIVITY_MAX}
+        step={MANUAL_SENSITIVITY_STEP}
+        value={manualInputSensitivity}
+        onChange={(event) => onManualChange(Number(event.target.value))}
+        aria-label="Input sensitivity threshold"
+        className="voice-threshold-slider absolute inset-0 w-full"
+        style={sliderStyle}
+      />
+    </div>
+  );
 }
 
 function VoiceSensitivitySetting({
   deviceId,
   automaticInputSensitivity,
   manualInputSensitivity,
+  noiseSuppressionEnabled,
+  echoCancellationEnabled,
+  inputVolume,
   onToggleAutomatic,
   onManualChange,
 }: {
   deviceId: string | null;
   automaticInputSensitivity: boolean;
   manualInputSensitivity: number;
+  noiseSuppressionEnabled: boolean;
+  echoCancellationEnabled: boolean;
+  inputVolume: number;
   onToggleAutomatic: () => void;
   onManualChange: (threshold: number) => void;
 }) {
-  const automaticThreshold = useAutomaticSensitivityThresholdPreview(deviceId, automaticInputSensitivity);
-  const displayedThreshold = automaticInputSensitivity ? automaticThreshold : manualInputSensitivity;
-
   return (
     <VoiceStackedSetting
       label="Automatically Adjust Input Sensitivity"
-      description="Controls how much sound Rift transmits from your mic."
+      description="Controls how much sound Rift transmits from your mic. If the indicator is green, Rift is transmitting your voice."
       control={(
         <VoiceToggleSwitch
           enabled={automaticInputSensitivity}
@@ -741,18 +1122,24 @@ function VoiceSensitivitySetting({
         />
       )}
     >
-      <input
-        type="range"
-        min={MANUAL_SENSITIVITY_MIN}
-        max={MANUAL_SENSITIVITY_MAX}
-        step={MANUAL_SENSITIVITY_STEP}
-        value={displayedThreshold}
-        disabled={automaticInputSensitivity}
-        onChange={(event) => onManualChange(Number(event.target.value))}
-        aria-label="Input sensitivity threshold"
-        className="voice-sensitivity-slider w-full"
-        style={automaticInputSensitivity ? ({ opacity: 1 } as CSSProperties) : undefined}
-      />
+      {automaticInputSensitivity ? (
+        <AutomaticVoiceSensitivityIndicator
+          deviceId={deviceId}
+          manualInputSensitivity={manualInputSensitivity}
+          noiseSuppressionEnabled={noiseSuppressionEnabled}
+          echoCancellationEnabled={echoCancellationEnabled}
+          inputVolume={inputVolume}
+        />
+      ) : (
+        <ManualVoiceSensitivityIndicator
+          deviceId={deviceId}
+          manualInputSensitivity={manualInputSensitivity}
+          noiseSuppressionEnabled={noiseSuppressionEnabled}
+          echoCancellationEnabled={echoCancellationEnabled}
+          inputVolume={inputVolume}
+          onManualChange={onManualChange}
+        />
+      )}
     </VoiceStackedSetting>
   );
 }
@@ -1431,7 +1818,7 @@ function MicrophoneTestCard({
         }
 
         const rms = Math.sqrt(sumSquares / activeSamples.length);
-        const nextLevel = Math.min(1, rms * 6);
+        const nextLevel = normalizeMicMeterLevel(rms);
         setLevel((current) => current * 0.58 + nextLevel * 0.42);
         meterFrameRef.current = requestAnimationFrame(draw);
       };
@@ -1734,6 +2121,9 @@ function VoiceVideoSettingsTab() {
                 deviceId={inputDeviceId}
                 automaticInputSensitivity={automaticInputSensitivity}
                 manualInputSensitivity={manualInputSensitivity}
+                noiseSuppressionEnabled={noiseSuppressionEnabled}
+                echoCancellationEnabled={echoCancellationEnabled}
+                inputVolume={inputVolume}
                 onToggleAutomatic={() => setAutomaticInputSensitivity(!automaticInputSensitivity)}
                 onManualChange={setManualInputSensitivity}
               />
