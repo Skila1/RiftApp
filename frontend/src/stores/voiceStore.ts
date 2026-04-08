@@ -316,6 +316,7 @@ interface VoiceStore {
   connected: boolean;
   connecting: boolean;
   roomName: string | null;
+  connectionEndpoint: string | null;
   streamId: string | null;
   participants: VoiceParticipant[];
   speakingSignals: Record<string, boolean>;
@@ -1373,6 +1374,7 @@ function resetState() {
     connected: false,
     connecting: false,
     roomName: null,
+    connectionEndpoint: null,
     streamId: null,
     participants: [],
     speakingSignals: {},
@@ -1422,6 +1424,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   connected: false,
   connecting: false,
   roomName: null,
+  connectionEndpoint: null,
   streamId: null,
   participants: [],
   speakingSignals: {},
@@ -1470,6 +1473,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     try {
       await get().refreshMediaDevices();
       const { token, url } = await api.getVoiceToken(sid);
+      set({ connectionEndpoint: url });
 
       const voiceState = useVoiceStore.getState();
       const room = new Room({
