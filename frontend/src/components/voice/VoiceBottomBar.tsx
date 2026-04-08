@@ -27,6 +27,7 @@ import {
   CameraIcon,
   SettingsIcon,
   DisconnectIcon,
+  NoiseSuppressionIcon,
   activityIcons,
 } from './VoiceIcons';
 
@@ -38,26 +39,11 @@ const MIN_GRAPH_TOP_MS = 26;
 
 type VoiceTone = 'success' | 'warning';
 
-type VoiceDeviceCollection = {
-  audioinput: Array<{ deviceId: string; label: string }>;
-  audiooutput: Array<{ deviceId: string; label: string }>;
-};
-
 function CloseIcon({ size = 18 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
       <line x1="18" y1="6" x2="6" y2="18" />
       <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
-}
-
-function DeviceIcon({ size = 14 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="12" rx="2" />
-      <path d="M8 20h8" />
-      <path d="M12 16v4" />
     </svg>
   );
 }
@@ -123,12 +109,14 @@ function HeaderActionButton({
   onClick,
   disabled,
   danger,
+  active,
   children,
 }: {
   title: string;
   onClick?: () => void;
   disabled?: boolean;
   danger?: boolean;
+  active?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -140,7 +128,9 @@ function HeaderActionButton({
       className={`flex h-7 w-7 items-center justify-center rounded-md text-[#b5bac1] transition-all duration-150 ${
         danger
           ? 'hover:bg-[#ed4245]/12 hover:text-[#ed4245]'
-          : 'hover:bg-white/[0.08] hover:text-[#f2f3f5]'
+          : active
+            ? 'bg-white/[0.08] text-[#f2f3f5] hover:bg-white/[0.11]'
+            : 'hover:bg-white/[0.08] hover:text-[#f2f3f5]'
       } disabled:cursor-not-allowed disabled:opacity-45`}
     >
       {children}
@@ -263,30 +253,6 @@ function formatEndpointLabel(endpoint: string | null) {
   }
 }
 
-function resolveVoiceDeviceLabel(
-  mediaDevices: VoiceDeviceCollection,
-  outputDeviceId: string | null,
-  inputDeviceId: string | null,
-) {
-  const outputDevice = outputDeviceId
-    ? mediaDevices.audiooutput.find((device) => device.deviceId === outputDeviceId)
-    : mediaDevices.audiooutput[0];
-
-  if (outputDevice?.label) {
-    return outputDevice.label;
-  }
-
-  const inputDevice = inputDeviceId
-    ? mediaDevices.audioinput.find((device) => device.deviceId === inputDeviceId)
-    : mediaDevices.audioinput[0];
-
-  if (inputDevice?.label) {
-    return inputDevice.label;
-  }
-
-  return 'Default Device';
-}
-
 function buildSmoothPath(points: Array<{ x: number; y: number }>) {
   if (points.length === 0) {
     return '';
@@ -321,21 +287,17 @@ function ConnectionBarsIcon({
   bars: 0 | 1 | 2 | 3 | 4;
   tone: VoiceTone;
 }) {
-  const activeClass = tone === 'success' ? 'bg-[#3ba55d]' : 'bg-[#faa61a]';
+  const activeColor = tone === 'success' ? '#3ba55d' : '#faa61a';
+  const inactiveColor = 'rgba(255,255,255,0.14)';
+  const segmentColors = [0, 1, 2, 3].map((segmentIndex) => (bars > segmentIndex ? activeColor : inactiveColor));
 
   return (
-    <div className="flex h-[14px] items-end gap-[1.5px]">
-      {[0, 1, 2, 3].map((barIndex) => {
-        const heights = ['h-[4px]', 'h-[7px]', 'h-[10px]', 'h-[13px]'];
-        const isActive = bars > barIndex;
-        return (
-          <span
-            key={barIndex}
-            className={`block w-[2.5px] rounded-full ${heights[barIndex]} ${isActive ? activeClass : 'bg-white/14'}`}
-          />
-        );
-      })}
-    </div>
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <path d="M2.1 11.75C2.1 10.82 2.86 10.06 3.79 10.06" stroke={segmentColors[0]} strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M2.1 8.98C4.56 8.98 6.56 10.98 6.56 13.44" stroke={segmentColors[1]} strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M2.1 6.17C6.12 6.17 9.37 9.43 9.37 13.44" stroke={segmentColors[2]} strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M2.1 3.35C7.68 3.35 12.19 7.87 12.19 13.44" stroke={segmentColors[3]} strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
   );
 }
 
@@ -427,7 +389,6 @@ function VoiceConnectionPopover({
   currentPingMs,
   averagePingMs,
   endpoint,
-  deviceLabel,
   onClose,
 }: {
   popoverRef: RefObject<HTMLDivElement>;
@@ -435,7 +396,6 @@ function VoiceConnectionPopover({
   currentPingMs: number | null;
   averagePingMs: number;
   endpoint: string | null;
-  deviceLabel: string;
   onClose: () => void;
 }) {
   return (
@@ -460,7 +420,6 @@ function VoiceConnectionPopover({
       <VoiceConnectionGraph values={pingHistory} />
 
       <div className="mt-5 space-y-2.5">
-        <ConnectionInfoRow label="Device:" value={deviceLabel} leadingIcon={<DeviceIcon />} />
         <ConnectionInfoRow label="Current ping:" value={formatCompactPing(currentPingMs)} />
         <ConnectionInfoRow label="Average ping:" value={formatCompactPing(averagePingMs)} />
         <ConnectionInfoRow
@@ -485,7 +444,6 @@ function VoiceConnectionSummary({
   currentPingMs,
   averagePingMs,
   endpoint,
-  deviceLabel,
   triggerRef,
   popoverRef,
   onTogglePopover,
@@ -500,7 +458,6 @@ function VoiceConnectionSummary({
   currentPingMs: number | null;
   averagePingMs: number;
   endpoint: string | null;
-  deviceLabel: string;
   triggerRef: RefObject<HTMLButtonElement>;
   popoverRef: RefObject<HTMLDivElement>;
   onTogglePopover: () => void;
@@ -510,14 +467,7 @@ function VoiceConnectionSummary({
 
   return (
     <div className="relative min-w-0 flex-1">
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={onTogglePopover}
-        className="flex w-full min-w-0 items-center gap-2.5 rounded-md px-1 py-1 text-left transition-colors duration-150 hover:bg-white/[0.04]"
-        aria-expanded={popoverOpen}
-        aria-haspopup="dialog"
-      >
+      <div className="flex min-w-0 items-center gap-2.5 px-1 py-1">
         <div
           className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[10px] ${
             success ? 'bg-[#183227]' : 'bg-[#3b2d14]'
@@ -527,12 +477,21 @@ function VoiceConnectionSummary({
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className={`truncate text-[14px] font-semibold leading-[1.1] ${success ? 'text-[#3ba55d]' : 'text-[#faa61a]'}`}>
+          <button
+            ref={triggerRef}
+            type="button"
+            onClick={onTogglePopover}
+            className={`block max-w-full truncate rounded-sm text-left text-[14px] font-semibold leading-[1.1] transition-colors duration-150 hover:brightness-110 ${
+              success ? 'text-[#3ba55d]' : 'text-[#faa61a]'
+            }`}
+            aria-expanded={popoverOpen}
+            aria-haspopup="dialog"
+          >
             {statusLabelText}
-          </p>
+          </button>
           <p className="mt-[3px] truncate text-[11px] leading-none text-[#b5bac1]">{channelLabel}</p>
         </div>
-      </button>
+      </div>
 
       {popoverOpen ? (
         <VoiceConnectionPopover
@@ -541,7 +500,6 @@ function VoiceConnectionSummary({
           currentPingMs={currentPingMs}
           averagePingMs={averagePingMs}
           endpoint={endpoint}
-          deviceLabel={deviceLabel}
           onClose={onClosePopover}
         />
       ) : null}
@@ -559,14 +517,13 @@ function VoiceHeader({
   currentPingMs,
   averagePingMs,
   endpoint,
-  deviceLabel,
   disableDeafen,
-  isDeafened,
+  noiseSuppressionEnabled,
   triggerRef,
   popoverRef,
   onTogglePopover,
   onClosePopover,
-  onToggleDeafen,
+  onToggleNoiseSuppression,
   onLeave,
 }: {
   statusLabelText: string;
@@ -578,14 +535,13 @@ function VoiceHeader({
   currentPingMs: number | null;
   averagePingMs: number;
   endpoint: string | null;
-  deviceLabel: string;
   disableDeafen: boolean;
-  isDeafened: boolean;
+  noiseSuppressionEnabled: boolean;
   triggerRef: RefObject<HTMLButtonElement>;
   popoverRef: RefObject<HTMLDivElement>;
   onTogglePopover: () => void;
   onClosePopover: () => void;
-  onToggleDeafen: () => void;
+  onToggleNoiseSuppression: () => void;
   onLeave: () => void;
 }) {
   return (
@@ -600,7 +556,6 @@ function VoiceHeader({
         currentPingMs={currentPingMs}
         averagePingMs={averagePingMs}
         endpoint={endpoint}
-        deviceLabel={deviceLabel}
         triggerRef={triggerRef}
         popoverRef={popoverRef}
         onTogglePopover={onTogglePopover}
@@ -609,11 +564,12 @@ function VoiceHeader({
 
       <div className="flex flex-shrink-0 items-center gap-0.5">
         <HeaderActionButton
-          title={isDeafened ? 'Undeafen' : 'Deafen'}
-          onClick={onToggleDeafen}
+          title={noiseSuppressionEnabled ? 'Disable RNNoise' : 'Enable RNNoise'}
+          onClick={onToggleNoiseSuppression}
           disabled={disableDeafen}
+          active={noiseSuppressionEnabled}
         >
-          <HeadphonesIcon deafened={isDeafened} size={16} />
+          <NoiseSuppressionIcon active={noiseSuppressionEnabled} size={16} />
         </HeaderActionButton>
         <HeaderActionButton title="Disconnect" onClick={onLeave} danger>
           <DisconnectIcon size={16} />
@@ -782,9 +738,6 @@ export default function VoiceBottomBar() {
   const connectionPingMs = useVoiceStore((s) => s.connectionStats.pingMs);
   const connectionBars = useVoiceStore((s) => s.connectionStats.bars);
   const connectionEndpoint = useVoiceStore((s) => s.connectionEndpoint);
-  const mediaDevices = useVoiceStore((s) => s.mediaDevices);
-  const inputDeviceId = useVoiceStore((s) => s.inputDeviceId);
-  const outputDeviceId = useVoiceStore((s) => s.outputDeviceId);
 
   const activeHubId = useHubStore((s) => s.activeHubId);
   const hubs = useHubStore((s) => s.hubs);
@@ -808,10 +761,6 @@ export default function VoiceBottomBar() {
   const voiceStream = streams.find((stream) => stream.id === (voiceStreamId ?? activeVoiceChannelId));
   const inVoice = voiceConnected || voiceConnecting;
   const controlsDisabled = !voiceConnected || voiceConnecting;
-  const deviceLabel = useMemo(
-    () => resolveVoiceDeviceLabel(mediaDevices, outputDeviceId, inputDeviceId),
-    [mediaDevices, outputDeviceId, inputDeviceId],
-  );
   const averagePingMs = useMemo(() => averagePing(pingHistory), [pingHistory]);
 
   useEffect(() => {
@@ -911,12 +860,6 @@ export default function VoiceBottomBar() {
     openSettings('voice');
   }, [openSettings]);
 
-  const handleToggleNoiseSuppression = useCallback(() => {
-    setConnectionPopoverOpen(false);
-    setQuickMenuOpen(false);
-    void voiceToggleNoiseSuppression();
-  }, [voiceToggleNoiseSuppression]);
-
   const handleToggleConnectionPopover = useCallback(() => {
     setQuickMenuOpen(false);
     setConnectionPopoverOpen((current) => !current);
@@ -965,14 +908,13 @@ export default function VoiceBottomBar() {
             currentPingMs={connectionPingMs}
             averagePingMs={averagePingMs}
             endpoint={connectionEndpoint}
-            deviceLabel={deviceLabel}
             disableDeafen={!voiceConnected}
-            isDeafened={voiceIsDeafened}
+            noiseSuppressionEnabled={voiceNoiseSuppressionEnabled}
             triggerRef={connectionTriggerRef}
             popoverRef={connectionPopoverRef}
             onTogglePopover={handleToggleConnectionPopover}
             onClosePopover={() => setConnectionPopoverOpen(false)}
-            onToggleDeafen={() => void voiceToggleDeafen()}
+            onToggleNoiseSuppression={() => void voiceToggleNoiseSuppression()}
             onLeave={handleLeave}
           />
 
@@ -1022,16 +964,6 @@ export default function VoiceBottomBar() {
           <div className="absolute bottom-full right-2 mb-1.5 w-[188px] rounded-xl border border-white/[0.06] bg-[#111214]/96 p-1 shadow-[0_14px_36px_rgba(0,0,0,0.45)] backdrop-blur-sm">
             <QuickMenuButton onClick={handleOpenVoiceSettings} trailing={<SettingsIcon size={15} />}>
               Voice Settings
-            </QuickMenuButton>
-            <QuickMenuButton
-              onClick={handleToggleNoiseSuppression}
-              trailing={
-                <span className={`text-[11px] ${voiceNoiseSuppressionEnabled ? 'text-[#3ba55d]' : 'text-[#949ba4]'}`}>
-                  {voiceNoiseSuppressionEnabled ? 'On' : 'Off'}
-                </span>
-              }
-            >
-              {voiceNoiseSuppressionEnabled ? 'Disable RNNoise' : 'Enable RNNoise'}
             </QuickMenuButton>
             {inVoice ? (
               <QuickMenuButton onClick={handleLeave} danger trailing={<DisconnectIcon size={15} />}>
