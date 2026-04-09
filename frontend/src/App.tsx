@@ -1,10 +1,13 @@
 import { Component, lazy, Suspense, useEffect, useState, type ComponentType, type ErrorInfo, type ReactNode } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './stores/auth';
 import { useAppSettingsStore } from './stores/appSettingsStore';
 import { usePresenceStore } from './stores/presenceStore';
 import { useFrontendUpdateStore } from './stores/frontendUpdateStore';
 import { SELF_PRESENCE_STORAGE_KEY } from './stores/selfPresencePersistence';
+import { setupBackButton, setupDeepLinks, isNative } from './lib/capacitor';
+import { initPushNotifications, teardownPushNotifications } from './lib/pushNotifications';
+import { App as CapApp } from '@capacitor/app';
 import TitleBar from './components/layout/TitleBar';
 import { isProtectedImportUpdateReadyError, safeImport } from './utils/safeImport';
 // Push build cuz yeah hectic
@@ -126,6 +129,35 @@ function RouteChunkFailureView({ error }: { error: unknown }) {
       </div>
     </div>
   );
+}
+
+function NativeShellBridge() {
+  const navigate = useNavigate();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  useEffect(() => {
+    const cleanupDeepLinks = setupDeepLinks((path) => navigate(path));
+    const cleanupBackButton = setupBackButton(() => {
+      void CapApp.minimizeApp();
+    });
+    return () => {
+      cleanupDeepLinks();
+      cleanupBackButton();
+    };
+  }, [navigate]);
+
+  useEffect(() => {
+    if (isAuthenticated && isNative()) {
+      void initPushNotifications((path) => navigate(path));
+    }
+    return () => {
+      if (!isAuthenticated && isNative()) {
+        void teardownPushNotifications();
+      }
+    };
+  }, [isAuthenticated, navigate]);
+
+  return null;
 }
 
 function AppRoutes() {
@@ -353,6 +385,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <NativeShellBridge />
       <div className="flex flex-col h-screen">
         <TitleBar />
         <div className="flex-1 min-h-0 overflow-y-auto">

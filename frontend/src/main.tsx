@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+import { initCapacitor } from './lib/capacitor';
 import { useFrontendUpdateStore } from './stores/frontendUpdateStore';
 import {
   isFrontendAssetFailureEvent,
@@ -144,6 +145,7 @@ function installChunkMismatchRecovery() {
 
 installChunkMismatchRecovery();
 installDeployRefreshMonitor();
+void initCapacitor();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -46,6 +46,7 @@ type RouterDeps struct {
 	ModerationService       *moderation.Service
 	ReportService           *service.ReportService
 	HubModerationRepo       *repository.HubModerationRepo
+	DeviceTokenRepo         *repository.DeviceTokenRepo
 	DB                      interface{}
 }
 
@@ -90,6 +91,11 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 	var hubModH *HubModerationHandler
 	if deps.HubModerationRepo != nil && deps.HubService != nil && deps.HubRepo != nil {
 		hubModH = NewHubModerationHandler(deps.HubModerationRepo, deps.HubService, deps.HubRepo)
+	}
+
+	var deviceTokenH *DeviceTokenHandler
+	if deps.DeviceTokenRepo != nil {
+		deviceTokenH = NewDeviceTokenHandler(deps.DeviceTokenRepo)
 	}
 
 	r.Get("/ws", wsH.Handle)
@@ -281,6 +287,11 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 			r.Get("/api/hubs/{hubID}/bans", hubModH.ListBans)
 			r.Post("/api/hubs/{hubID}/bans/{userID}", hubModH.BanMember)
 			r.Delete("/api/hubs/{hubID}/bans/{userID}", hubModH.UnbanMember)
+		}
+
+		if deviceTokenH != nil {
+			r.Post("/api/device-tokens", deviceTokenH.Register)
+			r.Delete("/api/device-tokens", deviceTokenH.Unregister)
 		}
 	})
 

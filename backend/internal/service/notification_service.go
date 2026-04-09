@@ -15,10 +15,27 @@ import (
 type NotificationService struct {
 	notifRepo *repository.NotificationRepo
 	hub       *ws.Hub
+	pushSvc   PushSender
+}
+
+type PushSender interface {
+	SendToUser(ctx context.Context, userID string, p PushPayload) error
+}
+
+type PushPayload struct {
+	Title       string
+	Body        string
+	Data        map[string]string
+	BadgeCount  *int
+	CollapseKey string
 }
 
 func NewNotificationService(notifRepo *repository.NotificationRepo, hub *ws.Hub) *NotificationService {
 	return &NotificationService{notifRepo: notifRepo, hub: hub}
+}
+
+func (s *NotificationService) SetPushSender(ps PushSender) {
+	s.pushSvc = ps
 }
 
 func (s *NotificationService) List(ctx context.Context, userID string) ([]models.Notification, error) {
@@ -89,4 +106,29 @@ func (s *NotificationService) Create(ctx context.Context, userID, ntype, title s
 
 	evt := ws.NewEvent(ws.OpNotificationCreate, notif)
 	s.hub.SendToUser(userID, evt)
+
+	if s.pushSvc != nil {
+		go func() {
+			pushBody := title
+			if body != nil && *body != "" {
+				pushBody = *body
+			}
+			data := map[string]string{"type": ntype}
+			if hubID != nil {
+				data["hub_id"] = *hubID
+			}
+			if streamID != nil {
+				data["stream_id"] = *streamID
+			}
+			if referenceID != nil {
+				data["reference_id"] = *referenceID
+			}
+			_ = s.pushSvc.SendToUser(context.Background(), userID, PushPayload{
+				Title:       title,
+				Body:        pushBody,
+				Data:        data,
+				CollapseKey: ntype,
+			})
+		}()
+	}
 }
