@@ -1567,6 +1567,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     if (joiningLock) return;
     joiningLock = true;
     joinCancellationRequested = false;
+    const previousStreamId = get().streamId;
     useActiveSpeakerStore.getState().clearActiveSpeaker();
     setScreenShareNotice(null);
 
@@ -1687,7 +1688,9 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
       const cancelled = joinCancellationRequested;
       console.error('Failed to join voice channel:', err);
       if (roomRef) { roomRef.removeAllListeners(); roomRef.disconnect(); roomRef = null; }
-      wsSend('voice_state_update', { stream_id: sid, action: 'leave' });
+      if (previousStreamId) {
+        wsSend('voice_state_update', { stream_id: previousStreamId, action: 'leave' });
+      }
       resetState();
       if (!cancelled) {
         setScreenShareNotice(voiceJoinFailureNotice(err));
