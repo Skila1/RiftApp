@@ -161,6 +161,14 @@ function cleanSearchFilters(filters: MessageSearchFilters): MessageSearchFilters
   return next;
 }
 
+function buildSearchFilters(query?: string): MessageSearchFilters {
+  const normalizedQuery = query?.trim();
+  return {
+    query: normalizedQuery ? normalizedQuery : undefined,
+    limit: 25,
+  };
+}
+
 function getUserLabel(user?: User): string {
   if (!user) return 'Unknown user';
   return user.display_name || user.username;
@@ -1051,7 +1059,7 @@ export default function ChatPanel({
       const queryValue = normalizedQuery.length > 0 ? normalizedQuery : undefined;
 
       if (detail.run) {
-        void runSearch({ query: queryValue });
+        void runSearch(detail.clearFiltersOnRun ? buildSearchFilters(queryValue) : { query: queryValue });
         return;
       }
 

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePresenceStore } from '../../stores/presenceStore';
-import { useHubStore } from '../../stores/hubStore';
 import { useProfilePopoverStore } from '../../stores/profilePopoverStore';
 import { useUserContextMenuStore } from '../../stores/userContextMenuStore';
 import StatusDot, { statusLabel } from '../shared/StatusDot';
@@ -187,17 +186,10 @@ function UserRow({ user }: { user: User }) {
 export default function MemberList() {
   const hubMembers = usePresenceStore((s) => s.hubMembers);
   const presence = usePresenceStore((s) => s.presence);
-  const hubs = useHubStore((s) => s.hubs);
-  const activeHubId = useHubStore((s) => s.activeHubId);
   const [messageSearch, setMessageSearch] = useState('');
   const [searchMenuOpen, setSearchMenuOpen] = useState(false);
   const searchWrapRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-
-  const activeHub = useMemo(
-    () => hubs.find((hub) => hub.id === activeHubId),
-    [hubs, activeHubId],
-  );
 
   const { online, offline } = useMemo(() => {
     const members = Object.values(hubMembers);
@@ -248,7 +240,7 @@ export default function MemberList() {
   }, [searchMenuOpen]);
 
   const runMessageSearch = useCallback(() => {
-    dispatchChatSearchRequest({ query: messageSearch, run: true });
+    dispatchChatSearchRequest({ query: messageSearch, run: true, clearFiltersOnRun: true });
     setSearchMenuOpen(false);
   }, [messageSearch]);
 
@@ -263,7 +255,7 @@ export default function MemberList() {
     <div className="relative w-60 border-l border-riftapp-border/60 bg-riftapp-content flex flex-col overflow-visible flex-shrink-0">
       <div className="relative z-20 h-12 border-b border-riftapp-border/50 bg-riftapp-content px-4">
         <div ref={searchWrapRef} className="relative flex h-full items-center justify-end">
-          <div className={`flex h-6 w-[150px] min-w-0 items-center gap-1 rounded-[4px] px-1.5 text-[#b5bac1] shadow-[0_1px_0_rgba(0,0,0,0.32)] transition-colors ${searchMenuOpen ? 'bg-[#202225] text-[#dcddde]' : 'bg-[#1e1f22] hover:bg-[#202225]'}`}>
+          <div className={`flex h-6 w-[168px] min-w-0 items-center gap-1 rounded-[4px] px-1.5 text-[#b5bac1] shadow-[0_1px_0_rgba(0,0,0,0.32)] transition-colors ${searchMenuOpen ? 'bg-[#262930] text-[#dcddde]' : 'bg-[#24272d] hover:bg-[#262930]'}`}>
             <input
               ref={searchInputRef}
               type="text"
@@ -279,14 +271,14 @@ export default function MemberList() {
                   runMessageSearch();
                 }
               }}
-              placeholder={activeHub ? `Search ${activeHub.name}` : 'Search messages'}
+              placeholder="Search"
               className="min-w-0 flex-1 bg-transparent py-0 text-[12px] leading-5 text-[#dcddde] outline-none placeholder:text-[#72767d]"
               aria-label="Search messages"
             />
             <button
               type="button"
               onClick={runMessageSearch}
-              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[#72767d] transition-colors hover:text-[#dcddde]"
+              className="inline-flex h-5 w-6 shrink-0 items-center justify-center rounded-[3px] bg-[#2d3138] text-[#8f949c] transition-colors hover:bg-[#363a43] hover:text-[#dcddde]"
               aria-label="Search messages"
             >
               <SearchIcon className="h-[13px] w-[13px]" />
