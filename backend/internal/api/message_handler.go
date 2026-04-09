@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -13,11 +14,12 @@ import (
 )
 
 type MessageHandler struct {
-	svc *service.MessageService
+	svc   *service.MessageService
+	dmSvc *service.DMService
 }
 
-func NewMessageHandler(svc *service.MessageService) *MessageHandler {
-	return &MessageHandler{svc: svc}
+func NewMessageHandler(svc *service.MessageService, dmSvc *service.DMService) *MessageHandler {
+	return &MessageHandler{svc: svc, dmSvc: dmSvc}
 }
 
 func (h *MessageHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -112,6 +114,60 @@ func (h *MessageHandler) Unpin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeData(w, http.StatusOK, msg)
+}
+
+func (h *MessageHandler) Forward(w http.ResponseWriter, r *http.Request) {
+	msgID := chi.URLParam(r, "messageID")
+	userID := middleware.GetUserID(r.Context())
+	var body struct {
+		StreamID       *string `json:"stream_id"`
+		ConversationID *string `json:"conversation_id"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	streamID := normalizeOptionalID(body.StreamID)
+	conversationID := normalizeOptionalID(body.ConversationID)
+	if (streamID == nil && conversationID == nil) || (streamID != nil && conversationID != nil) {
+		writeError(w, http.StatusBadRequest, "exactly one forward destination is required")
+		return
+	}
+
+	forwardInput, err := h.svc.PrepareForward(r.Context(), msgID, userID)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+
+	if streamID != nil {
+		msg, err := h.svc.Create(r.Context(), userID, *streamID, service.CreateMessageInput{
+			Content:       forwardInput.Content,
+			AttachmentIDs: forwardInput.AttachmentIDs,
+		})
+		if err != nil {
+			writeAppError(w, err)
+			return
+		}
+		writeData(w, http.StatusCreated, msg)
+		return
+	}
+
+	if h.dmSvc == nil {
+		writeError(w, http.StatusInternalServerError, "dm forwarding is unavailable")
+		return
+	}
+
+	msg, err := h.dmSvc.SendMessage(r.Context(), *conversationID, userID, service.SendDMInput{
+		Content:       forwardInput.Content,
+		AttachmentIDs: forwardInput.AttachmentIDs,
+	})
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	writeData(w, http.StatusCreated, msg)
 }
 
 func (h *MessageHandler) Search(w http.ResponseWriter, r *http.Request) {
@@ -234,6 +290,17 @@ func parseSearchTime(raw string) (*time.Time, error) {
 		}
 	}
 	return nil, fmt.Errorf("invalid time format")
+}
+
+func normalizeOptionalID(raw *string) *string {
+	if raw == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*raw)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
 }
 
 func parseSearchDayRange(raw string) (time.Time, time.Time, error) {

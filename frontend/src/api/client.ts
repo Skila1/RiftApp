@@ -238,6 +238,7 @@ class ApiClient {
   sendMessage(streamId: string, content: string, attachmentIds?: string[], replyToMessageId?: string) { return this.request<Message>(`/streams/${streamId}/messages`, { method: 'POST', body: JSON.stringify({ content, attachment_ids: attachmentIds, reply_to_message_id: replyToMessageId }) }); }
   editMessage(messageId: string, content: string) { return this.request<Message>(`/messages/${messageId}`, { method: 'PATCH', body: JSON.stringify({ content }) }); }
   deleteMessage(messageId: string) { return this.request(`/messages/${messageId}`, { method: 'DELETE' }); }
+  forwardMessage(messageId: string, target: { stream_id?: string; conversation_id?: string }) { return this.request<Message>(`/messages/${messageId}/forward`, { method: 'POST', body: JSON.stringify(target) }); }
 
   addReaction(messageId: string, emoji: string, emojiId?: string) { return this.request(`/messages/${messageId}/reactions`, { method: 'POST', body: JSON.stringify({ emoji, emoji_id: emojiId }) }); }
   removeReaction(messageId: string, emoji: string, emojiId?: string) { const qs = emojiId ? `?emoji_id=${encodeURIComponent(emojiId)}` : ''; return this.request(`/messages/${messageId}/reactions/${encodeURIComponent(emoji)}${qs}`, { method: 'DELETE' }); }

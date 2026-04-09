@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Message, User } from '../types';
 import { api } from '../api/client';
+import { useAuthStore } from './auth';
 import { useStreamStore } from './streamStore';
 import { normalizeMessage, normalizeMessages, normalizeUser } from '../utils/entityAssets';
 
@@ -349,6 +350,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
   addMessage: (message) => {
     const nextMessage = normalizeMessage(message);
     const activeStreamId = useStreamStore.getState().activeStreamId;
+    const currentUserId = useAuthStore.getState().user?.id;
     const sid = nextMessage.stream_id;
     if (!sid) return;
 
@@ -387,7 +389,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
       return { pinSystemEventsByStream, streamMessagesCache };
     });
 
-    if (sid !== activeStreamId) {
+    if (sid !== activeStreamId && nextMessage.author_id !== currentUserId) {
       useStreamStore.getState().incrementUnread(sid);
     }
   },

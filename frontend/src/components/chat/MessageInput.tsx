@@ -16,6 +16,27 @@ import { getReplyAuthorLabel, getReplyPreviewMeta } from '../../utils/replyPrevi
 const TYPING_THROTTLE_MS = 500;
 const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024; // 2 GB
 
+function inferClipboardFileExtension(contentType: string): string {
+  const subtype = contentType.split('/')[1] ?? 'bin';
+  const normalized = subtype.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return normalized || 'bin';
+}
+
+function normalizeIncomingFile(file: File): File {
+  if (file.name.trim()) {
+    return file;
+  }
+
+  return new File(
+    [file],
+    `pasted-file-${Date.now()}.${inferClipboardFileExtension(file.type)}`,
+    {
+      type: file.type || 'application/octet-stream',
+      lastModified: file.lastModified || Date.now(),
+    },
+  );
+}
+
 interface PendingFile {
   file: File;
   preview?: string;
@@ -138,7 +159,8 @@ export default function MessageInput({
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
     const newFiles: PendingFile[] = [];
-    for (const file of Array.from(files)) {
+    for (const rawFile of Array.from(files)) {
+      const file = normalizeIncomingFile(rawFile);
       if (file.size > MAX_FILE_SIZE) {
         newFiles.push({ file, uploading: false, error: 'File too large (max 2 GB)' });
         continue;
@@ -405,6 +427,22 @@ export default function MessageInput({
     }
   };
 
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const clipboardFiles = Array.from(e.clipboardData.items ?? [])
+      .filter((item) => item.kind === 'file')
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file != null);
+
+    if (clipboardFiles.length > 0) {
+      void addFiles(clipboardFiles);
+      return;
+    }
+
+    if (e.clipboardData.files.length > 0) {
+      void addFiles(Array.from(e.clipboardData.files));
+    }
+  }, [addFiles]);
+
   return (
     <div
       className="px-4 pb-6 pt-1 flex-shrink-0"
@@ -584,6 +622,7 @@ export default function MessageInput({
           value={content}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={isDMMode ? `Message @${streamName}` : `Message #${streamName}`}
           rows={1}
           className="flex-1 px-1 py-3 bg-transparent text-[15px] text-riftapp-text placeholder:text-riftapp-text-dim/60 resize-none focus:outline-none max-h-[200px] leading-relaxed"

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/riftapp-cloud/riftapp/internal/models"
@@ -366,6 +367,38 @@ func (r *MessageRepo) GetLinkedAttachments(ctx context.Context, msgID string) ([
 		attachments = append(attachments, a)
 	}
 	return attachments, rows.Err()
+}
+
+func (r *MessageRepo) CloneAttachments(ctx context.Context, sourceMsgID, uploaderID string) ([]string, error) {
+	attachments, err := r.GetLinkedAttachments(ctx, sourceMsgID)
+	if err != nil {
+		return nil, err
+	}
+	if len(attachments) == 0 {
+		return nil, nil
+	}
+
+	attachmentIDs := make([]string, 0, len(attachments))
+	for _, attachment := range attachments {
+		attachmentID := uuid.New().String()
+		_, err := r.db.Exec(ctx,
+			`INSERT INTO attachments (id, message_id, uploader_id, filename, url, content_type, size_bytes, created_at)
+			 VALUES ($1, NULL, $2, $3, $4, $5, $6, $7)`,
+			attachmentID,
+			uploaderID,
+			attachment.Filename,
+			attachment.URL,
+			attachment.ContentType,
+			attachment.SizeBytes,
+			time.Now(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		attachmentIDs = append(attachmentIDs, attachmentID)
+	}
+
+	return attachmentIDs, nil
 }
 
 func (r *MessageRepo) GetAuthorInfo(ctx context.Context, userID string) (*models.User, error) {

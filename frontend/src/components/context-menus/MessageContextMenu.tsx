@@ -35,14 +35,6 @@ function IconForward() {
   );
 }
 
-function IconThread() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#b5bac1] shrink-0">
-      <path d="M21 15a2 2 0 01-2 2H8l-4 4V5a2 2 0 012-2h13a2 2 0 012 2z" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 function IconPin() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#b5bac1] shrink-0">
@@ -129,6 +121,7 @@ interface Props {
   canPin: boolean;
   onClose: () => void;
   onEdit: () => void;
+  onForward: () => void;
   onDelete?: () => void;
   mediaUrl?: string;
 }
@@ -145,6 +138,7 @@ export default function MessageContextMenu({
   canPin,
   onClose,
   onEdit,
+  onForward,
   onDelete,
   mediaUrl,
 }: Props) {
@@ -206,6 +200,11 @@ export default function MessageContextMenu({
       void pinMessage(message.id);
     }
     onClose();
+  };
+
+  const handleForward = () => {
+    onClose();
+    onForward();
   };
 
   const addReaction = (emoji: string, emojiId?: string) => {
@@ -309,14 +308,12 @@ export default function MessageContextMenu({
             setTimeout(() => document.querySelector<HTMLTextAreaElement>('[data-riftapp-message-input]')?.focus(), 0);
           },
         )}
-        {!isDM && row(isPinned ? 'Unpin Message' : 'Pin Message', <IconPin />, handleTogglePin, { disabled: !canPin })}
-        {row('Forward', <IconForward />, undefined, { disabled: true })}
-        {row('Create Thread', <IconThread />, undefined, { disabled: true })}
+        {!isDM && canPin ? row(isPinned ? 'Unpin Message' : 'Pin Message', <IconPin />, handleTogglePin) : null}
+        {row('Forward', <IconForward />, handleForward)}
 
         {menuDivider()}
 
         {row('Copy Text', <IconCopy />, copyText)}
-        {row('Apps', <span className="text-[#949ba4] text-sm">›</span>, undefined, { disabled: true })}
         {row('Mark Unread', <IconUnread />, undefined, { disabled: true })}
         {row('Copy Message Link', <IconLink />, copyLink)}
         {row('Speak Message', <IconSpeak />, speak)}

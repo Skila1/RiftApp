@@ -13,6 +13,7 @@ import InviteEmbed from '../shared/InviteEmbed';
 import EmojiPicker, { type EmojiSelection } from '../shared/EmojiPicker';
 import MessageContextMenu from '../context-menus/MessageContextMenu';
 import DeleteMessageModal from '../modals/DeleteMessageModal';
+import ForwardMessageModal from '../modals/ForwardMessageModal';
 import ModalCloseButton from '../shared/ModalCloseButton';
 import BotBadge from '../shared/BotBadge';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
@@ -301,6 +302,7 @@ const MessageItem = memo(function MessageItem({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showForwardModal, setShowForwardModal] = useState(false);
   const [messageMenu, setMessageMenu] = useState<{ x: number; y: number; mediaUrl?: string } | null>(null);
   const [editing, setEditing] = useState(false);
   const [editDraft, setEditDraft] = useState(message.content);
@@ -314,7 +316,7 @@ const MessageItem = memo(function MessageItem({
   const canPin =
     !isDM &&
     !!message.stream_id &&
-    (isOwn || hasPermission(hubPermissions, PermManageMessages));
+    hasPermission(hubPermissions, PermManageMessages);
 
   const canEdit = isOwn && Boolean((message.content || '').trim());
 
@@ -736,6 +738,10 @@ const MessageItem = memo(function MessageItem({
           canPin={canPin}
           mediaUrl={messageMenu.mediaUrl}
           onClose={() => setMessageMenu(null)}
+          onForward={() => {
+            setMessageMenu(null);
+            setShowForwardModal(true);
+          }}
           onEdit={() => {
             setMessageMenu(null);
             setEditDraft(message.content);
@@ -745,6 +751,13 @@ const MessageItem = memo(function MessageItem({
             setMessageMenu(null);
             setShowDeleteModal(true);
           }}
+        />
+      )}
+
+      {showForwardModal && (
+        <ForwardMessageModal
+          message={message}
+          onClose={() => setShowForwardModal(false)}
         />
       )}
 

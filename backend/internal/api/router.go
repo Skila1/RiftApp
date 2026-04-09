@@ -64,7 +64,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 	rankH := NewRankHandler(deps.RankService, deps.WSHub)
 	streamH := NewStreamHandler(deps.StreamService, deps.WSHub)
 	catH := NewCategoryHandler(deps.CategoryService, deps.WSHub)
-	msgH := NewMessageHandler(deps.MsgService)
+	msgH := NewMessageHandler(deps.MsgService, deps.DMService)
 	wsH := NewWSHandler(deps.WSHub, deps.AuthService, deps.Config.AllowedOrigins)
 	voiceH := NewVoiceHandler(deps.Config, deps.HubService, deps.StreamService, deps.WSHub, deps.HubCustomizationRepo)
 	notifH := NewNotifHandler(deps.NotifService)
@@ -176,6 +176,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 		r.Get("/api/hubs/{hubID}/messages/search", msgH.Search)
 		r.Patch("/api/messages/{messageID}", msgH.Update)
 		r.Delete("/api/messages/{messageID}", msgH.Delete)
+		r.Post("/api/messages/{messageID}/forward", msgH.Forward)
 		r.Put("/api/messages/{messageID}/pin", msgH.Pin)
 		r.Delete("/api/messages/{messageID}/pin", msgH.Unpin)
 

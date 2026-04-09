@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+const incrementUnread = vi.fn();
+
 vi.mock('../../api/client', () => ({
   api: {
     getMessages: vi.fn(),
@@ -12,7 +14,15 @@ vi.mock('../streamStore', () => ({
   useStreamStore: {
     getState: vi.fn(() => ({
       activeStreamId: 'stream-1',
-      incrementUnread: vi.fn(),
+      incrementUnread,
+    })),
+  },
+}));
+
+vi.mock('../auth', () => ({
+  useAuthStore: {
+    getState: vi.fn(() => ({
+      user: { id: 'self-user' },
     })),
   },
 }));
@@ -23,6 +33,7 @@ describe('messageStore', () => {
   beforeEach(() => {
     useMessageStore.setState({ messages: [], messagesLoading: false, pinSystemEventsByStream: {} });
     vi.clearAllMocks();
+    incrementUnread.mockClear();
   });
 
   it('starts with empty messages', () => {
@@ -174,5 +185,13 @@ describe('messageStore', () => {
 
     useMessageStore.getState().applyReactionAdd('m1', 'user1', '👍', true);
     expect(useMessageStore.getState().messages[0].reactions).toHaveLength(0);
+  });
+
+  it('addMessage does not increment unread for self-authored messages in other streams', () => {
+    const msg = { id: 'm2', stream_id: 'stream-2', content: 'Hello', author_id: 'self-user', created_at: '' } as any;
+
+    useMessageStore.getState().addMessage(msg);
+
+    expect(incrementUnread).not.toHaveBeenCalled();
   });
 });

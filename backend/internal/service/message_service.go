@@ -75,6 +75,11 @@ type SearchMessagesInput struct {
 	Limit            int
 }
 
+type ForwardMessageInput struct {
+	Content       string
+	AttachmentIDs []string
+}
+
 func (s *MessageService) List(ctx context.Context, userID, streamID string, before *string, limit int) ([]models.Message, error) {
 	if _, err := s.hubService.GetStreamHubID(ctx, streamID, userID); err != nil {
 		return nil, err
@@ -300,6 +305,38 @@ func (s *MessageService) Delete(ctx context.Context, msgID, userID string) error
 	return nil
 }
 
+func (s *MessageService) PrepareForward(ctx context.Context, msgID, userID string) (ForwardMessageInput, error) {
+	msg, err := s.msgRepo.GetByID(ctx, msgID)
+	if err != nil {
+		return ForwardMessageInput{}, apperror.NotFound("message not found")
+	}
+
+	if msg.StreamID != nil {
+		if _, err := s.hubService.GetStreamHubID(ctx, *msg.StreamID, userID); err != nil {
+			return ForwardMessageInput{}, err
+		}
+	} else if msg.ConversationID != nil {
+		dmRepo := repository.NewDMRepo(s.msgRepo.GetDB())
+		isMember, err := dmRepo.IsMember(ctx, *msg.ConversationID, userID)
+		if err != nil {
+			return ForwardMessageInput{}, apperror.Internal("failed to validate conversation membership", err)
+		}
+		if !isMember {
+			return ForwardMessageInput{}, apperror.Forbidden("not a member of this conversation")
+		}
+	}
+
+	attachmentIDs, err := s.msgRepo.CloneAttachments(ctx, msg.ID, userID)
+	if err != nil {
+		return ForwardMessageInput{}, apperror.Internal("failed to clone message attachments", err)
+	}
+
+	return ForwardMessageInput{
+		Content:       msg.Content,
+		AttachmentIDs: attachmentIDs,
+	}, nil
+}
+
 func (s *MessageService) ToggleReaction(ctx context.Context, msgID, userID, emoji string, emojiID *string) (added bool, err error) {
 	if emoji == "" {
 		return false, apperror.BadRequest("emoji is required")
@@ -486,7 +523,7 @@ func (s *MessageService) togglePin(ctx context.Context, msgID, userID string, pi
 	if err != nil {
 		return nil, err
 	}
-	if msg.AuthorID != userID && !models.HasPermission(perms, models.PermManageMessages) {
+	if !models.HasPermission(perms, models.PermManageMessages) {
 		return nil, apperror.Forbidden("you do not have permission to pin this message")
 	}
 

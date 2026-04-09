@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Message, Conversation, User } from '../types';
 import { api } from '../api/client';
 import { normalizeConversation, normalizeMessage, normalizeMessages, normalizeUser } from '../utils/entityAssets';
+import { useAuthStore } from './auth';
 import { useHubStore } from './hubStore';
 import { useMessageStore } from './messageStore';
 import { useStreamStore } from './streamStore';
@@ -160,6 +161,7 @@ export const useDMStore = create<DMState>((set, get) => ({
 
   addDMMessage: (message) => {
     const nextMessage = normalizeMessage(message);
+    const currentUserId = useAuthStore.getState().user?.id;
     set((s) => {
       const convExists = s.conversations.some((c) => c.id === nextMessage.conversation_id);
       if (!convExists) {
@@ -168,6 +170,7 @@ export const useDMStore = create<DMState>((set, get) => ({
 
       const isActive = nextMessage.conversation_id === s.activeConversationId;
 	  const alreadyKnown = s.dmMessages.some((m) => m.id === nextMessage.id);
+      const isOwn = nextMessage.author_id === currentUserId;
 
       const conversations = s.conversations.map((c) => {
         if (c.id !== nextMessage.conversation_id) return c;
@@ -175,7 +178,7 @@ export const useDMStore = create<DMState>((set, get) => ({
           ...c,
           last_message: nextMessage,
           updated_at: nextMessage.created_at,
-		  unread_count: isActive || alreadyKnown ? 0 : (c.unread_count ?? 0) + 1,
+		  unread_count: isActive || alreadyKnown || isOwn ? 0 : (c.unread_count ?? 0) + 1,
         };
       }).sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
 

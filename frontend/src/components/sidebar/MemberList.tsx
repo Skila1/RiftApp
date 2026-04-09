@@ -260,8 +260,8 @@ export default function MemberList() {
   if (Object.keys(hubMembers).length === 0) return null;
 
   return (
-    <div className="w-60 border-l border-riftapp-border/60 bg-riftapp-content flex flex-col overflow-hidden flex-shrink-0">
-      <div className="border-b border-riftapp-border/50 bg-riftapp-content px-3">
+    <div className="relative w-60 border-l border-riftapp-border/60 bg-riftapp-content flex flex-col overflow-visible flex-shrink-0">
+      <div className="relative z-20 border-b border-riftapp-border/50 bg-riftapp-content px-3">
         <div ref={searchWrapRef} className="relative flex h-12 items-center">
           <div className={`flex min-w-0 flex-1 items-center gap-2 rounded-[10px] border px-3 text-[#b5bac1] shadow-[0_1px_0_rgba(255,255,255,0.02)] transition-colors ${searchMenuOpen ? 'border-[#4a4d54] bg-[#1e1f22] text-[#f2f3f5]' : 'border-[#2b2d31] bg-[#1a1b1e] hover:border-[#3a3d45]'}`}>
             <input
@@ -294,7 +294,7 @@ export default function MemberList() {
           </div>
 
           {searchMenuOpen ? (
-            <div className="absolute right-0 top-[calc(100%+8px)] z-40 w-[320px] overflow-hidden rounded-xl border border-[#1f2023] bg-[#2b2d31] shadow-[0_18px_48px_rgba(0,0,0,0.45)]">
+            <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[320px] overflow-hidden rounded-xl border border-[#1f2023] bg-[#2b2d31] shadow-[0_18px_48px_rgba(0,0,0,0.45)]">
               <div className="border-b border-white/6 px-4 py-3">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#949ba4]">Filters</p>
               </div>
