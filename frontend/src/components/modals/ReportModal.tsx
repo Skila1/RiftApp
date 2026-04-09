@@ -31,6 +31,10 @@ export default function ReportModal({ onClose, reportedUserId, messageId, hubId,
       setError('Please provide a reason');
       return;
     }
+    if (!reportedUserId && !messageId) {
+      setError('Unable to identify the reported content');
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {

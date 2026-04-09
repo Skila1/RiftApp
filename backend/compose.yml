@@ -17,8 +17,7 @@ services:
       - "8080:8080"
     env_file: .env
     depends_on:
-      localmod:
-        condition: service_healthy
+      - localmod
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
       interval: 10s

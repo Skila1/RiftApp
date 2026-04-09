@@ -53,7 +53,11 @@ func (h *HubModerationHandler) UpdateAutoModSettings(w http.ResponseWriter, r *h
 		writeError(w, http.StatusInternalServerError, "failed to save settings")
 		return
 	}
-	settings, _ := h.modRepo.GetSettings(r.Context(), hubID)
+	settings, err := h.modRepo.GetSettings(r.Context(), hubID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to reload settings")
+		return
+	}
 	writeJSON(w, http.StatusOK, settings)
 }
 
@@ -89,7 +93,10 @@ func (h *HubModerationHandler) BanMember(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, "failed to ban user")
 		return
 	}
-	_ = h.hubRepo.RemoveMember(r.Context(), hubID, targetID)
+	if err := h.hubRepo.RemoveMember(r.Context(), hubID, targetID); err != nil {
+		writeError(w, http.StatusInternalServerError, "ban recorded but failed to remove member from hub")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

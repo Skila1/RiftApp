@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import type { Report } from '../../types';
+import { useNavigate } from 'react-router-dom';
 
 const STATUS_COLORS: Record<string, string> = {
   open: 'bg-yellow-500/20 text-yellow-400',
@@ -19,6 +20,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export default function ModerationDashboard() {
+  const navigate = useNavigate();
   const [reports, setReports] = useState<Report[]>([]);
   const [total, setTotal] = useState(0);
   const [stats, setStats] = useState<{ total_reports: number; open: number; resolved: number; dismissed: number; flagged_images: number } | null>(null);
@@ -28,14 +30,22 @@ export default function ModerationDashboard() {
   const [loading, setLoading] = useState(true);
   const [actionNote, setActionNote] = useState('');
   const [error, setError] = useState('');
+  const [accessDenied, setAccessDenied] = useState(false);
 
   const loadReports = async () => {
     setLoading(true);
+    setError('');
     try {
       const res = await api.listReports({ status: statusFilter || undefined, category: categoryFilter || undefined, limit: 50 });
       setReports(res.reports);
       setTotal(res.total);
-    } catch { /* ignore */ }
+    } catch (err) {
+      if (err instanceof Error && err.message.toLowerCase().includes('forbidden')) {
+        setAccessDenied(true);
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to load reports');
+      }
+    }
     setLoading(false);
   };
 
@@ -43,7 +53,11 @@ export default function ModerationDashboard() {
     try {
       const s = await api.getModerationStats();
       setStats(s);
-    } catch { /* ignore */ }
+    } catch (err) {
+      if (err instanceof Error && err.message.toLowerCase().includes('forbidden')) {
+        setAccessDenied(true);
+      }
+    }
   };
 
   useEffect(() => { loadReports(); loadStats(); }, [statusFilter, categoryFilter]);
@@ -70,6 +84,20 @@ export default function ModerationDashboard() {
       setError(err instanceof Error ? err.message : 'Failed');
     }
   };
+
+  if (accessDenied) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-riftapp-content">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-white mb-2">Access Denied</h1>
+          <p className="text-riftapp-text-dim mb-4">You do not have permission to access the moderation dashboard.</p>
+          <button onClick={() => navigate('/app')} className="px-4 py-2 text-sm rounded-lg bg-riftapp-accent text-white hover:bg-riftapp-accent-hover transition-colors">
+            Go to App
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-y-auto bg-riftapp-content">

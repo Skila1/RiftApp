@@ -642,6 +642,7 @@ export function BansPanel({ hubId }: { hubId?: string }) {
 export function AutoModPanel({ hubId }: { hubId?: string }) {
   const [settings, setSettings] = useState<import('../../types').HubAutoModSettings | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     if (!hubId) return;
@@ -650,29 +651,39 @@ export function AutoModPanel({ hubId }: { hubId?: string }) {
 
   const handleToggle = async (enabled: boolean) => {
     if (!settings || !hubId) return;
+    const previous = settings;
     const updated = { ...settings, enabled };
     setSettings(updated);
     setSaving(true);
+    setSaveError('');
     try {
       const res = await api.updateAutoModSettings(hubId, updated);
       setSettings(res);
-    } catch { /* ignore */ }
+    } catch (err) {
+      setSettings(previous);
+      setSaveError(err instanceof Error ? err.message : 'Failed to save');
+    }
     setSaving(false);
   };
 
-  const handleThreshold = async (field: 'toxicity_threshold' | 'spam_threshold' | 'nsfw_threshold', value: number) => {
+  const handleThreshold = (_field: 'toxicity_threshold' | 'spam_threshold' | 'nsfw_threshold', value: number) => {
     if (!settings || !hubId) return;
-    const updated = { ...settings, [field]: value };
+    const updated = { ...settings, [_field]: value };
     setSettings(updated);
   };
 
   const handleSave = async () => {
     if (!settings || !hubId) return;
+    const previous = settings;
     setSaving(true);
+    setSaveError('');
     try {
       const res = await api.updateAutoModSettings(hubId, settings);
       setSettings(res);
-    } catch { /* ignore */ }
+    } catch (err) {
+      setSettings(previous);
+      setSaveError(err instanceof Error ? err.message : 'Failed to save');
+    }
     setSaving(false);
   };
 
@@ -711,6 +722,7 @@ export function AutoModPanel({ hubId }: { hubId?: string }) {
               >
                 {saving ? 'Saving...' : 'Save Changes'}
               </button>
+              {saveError && <p className="text-[#ed4245] text-[13px] mt-2">{saveError}</p>}
               <SettingsDivider />
             </>
           )}

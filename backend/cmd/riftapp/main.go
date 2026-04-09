@@ -90,10 +90,10 @@ func main() {
 	var modSvc *moderation.Service
 	if cfg.LocalModURL != "" {
 		modClient := moderation.NewClient(cfg.LocalModURL)
-		modSvc = moderation.NewService(modClient)
 		if err := modClient.Health(context.Background()); err != nil {
 			log.Printf("warning: LocalMod unreachable (%s): %v — moderation disabled", cfg.LocalModURL, err)
 		} else {
+			modSvc = moderation.NewService(modClient)
 			log.Printf("connected to LocalMod at %s", cfg.LocalModURL)
 		}
 	}
