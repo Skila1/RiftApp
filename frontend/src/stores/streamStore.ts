@@ -218,17 +218,17 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       return;
     }
     await useMessageStore.getState().loadMessages(nextActiveStreamId);
-    if (!isActiveHub()) {
+    if (!isActiveHub() || get().activeStreamId !== nextActiveStreamId) {
       return;
     }
     if (useVoiceChannelUiStore.getState().isOpen) {
       return;
     }
-    if (!isActiveHub()) {
+    if (!isActiveHub() || get().activeStreamId !== nextActiveStreamId) {
       return;
     }
     await get().ackStream(nextActiveStreamId);
-    if (!isActiveHub()) {
+    if (!isActiveHub() || get().activeStreamId !== nextActiveStreamId) {
       return;
     }
     await useNotificationStore.getState().markStreamNotificationsRead(nextActiveStreamId);
