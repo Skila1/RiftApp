@@ -16,6 +16,7 @@ export default function AdminSettingsPage() {
   const [adding, setAdding] = useState(false);
 
   const load = () => {
+    setError('');
     setLoading(true);
     adminApi.listAccounts()
       .then((r) => setAccounts(r.accounts))
@@ -41,6 +42,10 @@ export default function AdminSettingsPage() {
   };
 
   const handleUpdateRole = async (id: string, role: string) => {
+    if (currentAdminUser && id === currentAdminUser.id) {
+      setError('Cannot change your own role');
+      return;
+    }
     try { await adminApi.updateAccount(id, { role }); load(); }
     catch (err) { setError(err instanceof Error ? err.message : 'Failed'); }
   };

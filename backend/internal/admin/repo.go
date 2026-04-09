@@ -19,6 +19,18 @@ func NewRepo(db *pgxpool.Pool) *Repo {
 
 var ErrNotFound = errors.New("admin: not found")
 
+func (r *Repo) GetUserIDByEmail(ctx context.Context, email string) (string, error) {
+	var userID string
+	err := r.db.QueryRow(ctx, `SELECT id FROM users WHERE email = $1`, email).Scan(&userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", ErrNotFound
+		}
+		return "", err
+	}
+	return userID, nil
+}
+
 func (r *Repo) GetByUserID(ctx context.Context, userID string) (*Account, error) {
 	a := &Account{}
 	err := r.db.QueryRow(ctx,
@@ -297,7 +309,9 @@ func (r *Repo) ListUserSessions(ctx context.Context, limit, offset int) ([]UserS
 		return nil, 0, err
 	}
 
-	_ = tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return nil, 0, err
+	}
 	return list, total, nil
 }
 

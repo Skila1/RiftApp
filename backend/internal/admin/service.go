@@ -149,6 +149,10 @@ func (s *Service) SetupTOTP(ctx context.Context, loginToken string) (*TOTPSetupR
 		return nil, ErrInvalidCredentials
 	}
 
+	if acct.MustChangePassword {
+		return nil, ErrAccessDenied
+	}
+
 	issuer := "RiftApp Admin"
 	accountName := acct.Username
 	if acct.Email != nil {
@@ -183,6 +187,10 @@ func (s *Service) ConfirmTOTP(ctx context.Context, loginToken, code, ip, ua stri
 	acct, err := s.repo.GetByID(ctx, claims.SessionID)
 	if err != nil {
 		return nil, ErrInvalidCredentials
+	}
+
+	if acct.MustChangePassword {
+		return nil, ErrAccessDenied
 	}
 
 	if acct.TOTPSecret == nil {
@@ -302,6 +310,10 @@ func (s *Service) ListAccounts(ctx context.Context) ([]Account, error) {
 	return s.repo.List(ctx)
 }
 
+func (s *Service) GetAccountByID(ctx context.Context, id string) (*Account, error) {
+	return s.repo.GetByID(ctx, id)
+}
+
 func (s *Service) ListAdminSessions(ctx context.Context) ([]Session, error) {
 	return s.repo.ListAllSessions(ctx)
 }
@@ -330,8 +342,11 @@ func (s *Service) EnsureSeedAdmins(ctx context.Context) {
 		}
 
 		var userID string
-		err = s.repo.db.QueryRow(ctx, `SELECT id FROM users WHERE email = $1`, email).Scan(&userID)
+		userID, err = s.repo.GetUserIDByEmail(ctx, email)
 		if err != nil {
+			if !errors.Is(err, ErrNotFound) {
+				log.Printf("admin: error looking up user for seed admin %s: %v", email, err)
+			}
 			continue
 		}
 
@@ -340,7 +355,11 @@ func (s *Service) EnsureSeedAdmins(ctx context.Context) {
 			log.Printf("admin: failed to generate random password for seed admin %s: %v", email, err)
 			continue
 		}
-		hash, _ := bcrypt.GenerateFromPassword([]byte(randomPass), bcrypt.DefaultCost)
+		hash, err := bcrypt.GenerateFromPassword([]byte(randomPass), bcrypt.DefaultCost)
+		if err != nil {
+			log.Printf("admin: failed to hash password for seed admin %s: %v", email, err)
+			continue
+		}
 		now := time.Now()
 		acct := &Account{
 			ID:                 uuid.New().String(),

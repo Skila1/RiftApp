@@ -69,6 +69,10 @@ class AdminApiClient {
     return this.request<void>('/admin/auth/logout', { method: 'POST' });
   }
 
+  me() {
+    return this.request<AdminAccount>('/admin/auth/me');
+  }
+
   // Users
   listUsers(params: { search?: string; limit?: number; offset?: number } = {}) {
     const q = new URLSearchParams();

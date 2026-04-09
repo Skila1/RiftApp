@@ -81,8 +81,9 @@ export default function UsersPage() {
         <div className="space-y-2">
           {users.map((u) => (
             <div key={u.id}>
-              <div onClick={() => handleSelect(u)}
-                className={`bg-[#2b2d31] border rounded-lg p-4 cursor-pointer hover:border-[#3f4147]/80 transition-colors ${selected?.id === u.id ? 'border-[#00a8fc]/50 ring-1 ring-[#00a8fc]/30' : 'border-[#3f4147]/30'}`}>
+              <button type="button" onClick={() => handleSelect(u)}
+                aria-pressed={selected?.id === u.id}
+                className={`w-full text-left bg-[#2b2d31] border rounded-lg p-4 cursor-pointer hover:border-[#3f4147]/80 transition-colors ${selected?.id === u.id ? 'border-[#00a8fc]/50 ring-1 ring-[#00a8fc]/30' : 'border-[#3f4147]/30'}`}>
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-[#5865f2] flex items-center justify-center text-white text-sm font-bold shrink-0">
                     {(u.display_name || u.username)[0]?.toUpperCase()}
@@ -98,7 +99,7 @@ export default function UsersPage() {
                   </div>
                   <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${u.status > 0 ? 'bg-[#57f287]' : 'bg-[#949ba4]'}`} />
                 </div>
-              </div>
+              </button>
               {selected?.id === u.id && (
                 <div className="bg-[#2b2d31] border border-[#3f4147]/30 border-t-0 rounded-b-lg p-4 -mt-1">
                   <div className="grid grid-cols-3 gap-4 mb-4 text-sm">

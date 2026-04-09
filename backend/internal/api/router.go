@@ -369,10 +369,11 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 			r.Post("/set-password", adminAuthH.SetPassword)
 		})
 
-		// Authenticated admin logout
+		// Authenticated admin logout + me
 		r.Group(func(r chi.Router) {
 			r.Use(admin.RequireAdmin(deps.AdminService, admin.RoleModerator))
 			r.Post("/api/admin/auth/logout", adminAuthH.Logout)
+			r.Get("/api/admin/auth/me", adminAuthH.GetMe)
 		})
 
 		// Moderator+ routes

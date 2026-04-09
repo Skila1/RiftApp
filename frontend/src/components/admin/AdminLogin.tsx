@@ -27,7 +27,9 @@ export default function AdminLogin() {
     try {
       const res = await adminApi.login(email, password);
       if (res.admin_token) {
-        loginSuccess(res.admin_token, res.role || 'moderator', null);
+        adminApi.setToken(res.admin_token);
+        const me = await adminApi.me().catch(() => null);
+        loginSuccess(res.admin_token, res.role || 'moderator', me);
         return;
       }
       if (!res.login_token) {
@@ -84,7 +86,12 @@ export default function AdminLogin() {
     setLoading(true);
     try {
       const res = await adminApi.verify2fa(loginToken, code);
-      loginSuccess(res.admin_token, res.role, res.user);
+      let user = res.user;
+      if (!user) {
+        adminApi.setToken(res.admin_token);
+        user = await adminApi.me().catch(() => null as unknown as typeof res.user);
+      }
+      loginSuccess(res.admin_token, res.role, user);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid code');
     } finally {
@@ -98,7 +105,12 @@ export default function AdminLogin() {
     setLoading(true);
     try {
       const res = await adminApi.confirmTotp(loginToken, code);
-      loginSuccess(res.admin_token, res.role, res.user);
+      let user = res.user;
+      if (!user) {
+        adminApi.setToken(res.admin_token);
+        user = await adminApi.me().catch(() => null as unknown as typeof res.user);
+      }
+      loginSuccess(res.admin_token, res.role, user);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid code');
     } finally {

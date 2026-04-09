@@ -6,20 +6,35 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/riftapp-cloud/riftapp/internal/admin"
 	"github.com/riftapp-cloud/riftapp/internal/middleware"
 	"github.com/riftapp-cloud/riftapp/internal/service"
 )
 
 type ReportHandler struct {
-	svc     *service.ReportService
-	devSvc  *service.DeveloperService
+	svc    *service.ReportService
+	devSvc *service.DeveloperService
 }
 
 func NewReportHandler(svc *service.ReportService, devSvc *service.DeveloperService) *ReportHandler {
 	return &ReportHandler{svc: svc, devSvc: devSvc}
 }
 
+func (h *ReportHandler) isAdminContext(r *http.Request) bool {
+	return admin.GetAdminClaims(r.Context()) != nil
+}
+
+func (h *ReportHandler) getActorID(r *http.Request) string {
+	if claims := admin.GetAdminClaims(r.Context()); claims != nil {
+		return claims.UserID
+	}
+	return middleware.GetUserID(r.Context())
+}
+
 func (h *ReportHandler) isSuperAdmin(r *http.Request) bool {
+	if h.isAdminContext(r) {
+		return true
+	}
 	userID := middleware.GetUserID(r.Context())
 	u, err := h.devSvc.GetUserByID(r.Context(), userID)
 	if err != nil || u == nil || u.Email == nil {
@@ -84,7 +99,7 @@ func (h *ReportHandler) UpdateReport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "reportID")
-	userID := middleware.GetUserID(r.Context())
+	userID := h.getActorID(r)
 	var body struct {
 		Status string  `json:"status"`
 		Note   *string `json:"note"`
@@ -106,7 +121,7 @@ func (h *ReportHandler) TakeAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reportID := chi.URLParam(r, "reportID")
-	userID := middleware.GetUserID(r.Context())
+	userID := h.getActorID(r)
 	var input service.TakeActionInput
 	if err := readJSON(r, &input); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")

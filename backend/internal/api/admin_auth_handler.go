@@ -129,6 +129,20 @@ func (h *AdminAuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *AdminAuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
+	claims := admin.GetAdminClaims(r.Context())
+	if claims == nil {
+		writeError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+	acct, err := h.svc.GetAccountByID(r.Context(), claims.SessionID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "account not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, acct)
+}
+
 func (h *AdminAuthHandler) SetPassword(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		LoginToken  string `json:"login_token"`
