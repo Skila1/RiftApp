@@ -445,7 +445,7 @@ export default function MessageInput({
 
   return (
     <div
-      className="px-4 pb-6 pt-1 flex-shrink-0"
+      className="px-4 pb-3 pt-1 flex-shrink-0"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}

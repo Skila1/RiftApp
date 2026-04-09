@@ -66,7 +66,7 @@ export default function CategoryContextMenu({
   return (
     <>
       <MenuOverlay x={x} y={y} onClose={onClose}>
-        <div className="bg-[#111214] rounded-md border border-black/40 shadow-modal py-1.5 min-w-[200px] text-[13px] text-[#dbdee1] select-none">
+        <div className="rift-context-menu-shell min-w-[200px] text-[13px] text-[#dbdee1]">
           {/* Collapse / Expand */}
           <button
             type="button"

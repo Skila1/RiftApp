@@ -20,7 +20,7 @@ function Row({
       disabled={disabled}
       onClick={onClick}
       className={`w-full text-left px-3 py-2.5 rounded-md text-[14px] flex items-center justify-between gap-3 transition-colors ${
-        disabled ? 'text-[#5c5e66] cursor-not-allowed opacity-60' : 'text-riftapp-text hover:bg-riftapp-chrome-hover hover:text-white'
+        disabled ? 'text-[#5c5e66] cursor-not-allowed opacity-60' : 'text-riftapp-text hover:bg-riftapp-accent hover:text-white'
       }`}
     >
       <div className="min-w-0 flex-1 text-left">{children}</div>
@@ -35,7 +35,7 @@ function SubLabel({ children }: { children: React.ReactNode }) {
 
 function StopIcon() {
   return (
-    <span className="flex h-5 w-5 items-center justify-center rounded border border-riftapp-border-light bg-riftapp-panel">
+    <span className="flex h-5 w-5 items-center justify-center rounded border border-riftapp-border-light bg-riftapp-menu-hover">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-riftapp-text">
         <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
       </svg>
@@ -47,7 +47,7 @@ function CheckboxMark({ checked }: { checked: boolean }) {
   return (
     <span
       className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 ${
-        checked ? 'bg-[#5865f2] border-[#5865f2]' : 'border-riftapp-border-light bg-riftapp-content-elevated'
+        checked ? 'bg-[#5865f2] border-[#5865f2]' : 'border-riftapp-border-light bg-riftapp-menu-hover'
       }`}
     >
       {checked && (
@@ -126,7 +126,7 @@ export default function VoiceStreamContextMenu({
   return (
     <MenuOverlay x={x} y={y} onClose={onClose}>
       <div
-        className="min-w-[240px] max-w-[280px] rounded-md border border-riftapp-border/60 bg-riftapp-chrome py-1 shadow-modal"
+        className="rift-context-menu-shell min-w-[240px] max-w-[280px]"
         onContextMenu={(e) => e.preventDefault()}
       >
         <div className="px-1">

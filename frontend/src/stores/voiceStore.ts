@@ -28,6 +28,7 @@ import { useStreamStore } from './streamStore';
 import { useActiveSpeakerStore } from './activeSpeakerStore';
 import { publicAssetUrl } from '../utils/publicAssetUrl';
 import { getDesktop } from '../utils/desktop';
+import { resolveVoiceParticipantSpeakingState } from '../utils/voiceSpeakingState';
 import {
   DEFAULT_MANUAL_MIC_THRESHOLD,
   DEFAULT_MIC_GATE_RELEASE_MS,
@@ -1172,9 +1173,11 @@ function screenSharePublishEncoding(fps: ScreenShareFps, resolution: ScreenShare
 function buildScreenShareOptions(kind: ScreenShareKind, fps: ScreenShareFps = 30, resolution: ScreenShareResolution = '1080p') {
   const resConstraints = SCREEN_SHARE_RESOLUTIONS[resolution];
   const options: Record<string, unknown> = {
+    audio: true,
     resolution: { ...resConstraints, frameRate: fps },
     contentHint: 'detail',
     surfaceSwitching: 'include',
+    systemAudio: 'include',
   };
   if (kind === 'tab') {
     options.preferCurrentTab = true;
@@ -1291,7 +1294,7 @@ async function startScreenShare(
       isScreenSharing: true,
       screenShareRequesting: false,
       screenShareSurfaceLabel: options?.surfaceLabel ?? inferSurfaceLabel(state.screenShareKind),
-      screenShareModalOpen: true,
+      screenShareModalOpen: false,
     });
     if (streamId) wsSend('voice_screen_share_update', { stream_id: streamId, sharing: true });
   } catch (err) {
@@ -1395,18 +1398,26 @@ function buildParticipants(room: Room): VoiceParticipant[] {
   const speakingSignals = useVoiceStore.getState().speakingSignals;
   const streamId = useVoiceStore.getState().streamId;
   const deafenedUsers = streamId ? (useStreamStore.getState().voiceDeafenedUsers[streamId] ?? []) : [];
+  const localIdentity = room.localParticipant.identity;
   const toVP = (p: Participant): VoiceParticipant => {
     const hasExplicitSpeakingSignal = hasOwnKey(speakingSignals, p.identity);
     const explicitSpeakingSignal = hasExplicitSpeakingSignal ? speakingSignals[p.identity] : false;
+    const isLocalParticipant = p.identity === localIdentity;
 
     return ({
       identity: p.identity,
-      isSpeaking: isTransientSpeaking(p.identity) || (hasExplicitSpeakingSignal ? explicitSpeakingSignal : p.isSpeaking),
-    isMuted: !p.isMicrophoneEnabled,
-    isCameraOn: p.isCameraEnabled,
-    isScreenSharing: p.isScreenShareEnabled,
-    videoTrack: getTrackForSource(p, Track.Source.Camera),
-    screenTrack: getTrackForSource(p, Track.Source.ScreenShare),
+      isSpeaking: resolveVoiceParticipantSpeakingState({
+        transientSpeaking: isTransientSpeaking(p.identity),
+        hasExplicitSpeakingSignal,
+        explicitSpeakingSignal,
+        liveKitSpeaking: p.isSpeaking,
+        isLocalParticipant,
+      }),
+      isMuted: !p.isMicrophoneEnabled,
+      isCameraOn: p.isCameraEnabled,
+      isScreenSharing: p.isScreenShareEnabled,
+      videoTrack: getTrackForSource(p, Track.Source.Camera),
+      screenTrack: getTrackForSource(p, Track.Source.ScreenShare),
     });
   };
   const localVP = toVP(room.localParticipant);

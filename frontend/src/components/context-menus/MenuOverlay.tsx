@@ -66,5 +66,5 @@ export function MenuOverlay({
 }
 
 export function menuDivider() {
-  return <div className="mx-2 my-1 h-px bg-white/[0.06]" />;
+  return <div className="rift-context-menu-divider" />;
 }

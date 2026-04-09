@@ -453,11 +453,11 @@ export default function VoiceView() {
                 </button>
                 {/* Dropdown menu */}
                 {screenShareMenuOpen && (
-                  <div className="absolute bottom-full left-0 mb-2 min-w-[200px] rounded-lg bg-[#111214] border border-black/40 py-1 shadow-modal z-50">
+                  <div className="rift-context-submenu-shell absolute bottom-full left-0 z-50 mb-2 min-w-[200px] py-1">
                     {/* Change Stream */}
                     <button
                       type="button"
-                      className="w-full text-left px-3 py-2 text-[14px] text-[#dbdee1] hover:bg-white/[0.08] flex items-center gap-2.5"
+                      className="w-full text-left px-3 py-2 text-[14px] text-[#dbdee1] hover:bg-riftapp-accent hover:text-white flex items-center gap-2.5"
                       onClick={() => {
                         setScreenShareMenuOpen(false);
                         setQualitySubOpen(false);
@@ -474,7 +474,7 @@ export default function VoiceView() {
                     <div className="relative">
                       <button
                         type="button"
-                        className="w-full text-left px-3 py-2 text-[14px] text-[#dbdee1] hover:bg-white/[0.08] flex items-center justify-between gap-2"
+                        className="w-full text-left px-3 py-2 text-[14px] text-[#dbdee1] hover:bg-riftapp-accent hover:text-white flex items-center justify-between gap-2"
                         onClick={() => setQualitySubOpen((o) => !o)}
                       >
                         <span className="flex items-center gap-2.5">
@@ -497,7 +497,7 @@ export default function VoiceView() {
                               key={fps}
                               type="button"
                               onClick={() => void setScreenShareQuality(fps, screenShareResolution)}
-                              className="w-full flex items-center justify-between px-2 py-1.5 text-[13px] text-[#dbdee1] hover:bg-white/[0.08] rounded-md"
+                              className="w-full flex items-center justify-between px-2 py-1.5 text-[13px] text-[#dbdee1] hover:bg-riftapp-accent hover:text-white rounded-md"
                             >
                               <span>{fps} FPS</span>
                               {screenShareFps === fps && (
@@ -511,7 +511,7 @@ export default function VoiceView() {
                               key={res}
                               type="button"
                               onClick={() => void setScreenShareQuality(screenShareFps, res)}
-                              className="w-full flex items-center justify-between px-2 py-1.5 text-[13px] text-[#dbdee1] hover:bg-white/[0.08] rounded-md"
+                              className="w-full flex items-center justify-between px-2 py-1.5 text-[13px] text-[#dbdee1] hover:bg-riftapp-accent hover:text-white rounded-md"
                             >
                               <span className="capitalize">{res === 'source' ? 'Source' : res}</span>
                               {screenShareResolution === res && (
@@ -544,13 +544,13 @@ export default function VoiceView() {
                 <MoreIcon size={22} className="text-[#b5bac1]" />
               </ControlBtn>
               {moreOpen && (
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 min-w-[200px] rounded-md bg-[#111214] border border-black/40 py-1 shadow-modal z-50">
-                  <button type="button" className="w-full text-left px-3 py-2 text-[14px] text-[#dbdee1] hover:bg-[#5865f2]/30 rounded-md" onClick={() => { setMoreOpen(false); void toggleDeafen(); }}>
+                <div className="rift-context-submenu-shell absolute bottom-full left-1/2 z-50 mb-2 min-w-[200px] -translate-x-1/2 py-1">
+                  <button type="button" className="w-full text-left px-3 py-2 text-[14px] text-[#dbdee1] hover:bg-riftapp-accent hover:text-white rounded-md" onClick={() => { setMoreOpen(false); void toggleDeafen(); }}>
                     {isDeafened ? 'Undeafen' : 'Deafen'}
                   </button>
                   <button
                     type="button"
-                    className="w-full text-left px-3 py-2 text-[14px] text-[#dbdee1] hover:bg-[#5865f2]/30 rounded-md"
+                    className="w-full text-left px-3 py-2 text-[14px] text-[#dbdee1] hover:bg-riftapp-accent hover:text-white rounded-md"
                     onClick={() => {
                       setMoreOpen(false);
                       openSettings('voice');

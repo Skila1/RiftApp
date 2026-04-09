@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePresenceStore } from '../../stores/presenceStore';
-import { useStreamStore } from '../../stores/streamStore';
 import { useProfilePopoverStore } from '../../stores/profilePopoverStore';
 import { useUserContextMenuStore } from '../../stores/userContextMenuStore';
 import StatusDot, { statusLabel } from '../shared/StatusDot';
@@ -127,14 +126,14 @@ function SearchShortcutRow({
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-start gap-3 rounded-lg px-2.5 py-2.5 text-left transition-colors hover:bg-[#36393f]"
+      className="flex w-full items-start gap-2.5 rounded-[6px] px-3 py-[8px] text-left transition-colors hover:bg-[#36393f]"
     >
-      <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#b5bac1]">
-        <Icon className="h-[18px] w-[18px]" />
+      <span className="mt-[2px] flex h-4 w-4 shrink-0 items-center justify-center text-[#b5bac1]">
+        <Icon className="h-4 w-4" />
       </span>
       <span className="min-w-0">
-        <span className="block text-[13px] font-semibold leading-5 text-[#f2f3f5]">{title}</span>
-        <span className="block text-xs leading-4 text-[#a3a6ad]">{description}</span>
+        <span className="block text-[14px] font-medium leading-[18px] text-[#f2f3f5]">{title}</span>
+        <span className="mt-0.5 block text-[13px] leading-[16px] text-[#949ba4]">{description}</span>
       </span>
     </button>
   );
@@ -187,17 +186,10 @@ function UserRow({ user }: { user: User }) {
 export default function MemberList() {
   const hubMembers = usePresenceStore((s) => s.hubMembers);
   const presence = usePresenceStore((s) => s.presence);
-  const streams = useStreamStore((s) => s.streams);
-  const activeStreamId = useStreamStore((s) => s.activeStreamId);
   const [messageSearch, setMessageSearch] = useState('');
   const [searchMenuOpen, setSearchMenuOpen] = useState(false);
   const searchWrapRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-
-  const activeStream = useMemo(
-    () => streams.find((stream) => stream.id === activeStreamId),
-    [streams, activeStreamId],
-  );
 
   const { online, offline } = useMemo(() => {
     const members = Object.values(hubMembers);
@@ -248,7 +240,7 @@ export default function MemberList() {
   }, [searchMenuOpen]);
 
   const runMessageSearch = useCallback(() => {
-    dispatchChatSearchRequest({ query: messageSearch, run: true });
+    dispatchChatSearchRequest({ query: messageSearch, run: true, clearFiltersOnRun: true });
     setSearchMenuOpen(false);
   }, [messageSearch]);
 
@@ -261,9 +253,9 @@ export default function MemberList() {
 
   return (
     <div className="relative w-60 border-l border-riftapp-border/60 bg-riftapp-content flex flex-col overflow-visible flex-shrink-0">
-      <div className="relative z-20 border-b border-riftapp-border/50 bg-riftapp-content px-3">
-        <div ref={searchWrapRef} className="relative flex h-12 items-center">
-          <div className={`flex min-w-0 flex-1 items-center gap-2 rounded-[10px] border px-3 text-[#b5bac1] shadow-[0_1px_0_rgba(255,255,255,0.02)] transition-colors ${searchMenuOpen ? 'border-[#4a4d54] bg-[#1e1f22] text-[#f2f3f5]' : 'border-[#2b2d31] bg-[#1a1b1e] hover:border-[#3a3d45]'}`}>
+      <div className="relative z-20 h-12 border-b border-riftapp-border/50 bg-riftapp-content px-4">
+        <div ref={searchWrapRef} className="relative flex h-full items-center justify-end">
+          <div className={`flex h-6 w-[168px] min-w-0 items-center gap-1 rounded-[4px] px-1.5 text-[#b5bac1] shadow-[0_1px_0_rgba(0,0,0,0.32)] transition-colors ${searchMenuOpen ? 'bg-[#262930] text-[#dcddde]' : 'bg-[#24272d] hover:bg-[#262930]'}`}>
             <input
               ref={searchInputRef}
               type="text"
@@ -279,26 +271,26 @@ export default function MemberList() {
                   runMessageSearch();
                 }
               }}
-              placeholder={activeStream ? `Search ${activeStream.name}` : 'Search messages'}
-              className="min-w-0 flex-1 bg-transparent py-1.5 text-[13px] text-[#f2f3f5] outline-none placeholder:text-[#8e9297]"
+              placeholder="Search"
+              className="min-w-0 flex-1 bg-transparent py-0 text-[12px] leading-5 text-[#dcddde] outline-none placeholder:text-[#72767d]"
               aria-label="Search messages"
             />
             <button
               type="button"
               onClick={runMessageSearch}
-              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#8e9297] transition-colors hover:bg-[#2b2d31] hover:text-[#f2f3f5]"
+              className="inline-flex h-5 w-6 shrink-0 items-center justify-center rounded-[3px] bg-[#2d3138] text-[#8f949c] transition-colors hover:bg-[#363a43] hover:text-[#dcddde]"
               aria-label="Search messages"
             >
-              <SearchIcon className="h-4 w-4" />
+              <SearchIcon className="h-[13px] w-[13px]" />
             </button>
           </div>
 
           {searchMenuOpen ? (
-            <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[320px] overflow-hidden rounded-xl border border-[#1f2023] bg-[#2b2d31] shadow-[0_18px_48px_rgba(0,0,0,0.45)]">
-              <div className="border-b border-white/6 px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#949ba4]">Filters</p>
+            <div className="absolute right-[-4px] top-[calc(100%+7px)] z-50 w-[244px] overflow-hidden rounded-[8px] border border-[#1f2023] bg-[#2b2d31] shadow-[0_18px_48px_rgba(0,0,0,0.45)]">
+              <div className="px-3 pb-1 pt-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Filters</p>
               </div>
-              <div className="px-2 py-2">
+              <div className="px-1.5 pb-2">
                 {SEARCH_SHORTCUTS.map((shortcut) => (
                   <SearchShortcutRow
                     key={shortcut.key}

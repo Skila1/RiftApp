@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { MenuOverlay, menuDivider } from './MenuOverlay';
+import { MenuOverlay } from './MenuOverlay';
 import type { Message } from '../../types';
 import { useMessageStore } from '../../stores/messageStore';
 import { useReplyDraftStore } from '../../stores/replyDraftStore';
@@ -317,10 +317,10 @@ export default function MessageContextMenu({
       type="button"
       disabled={opts?.disabled}
       onClick={onClick}
-      className={`mx-2 flex w-[calc(100%-16px)] items-center justify-between gap-4 rounded-[4px] px-2 py-[6px] text-left text-[14px] font-medium leading-[18px] transition-colors disabled:cursor-default disabled:opacity-40 disabled:pointer-events-none ${
+      className={`mx-1.5 flex w-[calc(100%-12px)] items-center justify-between gap-3 rounded-md px-3 py-1.5 text-left text-sm font-medium transition-colors disabled:cursor-default disabled:opacity-40 disabled:pointer-events-none ${
         opts?.danger
-          ? 'text-[#f87174] hover:bg-[#52282a] hover:text-[#fff2f3]'
-          : 'text-[#dbdee1] hover:bg-[#5865f2] hover:text-white'
+          ? 'text-riftapp-danger hover:bg-riftapp-danger hover:text-white'
+          : 'text-riftapp-text-muted hover:bg-riftapp-accent hover:text-white'
       }`}
     >
       <span className="truncate">{label}</span>
@@ -328,17 +328,19 @@ export default function MessageContextMenu({
     </button>
   );
 
+  const divider = <div className="rift-context-menu-divider" />;
+
   return (
     <MenuOverlay x={x} y={y} onClose={onClose}>
-      <div className="min-w-[232px] max-w-[280px] select-none overflow-hidden rounded-[6px] border border-black/35 bg-[#111214] py-2 shadow-[0_8px_16px_rgba(0,0,0,0.24)]">
+      <div className="rift-context-menu-shell w-[216px]">
         {!isDM && (
-          <div className="mb-1.5 flex items-center gap-1 border-b border-white/[0.06] px-3 pb-1.5">
+          <div className="mx-1.5 mb-1.5 flex items-center justify-center gap-1.5 px-2 py-1">
             {QUICK_ROW.map((emoji) => (
               <button
                 key={emoji}
                 type="button"
                 onClick={() => addReaction(emoji)}
-                className="flex h-8 w-8 items-center justify-center rounded-[4px] text-lg transition-colors hover:bg-[#2b2d31]"
+                className="flex h-9 w-9 items-center justify-center rounded-md border border-riftapp-border/50 bg-riftapp-menu-hover text-lg shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:border-riftapp-accent hover:bg-riftapp-accent hover:text-white"
               >
                 {emoji}
               </button>
@@ -348,8 +350,8 @@ export default function MessageContextMenu({
 
         <div className="relative" onMouseEnter={() => setReactionOpen(true)} onMouseLeave={() => setReactionOpen(false)}>
           <div
-            className={`mx-2 flex w-[calc(100%-16px)] items-center justify-between gap-4 rounded-[4px] px-2 py-[6px] text-[14px] font-medium leading-[18px] ${
-              reactionOpen ? 'bg-[#5865f2] text-white' : 'text-[#dbdee1] hover:bg-[#5865f2] hover:text-white'
+            className={`mx-1.5 flex w-[calc(100%-12px)] items-center justify-between gap-3 rounded-md px-3 py-1.5 text-sm font-medium ${
+              reactionOpen ? 'bg-riftapp-accent text-white' : 'text-riftapp-text-muted hover:bg-riftapp-accent hover:text-white'
             } ${isDM ? 'opacity-40 pointer-events-none' : ''}`}
           >
             <span>Add Reaction</span>
@@ -357,13 +359,13 @@ export default function MessageContextMenu({
           </div>
           {reactionOpen && !isDM && (
             <div className="absolute left-full top-0 z-20 pl-1" onMouseEnter={() => setReactionOpen(true)} onMouseLeave={() => setReactionOpen(false)}>
-              <div className="grid min-w-[200px] grid-cols-5 gap-1 rounded-[6px] border border-black/35 bg-[#111214] p-2 shadow-[0_8px_16px_rgba(0,0,0,0.24)]">
+              <div className="rift-context-submenu-shell grid min-w-[208px] grid-cols-5 gap-1.5 p-2">
                 {REACTION_PICK.map((emoji) => (
                   <button
                     key={emoji}
                     type="button"
                     onClick={() => addReaction(emoji)}
-                    className="flex h-8 w-8 items-center justify-center rounded-[4px] text-lg transition-colors hover:bg-[#2b2d31]"
+                    className="flex h-9 w-9 items-center justify-center rounded-md text-lg transition-colors hover:bg-riftapp-accent hover:text-white"
                   >
                     {emoji}
                   </button>
@@ -373,7 +375,7 @@ export default function MessageContextMenu({
           )}
         </div>
 
-        {menuDivider()}
+        {divider}
 
         {isOwn && canEdit
           ? row('Edit Message', <IconPencil />, () => {
@@ -390,11 +392,11 @@ export default function MessageContextMenu({
             setTimeout(() => document.querySelector<HTMLTextAreaElement>('[data-riftapp-message-input]')?.focus(), 0);
           },
         )}
+        {row('Forward', <IconForward />, handleForward)}
         {row('Mark Unread', <IconUnread />, closeOnly)}
         {!isDM && canPin ? row(isPinned ? 'Unpin Message' : 'Pin Message', <IconPin />, handleTogglePin) : null}
-        {row('Forward', <IconForward />, handleForward)}
 
-        {menuDivider()}
+        {divider}
 
         {media?.kind === 'image' ? (
           <>
@@ -404,7 +406,7 @@ export default function MessageContextMenu({
             {row('Copy Image', <IconImage />, () => {
               void copyImage();
             })}
-            {menuDivider()}
+            {divider}
           </>
         ) : null}
 
@@ -412,7 +414,7 @@ export default function MessageContextMenu({
         {row('Copy Message Link', <IconLink />, copyLink)}
         {hasText ? row('Speak Message', <IconSpeak />, speak) : null}
 
-        {canDelete || developerMode || !isOwn ? menuDivider() : null}
+        {canDelete || developerMode || !isOwn ? divider : null}
 
         {canDelete
           ? row(

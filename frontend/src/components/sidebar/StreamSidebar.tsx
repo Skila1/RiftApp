@@ -274,7 +274,7 @@ export default function StreamSidebar() {
 
       {headerMenu && (
         <MenuOverlay x={headerMenu.x} y={headerMenu.y} onClose={() => setHeaderMenu(null)}>
-          <div className="min-w-[200px] select-none rounded-md border border-riftapp-border/60 bg-riftapp-bg py-1.5 text-[13px] text-riftapp-text shadow-modal">
+          <div className="rift-context-menu-shell min-w-[200px] text-[13px] text-riftapp-text">
             <button
               type="button"
               onClick={() => {
@@ -390,7 +390,7 @@ export default function StreamSidebar() {
       {/* Blank-space context menu */}
       {blankSpaceMenu && (
         <MenuOverlay x={blankSpaceMenu.x} y={blankSpaceMenu.y} onClose={() => setBlankSpaceMenu(null)}>
-          <div className="min-w-[200px] select-none rounded-md border border-riftapp-border/60 bg-riftapp-bg py-1.5 text-[13px] text-riftapp-text shadow-modal">
+          <div className="rift-context-menu-shell min-w-[200px] text-[13px] text-riftapp-text">
             <button
               type="button"
               onClick={() => {

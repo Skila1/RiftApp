@@ -77,10 +77,20 @@ export function selectPreferredActiveSpeaker<TTrack>(
     return null;
   }
 
-  const selections = speakingParticipants.map((participant) => getActiveSpeakerMediaSelection(participant));
-  const best = selections.reduce((winner, selection) => (
-    selection.priority > winner.priority ? selection : winner
-  ));
+  const selections = speakingParticipants
+    .map((participant) => ({
+      participant,
+      selection: getActiveSpeakerMediaSelection(participant),
+    }))
+    .filter(({ selection }) => selection.trackType !== null && selection.track != null);
+
+  if (selections.length === 0) {
+    return null;
+  }
+
+  const best = selections.reduce((winner, entry) => (
+    entry.selection.priority > winner.selection.priority ? entry : winner
+  )).selection;
 
   if (!current) {
     return best;
@@ -92,6 +102,10 @@ export function selectPreferredActiveSpeaker<TTrack>(
   }
 
   const currentSelection = getActiveSpeakerMediaSelection(currentParticipant);
+  if (currentSelection.trackType === null || currentSelection.track == null) {
+    return best;
+  }
+
   if (currentSelection.priority >= best.priority) {
     return currentSelection;
   }

@@ -213,9 +213,6 @@ export function useWebSocket() {
             streamState.applyVoiceState(stream_id, user_id, action);
             const voiceState = useVoiceStore.getState();
             if (action === 'join') {
-              if (!Object.prototype.hasOwnProperty.call(voiceState.speakingSignals, user_id)) {
-                voiceState.applySpeakingSignal(user_id, false);
-              }
               // Fetch profile for unknown users so their display name is shown immediately
               if (!usePresenceStore.getState().hubMembers[user_id]) {
                 api.getUser(user_id).then((u) => usePresenceStore.getState().mergeUser(u)).catch(() => {});

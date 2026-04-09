@@ -766,7 +766,7 @@ func (h *Hub) handleVoiceSpeaking(userID, streamID string, speaking bool) {
 		return
 	}
 
-	h.BroadcastToVoiceChannel(streamID, NewEvent(OpVoiceSpeakingUpdate, VoiceSpeakingData{
+	h.broadcastToStreamObservers(streamID, NewEvent(OpVoiceSpeakingUpdate, VoiceSpeakingData{
 		StreamID: streamID,
 		UserID:   userID,
 		Speaking: speaking,

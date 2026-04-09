@@ -161,6 +161,57 @@ function cleanSearchFilters(filters: MessageSearchFilters): MessageSearchFilters
   return next;
 }
 
+function buildSearchFilters(query?: string): MessageSearchFilters {
+  const normalizedQuery = query?.trim();
+  return {
+    query: normalizedQuery ? normalizedQuery : undefined,
+    limit: 25,
+  };
+}
+
+function formatSearchResultTimestamp(dateStr: string): string {
+  return new Date(dateStr).toLocaleString(undefined, {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+function searchResultAuthorColor(name: string): string {
+  const colors = [
+    'text-[#6cb6ff]', 'text-[#39c5cf]', 'text-[#57ab5a]',
+    'text-[#f69d50]', 'text-[#dcbdfb]', 'text-[#fc8dc7]',
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+}
+
+function highlightSearchQuery(text: string, query: string, keyPrefix: string): ReactNode {
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery) return text;
+
+  const escapedQuery = normalizedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const matcher = new RegExp(`(${escapedQuery})`, 'ig');
+  const parts = text.split(matcher);
+  if (parts.length === 1) return text;
+
+  return parts.map((part, index) => (
+    part.toLowerCase() === normalizedQuery.toLowerCase() ? (
+      <span key={`${keyPrefix}-match-${index}`} className="rounded-[3px] bg-[#6b5920] px-[2px] text-[#f7e8ad]">
+        {part}
+      </span>
+    ) : (
+      <span key={`${keyPrefix}-text-${index}`}>{part}</span>
+    )
+  ));
+}
+
 function getUserLabel(user?: User): string {
   if (!user) return 'Unknown user';
   return user.display_name || user.username;
@@ -239,6 +290,57 @@ function IconSearch(props: SVGProps<SVGSVGElement>) {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <circle cx="11" cy="11" r="8" />
       <path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+}
+
+function IconSlidersHorizontal(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <line x1="21" x2="14" y1="4" y2="4" />
+      <line x1="10" x2="3" y1="4" y2="4" />
+      <line x1="21" x2="12" y1="12" y2="12" />
+      <line x1="8" x2="3" y1="12" y2="12" />
+      <line x1="21" x2="16" y1="20" y2="20" />
+      <line x1="12" x2="3" y1="20" y2="20" />
+      <line x1="14" x2="14" y1="2" y2="6" />
+      <line x1="8" x2="8" y1="10" y2="14" />
+      <line x1="16" x2="16" y1="18" y2="22" />
+    </svg>
+  );
+}
+
+function IconArrowDownUp(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="m3 16 4 4 4-4" />
+      <path d="M7 20V4" />
+      <path d="m21 8-4-4-4 4" />
+      <path d="M17 4v16" />
+    </svg>
+  );
+}
+
+function IconChevronDown(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+function IconCheck(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="m5 12 5 5L20 7" />
+    </svg>
+  );
+}
+
+function IconFolder(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
     </svg>
   );
 }
@@ -394,54 +496,73 @@ function EmptyPanelState({
   );
 }
 
-function MessagePreviewCard({
+function SearchSidebarActionButton({
+  label,
+  icon,
+  badge,
+  active,
+  onClick,
+}: {
+  label: string;
+  icon: ReactNode;
+  badge?: number | string;
+  active?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 rounded-[4px] border px-2 py-1 text-[12px] font-semibold transition-colors ${
+        active
+          ? 'border-[#4f545c] bg-[#2b2d31] text-[#f2f3f5]'
+          : 'border-[#232428] bg-[#1b1c20] text-[#b5bac1] hover:border-[#313338] hover:bg-[#232428] hover:text-[#f2f3f5]'
+      }`}
+    >
+      <span className="inline-flex items-center justify-center text-[#b5bac1]">{icon}</span>
+      <span>{label}</span>
+      {badge != null && badge !== 0 && badge !== '' ? (
+        <span className="rounded-full bg-[#2f3136] px-1.5 py-px text-[10px] font-bold leading-4 text-[#f2f3f5]">{badge}</span>
+      ) : null}
+      <IconChevronDown className="h-3.5 w-3.5 text-[#72767d]" />
+    </button>
+  );
+}
+
+function SearchResultCard({
   message,
-  streamName,
+  query,
   onOpen,
-  extraLabel,
 }: {
   message: Message;
-  streamName?: string;
+  query: string;
   onOpen: () => void;
-  extraLabel?: string;
 }) {
+  const authorLabel = getUserLabel(message.author);
+  const authorColor = searchResultAuthorColor(authorLabel);
   const attachmentLabel = message.attachments?.length
     ? message.attachments.map((attachment) => attachment.filename).join(', ')
     : null;
+  const previewText = getMessagePreview(message);
 
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="w-full rounded-xl border border-white/6 bg-[#17181c] px-3 py-3 text-left transition-colors hover:bg-[#1d1f24]"
+      className="w-full rounded-[8px] border border-[#2c2f33] bg-[#18191c] px-3 py-2.5 text-left transition-colors hover:bg-[#202225]"
     >
       <div className="flex items-start gap-3">
-        <UserAvatar user={message.author} sizeClass="w-9 h-9" textClass="text-xs" />
+        <UserAvatar user={message.author} sizeClass="w-9 h-9" textClass="text-[11px]" />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold text-[#f2f3f5]">{getUserLabel(message.author)}</span>
-            {streamName ? (
-              <span className="rounded-md bg-[#232428] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#b5bac1]">
-                #{streamName}
-              </span>
-            ) : null}
-            {message.pinned ? (
-              <span className="rounded-md bg-[#1f4129] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#7adf8f]">
-                Pinned
-              </span>
-            ) : null}
-            {extraLabel ? (
-              <span className="rounded-md bg-[#2a1e12] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#f0b232]">
-                {extraLabel}
-              </span>
-            ) : null}
-            <span className="text-[11px] text-[#949ba4]">{formatCompactTimestamp(message.created_at)}</span>
+          <div className="flex min-w-0 items-baseline gap-1.5">
+            <span className={`truncate text-[14px] font-medium ${authorColor}`}>{authorLabel}</span>
+            <span className="shrink-0 text-[10px] text-[#72767d]">{formatSearchResultTimestamp(message.created_at)}</span>
           </div>
-          <p className="mt-1 whitespace-pre-wrap break-words text-[13px] leading-5 text-[#dbdee1]">
-            {getMessagePreview(message)}
-          </p>
+          <div className="mt-0.5 break-words text-[13px] leading-[18px] text-[#dcddde]">
+            {highlightSearchQuery(previewText, query, `${message.id}-preview`)}
+          </div>
           {attachmentLabel ? (
-            <p className="mt-2 truncate text-[11px] text-[#949ba4]">{attachmentLabel}</p>
+            <p className="mt-1 truncate text-[11px] text-[#8e9297]">{attachmentLabel}</p>
           ) : null}
         </div>
       </div>
@@ -590,11 +711,13 @@ function NotificationToggleRow({
 interface ChatPanelProps {
   showMemberList: boolean;
   onToggleMemberList: () => void;
+  onSearchPanelVisibilityChange?: (open: boolean) => void;
 }
 
 export default function ChatPanel({
   showMemberList,
   onToggleMemberList,
+  onSearchPanelVisibilityChange,
 }: ChatPanelProps) {
   const messages = useMessageStore((s) => s.messages);
   const messagesLoading = useMessageStore((s) => s.messagesLoading);
@@ -602,9 +725,9 @@ export default function ChatPanel({
   const pinSystemEventsByStream = useMessageStore((s) => s.pinSystemEventsByStream);
   const activeStreamId = useStreamStore((s) => s.activeStreamId);
   const streams = useStreamStore((s) => s.streams);
+  const categories = useStreamStore((s) => s.categories);
   const user = useAuthStore((s) => s.user);
   const activeHubId = useHubStore((s) => s.activeHubId);
-  const hubs = useHubStore((s) => s.hubs);
   const hubMembers = usePresenceStore((s) => s.hubMembers);
   const notifications = useNotificationStore((s) => s.notifications);
   const loadNotifications = useNotificationStore((s) => s.loadNotifications);
@@ -642,14 +765,14 @@ export default function ChatPanel({
     [conversations, activeConversationId]
   );
 
-  const activeHub = useMemo(
-    () => hubs.find((hub) => hub.id === activeHubId),
-    [hubs, activeHubId],
-  );
-
   const streamMap = useMemo(
     () => new Map(streams.map((stream) => [stream.id, stream])),
     [streams],
+  );
+
+  const categoryMap = useMemo(
+    () => new Map(categories.map((category) => [category.id, category])),
+    [categories],
   );
 
   const textStreamsInHub = useMemo(
@@ -691,6 +814,8 @@ export default function ChatPanel({
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchPerformed, setSearchPerformed] = useState(false);
+  const [searchPopover, setSearchPopover] = useState<'filters' | 'sort' | null>(null);
+  const [searchSortOrder, setSearchSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [pendingSearchFocus, setPendingSearchFocus] = useState<ChatSearchFocusFilter | null>(null);
   const [streamNotifSettings, setStreamNotifSettings] = useState<StreamNotificationSettings | null>(null);
   const [notifSettingsLoading, setNotifSettingsLoading] = useState(false);
@@ -704,6 +829,44 @@ export default function ChatPanel({
   }, [notifications, inboxTab]);
 
   const activeSearchFilterCount = useMemo(() => countSearchFilters(searchFilters), [searchFilters]);
+  const searchSidebarOpen = activePanel === 'search' && !isDMMode && Boolean(activeHubId) && Boolean(activeStreamId);
+  const searchQuery = searchFilters.query ?? '';
+
+  const sortedSearchResults = useMemo(() => {
+    const items = [...searchResults];
+    items.sort((left, right) => {
+      const leftTime = new Date(left.created_at).getTime();
+      const rightTime = new Date(right.created_at).getTime();
+      return searchSortOrder === 'oldest' ? leftTime - rightTime : rightTime - leftTime;
+    });
+    return items;
+  }, [searchResults, searchSortOrder]);
+
+  const searchResultSections = useMemo(() => {
+    const sections: Array<{ key: string; streamName: string; categoryName?: string; messages: Message[] }> = [];
+
+    for (const message of sortedSearchResults) {
+      const stream = message.stream_id ? streamMap.get(message.stream_id) : undefined;
+      const categoryName = stream?.category_id ? categoryMap.get(stream.category_id)?.name : undefined;
+      const streamName = stream?.name ?? 'unknown-channel';
+      const sectionKey = `${stream?.id ?? 'missing'}:${categoryName ?? ''}`;
+      const previousSection = sections[sections.length - 1];
+
+      if (!previousSection || previousSection.key !== sectionKey) {
+        sections.push({
+          key: sectionKey,
+          streamName,
+          categoryName,
+          messages: [message],
+        });
+        continue;
+      }
+
+      previousSection.messages.push(message);
+    }
+
+    return sections;
+  }, [sortedSearchResults, streamMap, categoryMap]);
 
   // Compute unread divider position for stream messages
   const firstUnreadIndex = useMemo(() => {
@@ -941,9 +1104,13 @@ export default function ChatPanel({
     return jumpToMessageId(messageId);
   }, []);
 
-  const closePanel = useCallback(() => setActivePanel(null), []);
+  const closePanel = useCallback(() => {
+    setActivePanel(null);
+    setSearchPopover(null);
+  }, []);
 
   const togglePanel = useCallback((panel: Exclude<HeaderPanel, null>) => {
+    setSearchPopover(null);
     setActivePanel((current) => (current === panel ? null : panel));
   }, []);
 
@@ -1042,6 +1209,11 @@ export default function ChatPanel({
     }
   }, [activeHubId, isDMMode, searchFilters]);
 
+  const runSearchFromSidebar = useCallback(() => {
+    setSearchPopover(null);
+    void runSearch({ query: searchQuery.trim() || undefined });
+  }, [runSearch, searchQuery]);
+
   useEffect(() => {
     return subscribeToChatSearchRequests((detail) => {
       if (isDMMode || !activeHubId) return;
@@ -1051,7 +1223,7 @@ export default function ChatPanel({
       const queryValue = normalizedQuery.length > 0 ? normalizedQuery : undefined;
 
       if (detail.run) {
-        void runSearch({ query: queryValue });
+        void runSearch(detail.clearFiltersOnRun ? buildSearchFilters(queryValue) : { query: queryValue });
         return;
       }
 
@@ -1068,15 +1240,31 @@ export default function ChatPanel({
     if (activePanel !== 'search' || !pendingSearchFocus) return;
 
     const focusTarget = pendingSearchFocus;
+    setSearchPopover('filters');
     requestAnimationFrame(() => {
-      const field = searchFieldRefs.current[focusTarget];
-      field?.focus();
-      if (field instanceof HTMLInputElement) {
-        field.select();
-      }
+      requestAnimationFrame(() => {
+        const field = searchFieldRefs.current[focusTarget];
+        field?.focus();
+        if (field instanceof HTMLInputElement) {
+          field.select();
+        }
+      });
     });
     setPendingSearchFocus(null);
   }, [activePanel, pendingSearchFocus]);
+
+  useEffect(() => {
+    if (activePanel !== 'search') {
+      setSearchPopover(null);
+    }
+  }, [activePanel]);
+
+  useEffect(() => {
+    onSearchPanelVisibilityChange?.(searchSidebarOpen);
+    return () => {
+      onSearchPanelVisibilityChange?.(false);
+    };
+  }, [onSearchPanelVisibilityChange, searchSidebarOpen]);
 
   const openStreamMessage = useCallback(
     async (message: Pick<Message, 'id' | 'stream_id'>, hubId = activeHubId ?? undefined) => {
@@ -1191,6 +1379,9 @@ export default function ChatPanel({
   }, [activeHubId, activeStreamId, activeConversationId]);
 
   const canShowChannelTools = !showWelcome && !isDMMode && Boolean(activeHubId);
+  const searchSidebarTitle = searchLoading ? 'Searching…' : searchPerformed ? `${searchResults.length} Results` : 'Search';
+  const searchInputClass = 'w-full rounded-md border border-[#2b2d31] bg-[#1a1b1e] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors placeholder:text-[#72767d] focus:border-[#4f545c]';
+  const searchSelectClass = 'w-full rounded-md border border-[#2b2d31] bg-[#1a1b1e] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-[#4f545c]';
 
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-riftapp-content min-w-0 relative">
@@ -1263,7 +1454,402 @@ export default function ChatPanel({
 
       {/* Messages */}
       <div className="flex-1 overflow-hidden relative">
-        {activePanel ? (
+        {searchSidebarOpen ? (
+          <div ref={floatingPanelRef} className="absolute inset-y-0 right-0 z-30 flex w-[320px] flex-col border-l border-white/6 bg-[#111214] shadow-[-18px_0_36px_rgba(0,0,0,0.28)]">
+            <div className="border-b border-white/6 px-4 py-3">
+              <div className="flex h-7 items-center gap-2 rounded-[4px] bg-[#202225] px-2 text-[#dcddde] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                <IconSearch className="h-3.5 w-3.5 shrink-0 text-[#72767d]" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(event) => {
+                    const nextQuery = event.target.value;
+                    setSearchFilters((current) => ({
+                      ...current,
+                      query: nextQuery || undefined,
+                    }));
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      runSearchFromSidebar();
+                    }
+                  }}
+                  placeholder="Search"
+                  className="min-w-0 flex-1 bg-transparent text-[12px] leading-5 text-[#dcddde] outline-none placeholder:text-[#72767d]"
+                />
+                {searchQuery ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchFilters((current) => ({
+                        ...current,
+                        query: undefined,
+                      }));
+                    }}
+                    className="inline-flex h-4 w-4 items-center justify-center rounded text-[#72767d] transition-colors hover:text-[#dcddde]"
+                    aria-label="Clear search query"
+                  >
+                    <IconClose className="h-3 w-3" />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="relative border-b border-white/6 px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[15px] font-semibold text-[#f2f3f5]">{searchSidebarTitle}</span>
+                <div className="flex items-center gap-2">
+                  <SearchSidebarActionButton
+                    label="Filters"
+                    icon={<IconSlidersHorizontal className="h-3.5 w-3.5" />}
+                    badge={activeSearchFilterCount || undefined}
+                    active={searchPopover === 'filters'}
+                    onClick={() => setSearchPopover((current) => (current === 'filters' ? null : 'filters'))}
+                  />
+                  <SearchSidebarActionButton
+                    label="Sort"
+                    icon={<IconArrowDownUp className="h-3.5 w-3.5" />}
+                    active={searchPopover === 'sort'}
+                    onClick={() => setSearchPopover((current) => (current === 'sort' ? null : 'sort'))}
+                  />
+                </div>
+              </div>
+
+              {searchPopover === 'filters' ? (
+                <div className="absolute right-4 top-[calc(100%+8px)] z-20 w-[292px] overflow-hidden rounded-xl border border-[#232428] bg-[#111214] shadow-[0_18px_48px_rgba(0,0,0,0.45)]">
+                  <div className="border-b border-white/6 px-4 py-3">
+                    <h5 className="text-sm font-semibold text-[#f2f3f5]">Filters</h5>
+                    <p className="mt-0.5 text-xs text-[#949ba4]">Refine results across this server.</p>
+                  </div>
+                  <div className="max-h-[min(68vh,640px)] space-y-3 overflow-y-auto p-4">
+                    <div className="grid grid-cols-1 gap-3">
+                      <SearchField label="Channel">
+                        <select
+                          ref={(element) => {
+                            searchFieldRefs.current.stream_id = element;
+                          }}
+                          value={searchFilters.stream_id ?? ''}
+                          onChange={(event) => updateSearchFilter('stream_id', event.target.value || undefined)}
+                          className={searchSelectClass}
+                        >
+                          <option value="">All channels</option>
+                          {textStreamsInHub.map((stream) => (
+                            <option key={stream.id} value={stream.id}>
+                              #{stream.name}
+                            </option>
+                          ))}
+                        </select>
+                      </SearchField>
+
+                      <SearchField label="Author">
+                        <select
+                          ref={(element) => {
+                            searchFieldRefs.current.author_id = element;
+                          }}
+                          value={searchFilters.author_id ?? ''}
+                          onChange={(event) => updateSearchFilter('author_id', event.target.value || undefined)}
+                          className={searchSelectClass}
+                        >
+                          <option value="">Anyone</option>
+                          {memberOptions.map((member) => (
+                            <option key={member.id} value={member.id}>
+                              {getUserLabel(member)}
+                            </option>
+                          ))}
+                        </select>
+                      </SearchField>
+
+                      <SearchField label="Author Type">
+                        <select
+                          ref={(element) => {
+                            searchFieldRefs.current.author_type = element;
+                          }}
+                          value={searchFilters.author_type ?? ''}
+                          onChange={(event) => updateSearchFilter('author_type', (event.target.value || undefined) as MessageSearchFilters['author_type'])}
+                          className={searchSelectClass}
+                        >
+                          <option value="">Any</option>
+                          <option value="user">User</option>
+                          <option value="bot">Bot</option>
+                          <option value="webhook">Webhook</option>
+                        </select>
+                      </SearchField>
+
+                      <SearchField label="Mentions Username">
+                        <>
+                          <input
+                            ref={(element) => {
+                              searchFieldRefs.current.mentions = element;
+                            }}
+                            type="text"
+                            list="search-sidebar-mention-usernames"
+                            value={searchFilters.mentions ?? ''}
+                            onChange={(event) => updateSearchFilter('mentions', event.target.value || undefined)}
+                            placeholder="username"
+                            className={searchInputClass}
+                          />
+                          <datalist id="search-sidebar-mention-usernames">
+                            {memberOptions.map((member) => (
+                              <option key={member.id} value={member.username} />
+                            ))}
+                          </datalist>
+                        </>
+                      </SearchField>
+
+                      <SearchField label="Has">
+                        <select
+                          ref={(element) => {
+                            searchFieldRefs.current.has = element;
+                          }}
+                          value={searchFilters.has ?? ''}
+                          onChange={(event) => updateSearchFilter('has', (event.target.value || undefined) as MessageSearchFilters['has'])}
+                          className={searchSelectClass}
+                        >
+                          <option value="">Anything</option>
+                          <option value="file">File</option>
+                          <option value="image">Image</option>
+                          <option value="video">Video</option>
+                          <option value="audio">Audio</option>
+                          <option value="link">Link</option>
+                        </select>
+                      </SearchField>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <SearchField label="Before">
+                          <input
+                            ref={(element) => {
+                              searchFieldRefs.current.before = element;
+                            }}
+                            type="date"
+                            value={searchFilters.before ?? ''}
+                            onChange={(event) => updateSearchFilter('before', event.target.value || undefined)}
+                            className={searchInputClass}
+                          />
+                        </SearchField>
+
+                        <SearchField label="After">
+                          <input
+                            ref={(element) => {
+                              searchFieldRefs.current.after = element;
+                            }}
+                            type="date"
+                            value={searchFilters.after ?? ''}
+                            onChange={(event) => updateSearchFilter('after', event.target.value || undefined)}
+                            className={searchInputClass}
+                          />
+                        </SearchField>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <SearchField label="On">
+                          <input
+                            ref={(element) => {
+                              searchFieldRefs.current.on = element;
+                            }}
+                            type="date"
+                            value={searchFilters.on ?? ''}
+                            onChange={(event) => {
+                              const value = event.target.value || undefined;
+                              setSearchFilters((current) => ({
+                                ...current,
+                                on: value,
+                                during: value ? undefined : current.during,
+                              }));
+                            }}
+                            className={searchInputClass}
+                          />
+                        </SearchField>
+
+                        <SearchField label="During">
+                          <input
+                            ref={(element) => {
+                              searchFieldRefs.current.during = element;
+                            }}
+                            type="date"
+                            value={searchFilters.during ?? ''}
+                            onChange={(event) => {
+                              const value = event.target.value || undefined;
+                              setSearchFilters((current) => ({
+                                ...current,
+                                during: value,
+                                on: value ? undefined : current.on,
+                              }));
+                            }}
+                            className={searchInputClass}
+                          />
+                        </SearchField>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <SearchField label="Filename">
+                          <input
+                            ref={(element) => {
+                              searchFieldRefs.current.filename = element;
+                            }}
+                            type="text"
+                            value={searchFilters.filename ?? ''}
+                            onChange={(event) => updateSearchFilter('filename', event.target.value || undefined)}
+                            placeholder="clip, export"
+                            className={searchInputClass}
+                          />
+                        </SearchField>
+
+                        <SearchField label="Extension">
+                          <input
+                            ref={(element) => {
+                              searchFieldRefs.current.ext = element;
+                            }}
+                            type="text"
+                            value={searchFilters.ext ?? ''}
+                            onChange={(event) => updateSearchFilter('ext', event.target.value || undefined)}
+                            placeholder="png, mp4"
+                            className={searchInputClass}
+                          />
+                        </SearchField>
+                      </div>
+
+                      <SearchField label="Limit">
+                        <select
+                          value={searchFilters.limit ?? 25}
+                          onChange={(event) => updateSearchFilter('limit', Number(event.target.value))}
+                          className={searchSelectClass}
+                        >
+                          <option value={25}>25 results</option>
+                          <option value={50}>50 results</option>
+                          <option value={100}>100 results</option>
+                        </select>
+                      </SearchField>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <label className="inline-flex items-center gap-2 text-sm text-[#dbdee1]">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(searchFilters.pinned)}
+                          onChange={(event) => updateSearchFilter('pinned', event.target.checked || undefined)}
+                          className="h-4 w-4 rounded border-[#4f545c] bg-[#17181c]"
+                        />
+                        Pinned only
+                      </label>
+                      <label className="inline-flex items-center gap-2 text-sm text-[#dbdee1]">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(searchFilters.link)}
+                          onChange={(event) => updateSearchFilter('link', event.target.checked || undefined)}
+                          className="h-4 w-4 rounded border-[#4f545c] bg-[#17181c]"
+                        />
+                        Contains link
+                      </label>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-white/6 px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={resetSearch}
+                      className="rounded-md px-2.5 py-1 text-xs font-semibold text-[#b5bac1] transition-colors hover:bg-[#232428] hover:text-[#f2f3f5]"
+                    >
+                      Reset
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchPopover(null);
+                        void runSearch();
+                      }}
+                      className="inline-flex items-center gap-1 rounded-md bg-[#5865f2] px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-[#4752c4]"
+                    >
+                      <IconSearch className="h-3.5 w-3.5" />
+                      Search
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {searchPopover === 'sort' ? (
+                <div className="absolute right-4 top-[calc(100%+8px)] z-20 w-[180px] overflow-hidden rounded-xl border border-[#232428] bg-[#111214] p-1.5 shadow-[0_18px_48px_rgba(0,0,0,0.45)]">
+                  {([
+                    ['newest', 'Newest'],
+                    ['oldest', 'Oldest'],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => {
+                        setSearchSortOrder(value);
+                        setSearchPopover(null);
+                      }}
+                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${searchSortOrder === value ? 'bg-[#232428] text-[#f2f3f5]' : 'text-[#b5bac1] hover:bg-[#1a1b1e] hover:text-[#f2f3f5]'}`}
+                    >
+                      <span>{label}</span>
+                      {searchSortOrder === value ? <IconCheck className="h-3.5 w-3.5" /> : null}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-3 py-3">
+              {searchLoading ? (
+                <div className="space-y-4">
+                  {[0, 1, 2, 3].map((item) => (
+                    <div key={item} className="space-y-2">
+                      <div className="h-3 w-28 animate-pulse rounded-full bg-[#1b1d22]" />
+                      <div className="h-20 animate-pulse rounded-[8px] bg-[#17181c]" />
+                    </div>
+                  ))}
+                </div>
+              ) : searchError ? (
+                <EmptyPanelState
+                  title="Search failed"
+                  description={searchError}
+                  icon={<IconSearch className="h-5 w-5" />}
+                />
+              ) : searchResultSections.length > 0 ? (
+                <div className="space-y-4">
+                  {searchResultSections.map((section, index) => (
+                    <div key={`${section.key}-${index}`} className="space-y-2">
+                      <div className="flex items-center gap-1.5 px-1 text-[12px] font-semibold text-[#dcddde]">
+                        <span className="text-[#b9bbbe]">#</span>
+                        <span>{section.streamName}</span>
+                        {section.categoryName ? (
+                          <>
+                            <IconFolder className="ml-1 h-3.5 w-3.5 text-[#72767d]" />
+                            <span className="truncate text-[11px] font-medium text-[#8e9297]">{section.categoryName}</span>
+                          </>
+                        ) : null}
+                      </div>
+                      <div className="space-y-2">
+                        {section.messages.map((message) => (
+                          <SearchResultCard
+                            key={message.id}
+                            message={message}
+                            query={searchQuery}
+                            onOpen={() => void openStreamMessage(message)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : searchPerformed ? (
+                <EmptyPanelState
+                  title="No messages matched"
+                  description="Adjust the filters or broaden the query and try again."
+                  icon={<IconSearch className="h-5 w-5" />}
+                />
+              ) : (
+                <EmptyPanelState
+                  title="Search the server"
+                  description="Type in the search box or open filters to narrow down results by channel, author, file, or date."
+                  icon={<IconSearch className="h-5 w-5" />}
+                />
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {activePanel && activePanel !== 'search' ? (
           <div ref={floatingPanelRef} className="absolute right-4 top-3 z-30">
             {activePanel === 'notifications' && canShowChannelTools ? (
               <FloatingPanel
@@ -1401,342 +1987,6 @@ export default function ChatPanel({
               </FloatingPanel>
             ) : null}
 
-            {activePanel === 'search' && canShowChannelTools ? (
-              <FloatingPanel
-                title="Search Messages"
-                subtitle={activeSearchFilterCount > 0 ? `${activeSearchFilterCount} filters active in ${activeHub?.name ?? 'this hub'}` : `Search across ${activeHub?.name ?? 'this hub'}`}
-                widthClass="w-[430px]"
-                onClose={closePanel}
-                actions={
-                  <button
-                    type="button"
-                    onClick={() => void runSearch()}
-                    className="inline-flex items-center gap-1 rounded-md bg-[#5865f2] px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-[#4752c4]"
-                  >
-                    <IconSearch className="h-3.5 w-3.5" />
-                    Search
-                  </button>
-                }
-              >
-                <div className="space-y-4">
-                  <div>
-                    <PanelSectionLabel>Quick Filters</PanelSectionLabel>
-                    <div className="flex flex-wrap gap-2">
-                      {activeStream ? (
-                        <button
-                          type="button"
-                          onClick={() => updateSearchFilter('stream_id', searchFilters.stream_id === activeStream.id ? undefined : activeStream.id)}
-                          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${searchFilters.stream_id === activeStream.id ? 'bg-[#5865f2] text-white' : 'bg-[#1b1d22] text-[#b5bac1] hover:bg-[#232428] hover:text-[#f2f3f5]'}`}
-                        >
-                          #{activeStream.name}
-                        </button>
-                      ) : null}
-                      {user ? (
-                        <button
-                          type="button"
-                          onClick={() => updateSearchFilter('author_id', searchFilters.author_id === user.id ? undefined : user.id)}
-                          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${searchFilters.author_id === user.id ? 'bg-[#5865f2] text-white' : 'bg-[#1b1d22] text-[#b5bac1] hover:bg-[#232428] hover:text-[#f2f3f5]'}`}
-                        >
-                          From me
-                        </button>
-                      ) : null}
-                      {user?.username ? (
-                        <button
-                          type="button"
-                          onClick={() => updateSearchFilter('mentions', searchFilters.mentions === user.username ? undefined : user.username)}
-                          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${searchFilters.mentions === user.username ? 'bg-[#5865f2] text-white' : 'bg-[#1b1d22] text-[#b5bac1] hover:bg-[#232428] hover:text-[#f2f3f5]'}`}
-                        >
-                          Mentions @{user.username}
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() => updateSearchFilter('link', searchFilters.link ? undefined : true)}
-                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${searchFilters.link ? 'bg-[#5865f2] text-white' : 'bg-[#1b1d22] text-[#b5bac1] hover:bg-[#232428] hover:text-[#f2f3f5]'}`}
-                      >
-                        Has link
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => updateSearchFilter('pinned', searchFilters.pinned ? undefined : true)}
-                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${searchFilters.pinned ? 'bg-[#5865f2] text-white' : 'bg-[#1b1d22] text-[#b5bac1] hover:bg-[#232428] hover:text-[#f2f3f5]'}`}
-                      >
-                        Pinned
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <PanelSectionLabel>Filters</PanelSectionLabel>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <SearchField label="Channel">
-                        <select
-                          ref={(element) => {
-                            searchFieldRefs.current.stream_id = element;
-                          }}
-                          value={searchFilters.stream_id ?? ''}
-                          onChange={(event) => updateSearchFilter('stream_id', event.target.value || undefined)}
-                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-white/15"
-                        >
-                          <option value="">All channels</option>
-                          {textStreamsInHub.map((stream) => (
-                            <option key={stream.id} value={stream.id}>
-                              #{stream.name}
-                            </option>
-                          ))}
-                        </select>
-                      </SearchField>
-
-                      <SearchField label="Author">
-                        <select
-                          ref={(element) => {
-                            searchFieldRefs.current.author_id = element;
-                          }}
-                          value={searchFilters.author_id ?? ''}
-                          onChange={(event) => updateSearchFilter('author_id', event.target.value || undefined)}
-                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-white/15"
-                        >
-                          <option value="">Anyone</option>
-                          {memberOptions.map((member) => (
-                            <option key={member.id} value={member.id}>
-                              {getUserLabel(member)}
-                            </option>
-                          ))}
-                        </select>
-                      </SearchField>
-
-                      <SearchField label="Author Type">
-                        <select
-                          ref={(element) => {
-                            searchFieldRefs.current.author_type = element;
-                          }}
-                          value={searchFilters.author_type ?? ''}
-                          onChange={(event) => updateSearchFilter('author_type', (event.target.value || undefined) as MessageSearchFilters['author_type'])}
-                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-white/15"
-                        >
-                          <option value="">Any</option>
-                          <option value="user">User</option>
-                          <option value="bot">Bot</option>
-                          <option value="webhook">Webhook</option>
-                        </select>
-                      </SearchField>
-
-                      <SearchField label="Mentions Username">
-                        <>
-                          <input
-                            ref={(element) => {
-                              searchFieldRefs.current.mentions = element;
-                            }}
-                            type="text"
-                            list="search-mention-usernames"
-                            value={searchFilters.mentions ?? ''}
-                            onChange={(event) => updateSearchFilter('mentions', event.target.value || undefined)}
-                            placeholder="username"
-                            className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none placeholder:text-[#949ba4] transition-colors focus:border-white/15"
-                          />
-                          <datalist id="search-mention-usernames">
-                            {memberOptions.map((member) => (
-                              <option key={member.id} value={member.username} />
-                            ))}
-                          </datalist>
-                        </>
-                      </SearchField>
-
-                      <SearchField label="Has">
-                        <select
-                          ref={(element) => {
-                            searchFieldRefs.current.has = element;
-                          }}
-                          value={searchFilters.has ?? ''}
-                          onChange={(event) => updateSearchFilter('has', (event.target.value || undefined) as MessageSearchFilters['has'])}
-                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-white/15"
-                        >
-                          <option value="">Anything</option>
-                          <option value="file">File</option>
-                          <option value="image">Image</option>
-                          <option value="video">Video</option>
-                          <option value="audio">Audio</option>
-                          <option value="link">Link</option>
-                        </select>
-                      </SearchField>
-
-                      <SearchField label="Before">
-                        <input
-                          ref={(element) => {
-                            searchFieldRefs.current.before = element;
-                          }}
-                          type="date"
-                          value={searchFilters.before ?? ''}
-                          onChange={(event) => updateSearchFilter('before', event.target.value || undefined)}
-                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-white/15"
-                        />
-                      </SearchField>
-
-                      <SearchField label="After">
-                        <input
-                          ref={(element) => {
-                            searchFieldRefs.current.after = element;
-                          }}
-                          type="date"
-                          value={searchFilters.after ?? ''}
-                          onChange={(event) => updateSearchFilter('after', event.target.value || undefined)}
-                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-white/15"
-                        />
-                      </SearchField>
-
-                      <SearchField label="On">
-                        <input
-                          ref={(element) => {
-                            searchFieldRefs.current.on = element;
-                          }}
-                          type="date"
-                          value={searchFilters.on ?? ''}
-                          onChange={(event) => {
-                            const value = event.target.value || undefined;
-                            setSearchFilters((current) => ({
-                              ...current,
-                              on: value,
-                              during: value ? undefined : current.during,
-                            }));
-                          }}
-                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-white/15"
-                        />
-                      </SearchField>
-
-                      <SearchField label="During">
-                        <input
-                          ref={(element) => {
-                            searchFieldRefs.current.during = element;
-                          }}
-                          type="date"
-                          value={searchFilters.during ?? ''}
-                          onChange={(event) => {
-                            const value = event.target.value || undefined;
-                            setSearchFilters((current) => ({
-                              ...current,
-                              during: value,
-                              on: value ? undefined : current.on,
-                            }));
-                          }}
-                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-white/15"
-                        />
-                      </SearchField>
-
-                      <SearchField label="Filename">
-                        <input
-                          ref={(element) => {
-                            searchFieldRefs.current.filename = element;
-                          }}
-                          type="text"
-                          value={searchFilters.filename ?? ''}
-                          onChange={(event) => updateSearchFilter('filename', event.target.value || undefined)}
-                          placeholder="clip, export, notes"
-                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none placeholder:text-[#949ba4] transition-colors focus:border-white/15"
-                        />
-                      </SearchField>
-
-                      <SearchField label="Extension">
-                        <input
-                          ref={(element) => {
-                            searchFieldRefs.current.ext = element;
-                          }}
-                          type="text"
-                          value={searchFilters.ext ?? ''}
-                          onChange={(event) => updateSearchFilter('ext', event.target.value || undefined)}
-                          placeholder="png, mp4, pdf"
-                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none placeholder:text-[#949ba4] transition-colors focus:border-white/15"
-                        />
-                      </SearchField>
-
-                      <SearchField label="Limit">
-                        <select
-                          value={searchFilters.limit ?? 25}
-                          onChange={(event) => updateSearchFilter('limit', Number(event.target.value))}
-                          className="w-full rounded-lg border border-white/8 bg-[#17181c] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-white/15"
-                        >
-                          <option value={25}>25 results</option>
-                          <option value={50}>50 results</option>
-                          <option value={100}>100 results</option>
-                        </select>
-                      </SearchField>
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap gap-3">
-                      <label className="inline-flex items-center gap-2 text-sm text-[#dbdee1]">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(searchFilters.pinned)}
-                          onChange={(event) => updateSearchFilter('pinned', event.target.checked || undefined)}
-                          className="h-4 w-4 rounded border-white/20 bg-[#17181c]"
-                        />
-                        Pinned only
-                      </label>
-                      <label className="inline-flex items-center gap-2 text-sm text-[#dbdee1]">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(searchFilters.link)}
-                          onChange={(event) => updateSearchFilter('link', event.target.checked || undefined)}
-                          className="h-4 w-4 rounded border-white/20 bg-[#17181c]"
-                        />
-                        Contains link
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3 rounded-xl border border-white/6 bg-[#17181c] px-3 py-2.5">
-                    <span className="text-xs text-[#949ba4]">Press Enter in the top search bar or run search from here.</span>
-                    <button
-                      type="button"
-                      onClick={resetSearch}
-                      className="rounded-md px-2.5 py-1 text-xs font-semibold text-[#b5bac1] transition-colors hover:bg-[#232428] hover:text-[#f2f3f5]"
-                    >
-                      Reset
-                    </button>
-                  </div>
-
-                  <div>
-                    <PanelSectionLabel>Results</PanelSectionLabel>
-                    {searchLoading ? (
-                      <div className="space-y-2">
-                        {[0, 1, 2].map((item) => (
-                          <div key={item} className="h-24 animate-pulse rounded-xl bg-[#17181c]" />
-                        ))}
-                      </div>
-                    ) : searchError ? (
-                      <EmptyPanelState
-                        title="Search failed"
-                        description={searchError}
-                        icon={<IconSearch className="h-5 w-5" />}
-                      />
-                    ) : searchResults.length > 0 ? (
-                      <div className="space-y-2">
-                        {searchResults.map((message) => (
-                          <MessagePreviewCard
-                            key={message.id}
-                            message={message}
-                            streamName={message.stream_id ? streamMap.get(message.stream_id)?.name : undefined}
-                            onOpen={() => void openStreamMessage(message)}
-                          />
-                        ))}
-                      </div>
-                    ) : searchPerformed ? (
-                      <EmptyPanelState
-                        title="No messages matched"
-                        description="Adjust the filters or broaden the query and try again."
-                        icon={<IconSearch className="h-5 w-5" />}
-                      />
-                    ) : (
-                      <EmptyPanelState
-                        title="Search the hub"
-                        description="Use the text query, channel selector, author filter, file filters, and date filters to search this hub."
-                        icon={<IconSearch className="h-5 w-5" />}
-                      />
-                    )}
-                  </div>
-                </div>
-              </FloatingPanel>
-            ) : null}
-
             {activePanel === 'inbox' ? (
               <FloatingPanel
                 title="Inbox"
@@ -1838,7 +2088,7 @@ export default function ChatPanel({
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
           </button>
         )}
-        <div ref={scrollContainerRef} onScroll={handleScroll} className="h-full overflow-y-auto">
+        <div ref={scrollContainerRef} onScroll={handleScroll} className={`h-full overflow-y-auto ${searchSidebarOpen ? 'pr-[332px]' : ''}`}>
         {isLoading ? (
           <div className="px-4 py-4 space-y-4 animate-fade-in">
             {[...Array(6)].map((_, i) => (
@@ -1960,17 +2210,23 @@ export default function ChatPanel({
       </div>
 
       {/* Typing indicator + Input */}
-      {!showWelcome && activeStreamId && <TypingIndicator streamId={activeStreamId} />}
-      {!showWelcome && (
-        <MessageInput
-          streamName={isDMMode ? (activeConversation?.recipient?.display_name || '') : (activeStream?.name || '')}
-          onTyping={isDMMode ? undefined : onTyping}
-          onTypingStop={isDMMode ? undefined : onTypingStop}
-          isDMMode={isDMMode}
-          onSendDM={isDMMode ? sendDMMessage : undefined}
-          replyScopeKey={activeStreamId || activeConversationId || ''}
-        />
-      )}
+      {!showWelcome && activeStreamId ? (
+        <div className={searchSidebarOpen ? 'mr-[320px]' : undefined}>
+          <TypingIndicator streamId={activeStreamId} />
+        </div>
+      ) : null}
+      {!showWelcome ? (
+        <div className={searchSidebarOpen ? 'mr-[320px]' : undefined}>
+          <MessageInput
+            streamName={isDMMode ? (activeConversation?.recipient?.display_name || '') : (activeStream?.name || '')}
+            onTyping={isDMMode ? undefined : onTyping}
+            onTypingStop={isDMMode ? undefined : onTypingStop}
+            isDMMode={isDMMode}
+            onSendDM={isDMMode ? sendDMMessage : undefined}
+            replyScopeKey={activeStreamId || activeConversationId || ''}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

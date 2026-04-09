@@ -376,6 +376,10 @@ const MessageItem = memo(function MessageItem({
   const replyAuthorLabel = useMemo(() => getReplyAuthorLabel(message.reply_to), [message.reply_to]);
   const replyPreview = useMemo(() => getReplyPreviewMeta(message.reply_to), [message.reply_to]);
   const replyAuthorBg = useMemo(() => avatarBg(replyAuthorLabel), [replyAuthorLabel]);
+  const repliesToSelf = useMemo(() => {
+    if (!currentUserId || !message.reply_to) return false;
+    return message.reply_to.author_id === currentUserId || message.reply_to.author?.id === currentUserId;
+  }, [currentUserId, message.reply_to]);
 
   // Detect whether the current user is mentioned in this message
   const mentionsSelf = useMemo(() => {
@@ -389,52 +393,49 @@ const MessageItem = memo(function MessageItem({
     jumpToMessageId(replyTargetId);
   }, [replyTargetId]);
 
+  const replyPreviewToneClass =
+    replyPreview.tone === 'default'
+      ? 'text-riftapp-text-dim/85 group-hover/reply:text-riftapp-text-dim'
+      : replyPreview.tone === 'attachment'
+        ? 'text-riftapp-text-dim/70 group-hover/reply:text-riftapp-text-dim/85'
+        : 'text-riftapp-text-dim/60 group-hover/reply:text-riftapp-text-dim/75';
+
   const replyPreviewBody = (
     <>
       <span
-        aria-hidden
-        className="mt-[9px] h-[10px] w-6 shrink-0 rounded-tl-[6px] border-l-2 border-t-2 border-riftapp-border/35"
-      />
-      <span
-        className={`mt-px flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full ${
+        className={`flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full ${
           replyAuthor ? replyAuthorBg : 'bg-riftapp-content-elevated text-riftapp-text-dim/75'
         }`}
       >
         {replyAuthor?.avatar_url ? (
           <img src={publicAssetUrl(replyAuthor.avatar_url)} alt={replyAuthorLabel} className="h-full w-full object-cover" />
         ) : (
-          <span className={`text-[9px] font-semibold uppercase leading-none ${replyAuthor ? 'text-white/90' : 'text-riftapp-text-dim/75'}`}>
+          <span className={`text-[8px] font-semibold uppercase leading-none ${replyAuthor ? 'text-white/90' : 'text-riftapp-text-dim/75'}`}>
             {replyAuthor ? replyAuthorLabel.slice(0, 1).toUpperCase() : '?'}
           </span>
         )}
       </span>
-      <span className="max-w-[38%] shrink-0 truncate text-[12px] font-semibold leading-4 text-riftapp-text-dim/90 transition-colors group-hover/reply:text-riftapp-text">
-        {replyAuthorLabel}
-      </span>
-      <span
-        className={`min-w-0 truncate text-[12px] leading-4 transition-colors ${
-          replyPreview.tone === 'default'
-            ? 'text-riftapp-text-dim/75 group-hover/reply:text-riftapp-text-dim'
-            : replyPreview.tone === 'attachment'
-              ? 'text-riftapp-text-dim/65 group-hover/reply:text-riftapp-text-dim/85'
-              : 'text-riftapp-text-dim/55 group-hover/reply:text-riftapp-text-dim/70'
-        }`}
-      >
-        {replyPreview.text}
+      <span className="flex min-w-0 items-center gap-1 text-[12px] leading-4">
+        <span className="rift-reply-mention">
+          @{replyAuthorLabel}
+        </span>
+        <span className={`min-w-0 truncate transition-colors ${replyPreviewToneClass}`}>
+          {replyPreview.text}
+        </span>
       </span>
     </>
   );
 
   const replyPreviewBlock = hasReplyPreview ? (
     interactionsDisabled || !replyTargetId ? (
-      <div className="mb-0.5 flex max-w-[580px] min-w-0 items-center gap-1.5 pr-2 text-left opacity-80">
+      <div className="rift-reply-preview mb-0.5 w-full pr-2 text-left">
         {replyPreviewBody}
       </div>
     ) : (
       <button
         type="button"
         onClick={handleReplyPreviewClick}
-        className="group/reply mb-0.5 flex max-w-[580px] min-w-0 items-center gap-1.5 pr-2 text-left"
+        className="rift-reply-preview group/reply mb-0.5 w-full pr-2 text-left"
       >
         {replyPreviewBody}
       </button>
@@ -631,7 +632,7 @@ const MessageItem = memo(function MessageItem({
       className={isPreview
         ? 'relative rounded-xl'
         : `group relative py-0.5 -mx-4 px-4 transition-colors duration-100 ${
-            mentionsSelf
+            mentionsSelf || repliesToSelf
               ? 'bg-riftapp-mention-highlight-bg border-l-[3px] border-riftapp-mention-highlight-border hover:bg-riftapp-mention-highlight-hover'
               : 'hover:bg-riftapp-content-elevated/60'
           } ${
@@ -687,12 +688,13 @@ const MessageItem = memo(function MessageItem({
       )}
 
       {showHeader ? (
-        <div className="flex gap-3">
+        <div className="rift-message-layout">
+          {replyPreviewBlock ? <div className="col-start-2 row-start-1 min-w-0">{replyPreviewBlock}</div> : null}
           {/* Avatar */}
           <div
             onClick={interactionsDisabled ? undefined : handleProfileClick}
             onContextMenu={interactionsDisabled ? undefined : handleUserContextMenu}
-            className={`w-10 h-10 rounded-full flex-shrink-0 mt-0.5 overflow-hidden ${interactionsDisabled ? '' : 'cursor-pointer hover:opacity-80 transition-opacity'}`}
+            className={`h-10 w-10 self-start overflow-hidden rounded-full ${replyPreviewBlock ? 'row-start-2 mt-0.5' : 'row-start-1 mt-0.5'} ${interactionsDisabled ? '' : 'cursor-pointer transition-opacity hover:opacity-80'}`}
           >
             {author?.avatar_url ? (
               <img src={publicAssetUrl(author.avatar_url)} alt={authorName} className="w-full h-full object-cover" />
@@ -702,25 +704,24 @@ const MessageItem = memo(function MessageItem({
               </div>
             )}
           </div>
-          <div className="flex-1 min-w-0">
-            {replyPreviewBlock}
-            <div className="flex items-baseline gap-2 mb-0.5">
-              <span onClick={interactionsDisabled ? undefined : handleProfileClick} onContextMenu={interactionsDisabled ? undefined : handleUserContextMenu} className={`font-semibold text-[15px] ${interactionsDisabled ? '' : 'cursor-pointer hover:underline'} ${isOwn ? 'text-riftapp-accent-hover' : color}`}>
+          <div className={`col-start-2 min-w-0 ${replyPreviewBlock ? 'row-start-2' : 'row-start-1'} self-start`}>
+            <div className="mb-0.5 flex min-w-0 items-baseline">
+              <span onClick={interactionsDisabled ? undefined : handleProfileClick} onContextMenu={interactionsDisabled ? undefined : handleUserContextMenu} className={`shrink-0 whitespace-nowrap font-semibold text-[15px] ${interactionsDisabled ? '' : 'cursor-pointer hover:underline'} ${isOwn ? 'text-riftapp-accent-hover' : color}`}>
                 {authorName}
               </span>
-              {author?.is_bot && <BotBadge />}
-              <span className="text-[11px] text-riftapp-text-dim/80 select-none">
+              {author?.is_bot && <span className="ml-1.5 shrink-0"><BotBadge /></span>}
+              <span className="ml-1.5 shrink-0 whitespace-nowrap text-[11px] text-riftapp-text-dim/80 select-none">
                 {renderTimestamp(message.created_at)}
               </span>
               {message.edited_at && (
-                <span className="text-[10px] text-riftapp-text-dim/60 select-none" title={`Edited ${renderTimestamp(message.edited_at)}`}>(edited)</span>
+                <span className="ml-1 shrink-0 whitespace-nowrap text-[10px] text-riftapp-text-dim/60 select-none" title={`Edited ${renderTimestamp(message.edited_at)}`}>(edited)</span>
               )}
             </div>
             {contentBlock}
           </div>
         </div>
       ) : (
-        <div className="pl-[52px]">
+        <div className="rift-message-followup">
           {replyPreviewBlock}
           {contentBlock}
         </div>

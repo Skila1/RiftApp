@@ -138,31 +138,46 @@ describe('activeSpeakerStore', () => {
   it('holds the last active speaker briefly when the room goes quiet', () => {
     useActiveSpeakerStore.getState().syncFromParticipants([
       participant({
-        identity: 'avatar-user',
+        identity: 'camera-user',
         isSpeaking: true,
+        isCameraOn: true,
+        videoTrack: { id: 'camera-track' } as never,
       }),
     ]);
 
     expect(useActiveSpeakerStore.getState().activeSpeaker).toMatchObject({
-      userId: 'avatar-user',
-      trackType: null,
+      userId: 'camera-user',
+      trackType: 'camera',
       isSpeaking: true,
     });
 
     useActiveSpeakerStore.getState().syncFromParticipants([
       participant({
-        identity: 'avatar-user',
+        identity: 'camera-user',
         isSpeaking: false,
+        isCameraOn: true,
+        videoTrack: { id: 'camera-track' } as never,
       }),
     ]);
 
     expect(useActiveSpeakerStore.getState().activeSpeaker).toMatchObject({
-      userId: 'avatar-user',
-      trackType: null,
+      userId: 'camera-user',
+      trackType: 'camera',
       isSpeaking: false,
     });
 
     vi.advanceTimersByTime(ACTIVE_SPEAKER_HOLD_MS + 20);
+    expect(useActiveSpeakerStore.getState().activeSpeaker).toBeNull();
+  });
+
+  it('ignores audio-only speakers for the floating media overlay', () => {
+    useActiveSpeakerStore.getState().syncFromParticipants([
+      participant({
+        identity: 'audio-user',
+        isSpeaking: true,
+      }),
+    ]);
+
     expect(useActiveSpeakerStore.getState().activeSpeaker).toBeNull();
   });
 });

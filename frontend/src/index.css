@@ -246,6 +246,63 @@
     @apply px-0.5 text-[11px] font-bold uppercase tracking-[0.02em] text-riftapp-text-dim
       hover:text-riftapp-text-muted cursor-default select-none flex items-center gap-1 mb-1;
   }
+
+  .rift-message-layout {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    column-gap: 12px;
+  }
+
+  .rift-message-followup {
+    padding-left: 52px;
+  }
+
+  .rift-reply-preview {
+    position: relative;
+    display: flex;
+    min-width: 0;
+    min-height: 16px;
+    align-items: center;
+    gap: 4px;
+    overflow: visible;
+  }
+
+  .rift-reply-preview::before {
+    content: '';
+    position: absolute;
+    left: -32px;
+    top: 7px;
+    width: 33px;
+    height: 20px;
+    border-left: 2px solid #4e5058;
+    border-top: 2px solid #4e5058;
+    border-top-left-radius: 6px;
+    pointer-events: none;
+  }
+
+  .rift-reply-mention {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    border-radius: 3px;
+    background: rgb(62 65 109 / 0.24);
+    padding: 0 4px;
+    font-weight: 500;
+    color: #dee0fc;
+    white-space: nowrap;
+  }
+
+  .rift-context-menu-shell {
+    @apply select-none overflow-hidden rounded-lg border border-riftapp-border/60 bg-riftapp-menu py-1.5 shadow-modal;
+  }
+
+  .rift-context-submenu-shell {
+    @apply overflow-hidden rounded-lg border border-riftapp-border/60 bg-riftapp-menu py-1.5 shadow-modal;
+  }
+
+  .rift-context-menu-divider {
+    @apply mx-2 my-1 border-t border-riftapp-border/40;
+  }
 }
 
 @keyframes rift-message-jump-flash {

@@ -143,7 +143,7 @@ export default function ChannelContextMenu({
   return (
     <>
       <MenuOverlay x={x} y={y} onClose={onClose}>
-        <div className="bg-[#111214] rounded-md border border-black/40 shadow-modal py-1.5 min-w-[220px] max-h-[min(90vh,520px)] overflow-y-auto text-[13px] text-[#dbdee1] select-none">
+        <div className="rift-context-menu-shell min-w-[220px] max-h-[min(90vh,520px)] overflow-y-auto text-[13px] text-[#dbdee1]">
         <button
           type="button"
           disabled={markReadDisabled}
@@ -238,7 +238,7 @@ export default function ChannelContextMenu({
           </div>
           {muteSubOpen && streamNotifSettings && (
             <div className="absolute left-full top-0 pl-1 z-10" onMouseEnter={() => setMuteSubOpen(true)} onMouseLeave={() => setMuteSubOpen(false)}>
-              <div className="bg-[#111214] rounded-md border border-black/40 shadow-modal py-1.5 min-w-[200px]">
+              <div className="rift-context-submenu-shell min-w-[200px]">
                 {(['For 15 Minutes', 'For 1 Hour', 'For 8 Hours', 'Until I Turn It Back On'] as const).map((label) => (
                   <button
                     key={label}
@@ -279,7 +279,7 @@ export default function ChannelContextMenu({
           </div>
           {notifSubOpen && streamNotifSettings && (
             <div className="absolute left-full top-0 pl-1 z-10" onMouseEnter={() => setNotifSubOpen(true)} onMouseLeave={() => setNotifSubOpen(false)}>
-              <div className="bg-[#111214] rounded-md border border-black/40 shadow-modal py-1.5 min-w-[260px] max-h-[min(70vh,420px)] overflow-y-auto">
+              <div className="rift-context-submenu-shell min-w-[260px] max-h-[min(70vh,420px)] overflow-y-auto">
                 {(['all', 'mentions_only', 'nothing'] as const).map((level) => (
                   <button
                     key={level}

@@ -283,7 +283,7 @@ export default function HubSidebar() {
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="min-w-[220px] select-none rounded-md border border-riftapp-border/60 bg-riftapp-bg py-1.5 text-[13px] text-riftapp-text shadow-modal">
+            <div className="rift-context-menu-shell min-w-[220px] text-[13px] text-riftapp-text">
               <button
                 type="button"
                 onClick={async () => {
@@ -372,7 +372,7 @@ export default function HubSidebar() {
                     className="absolute left-full top-0 pl-1 z-10"
                     onMouseEnter={() => setNotifSubmenuOpen(true)}
                   >
-                    <div className="min-w-[260px] rounded-md border border-riftapp-border/60 bg-riftapp-bg py-1.5 shadow-modal">
+                    <div className="rift-context-submenu-shell min-w-[260px]">
                       {(['all', 'mentions_only', 'nothing'] as const).map((level) => (
                         <button
                           key={level}

@@ -10,6 +10,7 @@ export type ChatSearchFocusFilter = keyof Pick<
 export type ChatSearchRequestDetail = {
   query?: string;
   run?: boolean;
+  clearFiltersOnRun?: boolean;
   focusFilter?: ChatSearchFocusFilter;
 };
 

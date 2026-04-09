@@ -178,7 +178,7 @@ export default function UserContextMenu() {
         pointerEvents: visible ? 'auto' : 'none',
       }}
     >
-      <div className="bg-riftapp-panel rounded-lg border border-riftapp-border/50 shadow-modal py-1.5 overflow-hidden">
+      <div className="rift-context-menu-shell">
         <MenuItem icon={<ProfileIcon />} label="Profile" onClick={handleProfile} />
 
         {!isSelf && (
@@ -271,7 +271,7 @@ function MenuItem({ icon, label, onClick, danger }: { icon: React.ReactNode; lab
 }
 
 function Separator() {
-  return <div className="mx-2 my-1 border-t border-riftapp-border/40" />;
+  return <div className="rift-context-menu-divider" />;
 }
 
 function ProfileIcon() {

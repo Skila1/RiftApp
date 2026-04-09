@@ -27,6 +27,7 @@ import { useVoiceChannelUiStore } from '../../stores/voiceChannelUiStore';
 export default function AppLayout() {
   useWebSocket();
   const [showMemberList, setShowMemberList] = useState(true);
+  const [searchSidebarOpen, setSearchSidebarOpen] = useState(false);
   const loadHubs = useHubStore((s) => s.loadHubs);
   const loadNotifications = useNotificationStore((s) => s.loadNotifications);
   const activeConversationId = useDMStore((s) => s.activeConversationId);
@@ -119,9 +120,10 @@ export default function AppLayout() {
         <ChatPanel
           showMemberList={showMemberList}
           onToggleMemberList={() => setShowMemberList((current) => !current)}
+          onSearchPanelVisibilityChange={setSearchSidebarOpen}
         />
       )}
-      {activeHubId && !activeConversationId && !voiceUiOpen && showMemberList && <MemberList />}
+      {activeHubId && !activeConversationId && !voiceUiOpen && showMemberList && !searchSidebarOpen && <MemberList />}
       <MiniProfilePopover />
       <FullProfileModal />
       <SelfProfilePopover />
