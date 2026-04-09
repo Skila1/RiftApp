@@ -267,8 +267,17 @@ func (h *DeveloperHandler) UpdateBotSettings(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
+	var avatarPtr *string
+	if v, ok := body["avatar_url"].(string); ok {
+		avatarPtr = &v
+	}
 	if v, ok := body["username"].(string); ok && app.BotUserID != nil {
-		_ = h.svc.UpdateBotUser(r.Context(), *app.BotUserID, v, v, nil)
+		_ = h.svc.UpdateBotUser(r.Context(), *app.BotUserID, v, v, avatarPtr)
+	} else if avatarPtr != nil && app.BotUserID != nil {
+		botUser, _ := h.svc.GetBotUser(r.Context(), appID)
+		if botUser != nil {
+			_ = h.svc.UpdateBotUser(r.Context(), *app.BotUserID, botUser.Username, botUser.DisplayName, avatarPtr)
+		}
 	}
 	if v, ok := body["bot_public"].(bool); ok {
 		app.BotPublic = v

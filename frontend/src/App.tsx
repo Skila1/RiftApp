@@ -27,6 +27,7 @@ const WebhooksPage = lazy(() => import('./components/developers/WebhooksPage'));
 const RichPresencePage = lazy(() => import('./components/developers/RichPresencePage'));
 const AppTestersPage = lazy(() => import('./components/developers/AppTestersPage'));
 const AppVerificationPage = lazy(() => import('./components/developers/AppVerificationPage'));
+const BotAuthorizePage = lazy(() => import('./components/developers/BotAuthorizePage'));
 
 type SettingsModalModule = typeof import('./components/settings/SettingsModal');
 type SettingsModalComponent = ComponentType;
@@ -215,6 +216,9 @@ export default function App() {
 
               {/* Invite (top-level for clean share URLs) */}
               <Route path="/invite/:code" element={<RequireAuth><InviteJoinPage /></RequireAuth>} />
+
+              {/* Bot authorization / invite page */}
+              <Route path="/oauth2/authorize" element={<RequireAuth><BotAuthorizePage /></RequireAuth>} />
 
               {/* Developer Portal */}
               <Route path="/developers" element={<RequireAuth><DevPortalLayout /></RequireAuth>}>

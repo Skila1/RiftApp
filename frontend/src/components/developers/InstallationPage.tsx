@@ -1,11 +1,19 @@
+import { useState } from 'react';
 import { useDeveloperStore } from '../../stores/developerStore';
 
 export default function InstallationPage() {
   const { currentApp } = useDeveloperStore();
+  const [copied, setCopied] = useState(false);
 
   const installUrl = currentApp
     ? `${window.location.origin}/oauth2/authorize?client_id=${currentApp.id}&scope=bot&permissions=0`
     : '';
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(installUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1000);
+  };
 
   return (
     <div className="max-w-3xl mx-auto px-6 py-8">
@@ -21,10 +29,10 @@ export default function InstallationPage() {
             {installUrl}
           </div>
           <button
-            onClick={() => navigator.clipboard.writeText(installUrl)}
+            onClick={handleCopy}
             className="mt-2 px-4 py-1.5 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 rounded text-sm transition-colors"
           >
-            Copy Link
+            {copied ? 'Copied' : 'Copy Link'}
           </button>
         </div>
 

@@ -13,6 +13,7 @@ export default function OAuth2Page() {
   const [newRedirect, setNewRedirect] = useState('');
   const [selectedScopes, setSelectedScopes] = useState<string[]>(['bot']);
   const [permissions, setPermissions] = useState('0');
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (appId) {
@@ -113,7 +114,7 @@ export default function OAuth2Page() {
           <div>
             <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Generated URL</label>
             <div className="bg-black/20 border border-white/5 rounded px-3 py-2 text-sm text-indigo-400 font-mono break-all select-all">{generatedUrl()}</div>
-            <button onClick={() => navigator.clipboard.writeText(generatedUrl())} className="mt-2 px-4 py-1.5 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 rounded text-sm transition-colors">Copy</button>
+            <button onClick={() => { navigator.clipboard.writeText(generatedUrl()); setCopied(true); setTimeout(() => setCopied(false), 1000); }} className="mt-2 px-4 py-1.5 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 rounded text-sm transition-colors">{copied ? 'Copied' : 'Copy'}</button>
           </div>
         </div>
       </div>

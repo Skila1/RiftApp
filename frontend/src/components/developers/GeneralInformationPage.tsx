@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDeveloperStore } from '../../stores/developerStore';
+import { api } from '../../api/client';
 
 export default function GeneralInformationPage() {
   const { appId } = useParams();
@@ -18,6 +19,9 @@ export default function GeneralInformationPage() {
   const [saving, setSaving] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [iconPreview, setIconPreview] = useState<string | null>(null);
+  const [iconFile, setIconFile] = useState<File | null>(null);
+  const iconInputRef = useRef<HTMLInputElement>(null);
 
   const loadFields = useCallback(() => {
     if (!currentApp) return;
@@ -28,6 +32,8 @@ export default function GeneralInformationPage() {
     setPrivacyUrl(currentApp.privacy_policy_url || '');
     setInteractionsUrl(currentApp.interactions_endpoint_url || '');
     setCustomInstallUrl(currentApp.custom_install_url || '');
+    setIconPreview(currentApp.icon || null);
+    setIconFile(null);
     setDirty(false);
   }, [currentApp]);
 
@@ -41,10 +47,32 @@ export default function GeneralInformationPage() {
 
   const markDirty = () => setDirty(true);
 
+  const handleIconSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIconFile(file);
+    setIconPreview(URL.createObjectURL(file));
+    markDirty();
+  };
+
+  const handleRemoveIcon = () => {
+    setIconFile(null);
+    setIconPreview(null);
+    markDirty();
+  };
+
   const handleSave = async () => {
     if (!appId) return;
     setSaving(true);
     try {
+      let iconUrl: string | null | undefined = undefined;
+      if (iconFile) {
+        const att = await api.uploadFile(iconFile);
+        iconUrl = att.url;
+      } else if (!iconPreview && currentApp?.icon) {
+        iconUrl = null;
+      }
+
       await updateApplication(appId, {
         name,
         description,
@@ -53,7 +81,9 @@ export default function GeneralInformationPage() {
         privacy_policy_url: privacyUrl || null,
         interactions_endpoint_url: interactionsUrl || null,
         custom_install_url: customInstallUrl || null,
+        ...(iconUrl !== undefined ? { icon: iconUrl } : {}),
       });
+      setIconFile(null);
       setDirty(false);
     } finally {
       setSaving(false);
@@ -94,11 +124,28 @@ export default function GeneralInformationPage() {
 
       <div className="space-y-6">
         <div className="flex items-start gap-6">
-          <div className="w-20 h-20 rounded-xl bg-indigo-600/20 flex items-center justify-center text-3xl font-bold text-indigo-400 flex-shrink-0">
-            {currentApp.icon ? (
-              <img src={currentApp.icon} alt="" className="w-full h-full rounded-xl object-cover" />
-            ) : (
-              currentApp.name.charAt(0).toUpperCase()
+          <div className="relative group flex-shrink-0">
+            <div
+              className="w-20 h-20 rounded-xl bg-indigo-600/20 flex items-center justify-center text-3xl font-bold text-indigo-400 cursor-pointer overflow-hidden"
+              onClick={() => iconInputRef.current?.click()}
+            >
+              {iconPreview ? (
+                <img src={iconPreview} alt="" className="w-full h-full rounded-xl object-cover" />
+              ) : (
+                currentApp.name.charAt(0).toUpperCase()
+              )}
+              <div className="absolute inset-0 bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <span className="text-white text-xs font-medium">Change</span>
+              </div>
+            </div>
+            <input ref={iconInputRef} type="file" accept="image/*" onChange={handleIconSelect} className="hidden" />
+            {iconPreview && (
+              <button
+                onClick={handleRemoveIcon}
+                className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-600 rounded-full text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+              >
+                &times;
+              </button>
             )}
           </div>
           <div className="flex-1">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { useDeveloperStore } from '../../stores/developerStore';
@@ -14,6 +14,10 @@ export default function BotPage() {
   const [token, setToken] = useState<string | null>(null);
   const [showToken, setShowToken] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [tokenCopied, setTokenCopied] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const PRESENCE_INTENT = 1 << 8;
   const MEMBERS_INTENT = 1 << 9;
@@ -26,8 +30,16 @@ export default function BotPage() {
       setBotPublic(res.bot_public);
       setRequireCodeGrant(res.bot_require_code_grant);
       setFlags(res.flags);
+      setAvatarPreview(res.bot.avatar_url || null);
     });
   }, [appId]);
+
+  const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+  };
 
   const handleReset = async () => {
     if (!appId) return;
@@ -37,16 +49,31 @@ export default function BotPage() {
     setShowToken(true);
   };
 
+  const handleCopyToken = () => {
+    if (!token) return;
+    navigator.clipboard.writeText(token);
+    setTokenCopied(true);
+    setTimeout(() => setTokenCopied(false), 1000);
+  };
+
   const handleSave = async () => {
     if (!appId) return;
     setSaving(true);
     try {
+      let avatarUrl: string | undefined;
+      if (avatarFile) {
+        const att = await api.uploadFile(avatarFile);
+        avatarUrl = att.url;
+      }
+
       await api.updateBotSettings(appId, {
         bot_public: botPublic,
         bot_require_code_grant: requireCodeGrant,
         flags,
+        ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
       });
       await updateApplication(appId, { bot_public: botPublic, bot_require_code_grant: requireCodeGrant, flags });
+      setAvatarFile(null);
     } finally {
       setSaving(false);
     }
@@ -62,8 +89,17 @@ export default function BotPage() {
 
       {bot && (
         <div className="bg-[#12122a] border border-white/5 rounded-lg p-4 mb-6 flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-indigo-600/20 flex items-center justify-center text-2xl font-bold text-indigo-400">
-            {bot.avatar_url ? <img src={bot.avatar_url} alt="" className="w-full h-full rounded-full object-cover" /> : bot.display_name?.charAt(0).toUpperCase()}
+          <div className="relative group">
+            <div
+              className="w-16 h-16 rounded-full bg-indigo-600/20 flex items-center justify-center text-2xl font-bold text-indigo-400 cursor-pointer overflow-hidden"
+              onClick={() => avatarInputRef.current?.click()}
+            >
+              {avatarPreview ? <img src={avatarPreview} alt="" className="w-full h-full rounded-full object-cover" /> : bot.display_name?.charAt(0).toUpperCase()}
+              <div className="absolute inset-0 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <span className="text-white text-[10px] font-medium">Change</span>
+              </div>
+            </div>
+            <input ref={avatarInputRef} type="file" accept="image/*" onChange={handleAvatarSelect} className="hidden" />
           </div>
           <div>
             <h3 className="font-semibold text-white">{bot.display_name || bot.username}</h3>
@@ -79,7 +115,7 @@ export default function BotPage() {
             <div className="flex-1 bg-black/30 border border-white/10 rounded px-3 py-2 text-sm font-mono text-gray-400">
               {showToken && token ? token : '••••••••••••••••••••••••'}
             </div>
-            <button onClick={() => token && navigator.clipboard.writeText(token)} className="px-3 py-2 bg-[#2d2d5e] hover:bg-[#3d3d6e] text-gray-200 rounded text-sm transition-colors">Copy</button>
+            <button onClick={handleCopyToken} className="px-3 py-2 bg-[#2d2d5e] hover:bg-[#3d3d6e] text-gray-200 rounded text-sm transition-colors">{tokenCopied ? 'Copied' : 'Copy'}</button>
             <button onClick={handleReset} className="px-3 py-2 bg-red-600/20 text-red-400 hover:bg-red-600/30 rounded text-sm transition-colors">Reset</button>
           </div>
           {showToken && token && (
