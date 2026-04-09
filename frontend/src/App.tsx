@@ -37,6 +37,8 @@ const AppTestersPage = protectedLazy(() => import('./components/developers/AppTe
 const AppVerificationPage = protectedLazy(() => import('./components/developers/AppVerificationPage'));
 const BotAuthorizePage = protectedLazy(() => import('./components/developers/BotAuthorizePage'));
 const ModerationDashboard = protectedLazy(() => import('./components/admin/ModerationDashboard'));
+const AdminLogin = protectedLazy(() => import('./components/admin/AdminLogin'));
+const AdminPanel = protectedLazy(() => import('./components/admin/AdminPanel'));
 
 type SettingsModalModule = typeof import('./components/settings/SettingsModal');
 type SettingsModalComponent = ComponentType;
@@ -183,8 +185,12 @@ function AppRoutes() {
         {/* Bot authorization / invite page */}
         <Route path="/oauth2/authorize" element={<RequireAuth><BotAuthorizePage /></RequireAuth>} />
 
-        {/* Admin moderation dashboard */}
+        {/* Admin moderation dashboard (legacy) */}
         <Route path="/admin/moderation" element={<RequireAuth><ModerationDashboard /></RequireAuth>} />
+
+        {/* Super Admin Panel */}
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin" element={<AdminPanel />} />
 
         {/* Developer Portal */}
         <Route path="/developers" element={<RequireAuth><DevPortalLayout /></RequireAuth>}>
