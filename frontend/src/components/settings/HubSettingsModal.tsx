@@ -4,13 +4,16 @@ import { formatDistanceToNow } from 'date-fns';
 import { useHubStore } from '../../stores/hubStore';
 import { useDMStore } from '../../stores/dmStore';
 import { useAuthStore } from '../../stores/auth';
+import { useFriendStore } from '../../stores/friendStore';
+import { useProfilePopoverStore } from '../../stores/profilePopoverStore';
 import { api } from '../../api/client';
 import ConfirmModal from '../modals/ConfirmModal';
+import { MenuOverlay, menuDivider } from '../context-menus/MenuOverlay';
 import ModalOverlay from '../shared/ModalOverlay';
 import StatusDot from '../shared/StatusDot';
-import type { Hub, User, HubEmoji, HubSticker, HubSound, HubRole, HubInvite } from '../../types';
+import type { Hub, User, HubEmoji, HubSticker, HubSound, HubRole, HubInvite, RelationshipType } from '../../types';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
-import { normalizeUsers } from '../../utils/entityAssets';
+import { normalizeUser, normalizeUsers } from '../../utils/entityAssets';
 import {
   hasPermission,
   PermViewStreams,
@@ -202,16 +205,7 @@ function HubSettingsModal({ hub, onClose }: { hub: Hub; onClose: () => void }) {
       >
         <nav className="w-[min(240px,32vw)] min-w-[200px] bg-[#2b2d31] flex flex-col flex-shrink-0 overflow-y-auto border-r border-black/20">
           <div className="px-3 pt-4 pb-3">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-[#949ba4] px-2 mb-2 truncate">{hub.name}</p>
-            <div className="flex items-center gap-2 px-2">
-              {hub.icon_url ? (
-                <img src={publicAssetUrl(hub.icon_url)} alt="" className="w-8 h-8 rounded-xl object-cover flex-shrink-0" />
-              ) : (
-                <div className="w-8 h-8 rounded-xl bg-[#5865f2] flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
-                  {hub.name.slice(0, 2).toUpperCase()}
-                </div>
-              )}
-            </div>
+            <p className="px-2 text-[15px] font-semibold text-white truncate">{hub.name}</p>
           </div>
           <div className="flex-1 px-2 pb-2 space-y-3">
             {NAV_SECTIONS.map((section, si) => (
@@ -687,13 +681,30 @@ const MEMBER_TABLE_DATE_FORMAT: Intl.DateTimeFormatOptions = {
   day: 'numeric',
 };
 
-function formatMemberTableDate(value: string | null | undefined): string {
-  if (!value) return 'Unknown';
+type MemberOverlayState = {
+  memberId: string;
+  x: number;
+  y: number;
+};
+
+const MIN_VALID_MEMBER_YEAR = 1900;
+
+function isUsableMemberDate(value: string | null | undefined): boolean {
+  if (!value) return false;
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime()) || parsed.getUTCFullYear() < 1900) {
-    return 'Unknown';
+  return !Number.isNaN(parsed.getTime()) && parsed.getUTCFullYear() >= MIN_VALID_MEMBER_YEAR;
+}
+
+function formatMemberTableDate(value: string | null | undefined): string {
+  if (!isUsableMemberDate(value)) return 'Unknown';
+  return new Date(value as string).toLocaleDateString(undefined, MEMBER_TABLE_DATE_FORMAT);
+}
+
+function formatMemberSinceDate(member: Pick<User, 'joined_at' | 'created_at'>): string {
+  if (isUsableMemberDate(member.joined_at)) {
+    return formatMemberTableDate(member.joined_at);
   }
-  return parsed.toLocaleDateString(undefined, MEMBER_TABLE_DATE_FORMAT);
+  return formatMemberTableDate(member.created_at);
 }
 
 function DarkCheckboxMark({ checked, disabled = false }: { checked: boolean; disabled?: boolean }) {
@@ -742,120 +753,166 @@ function DarkCheckbox({
   );
 }
 
-function MemberRoleEditorModal({
-  hub,
+function MemberActionRow({
+  label,
+  onClick,
+  disabled = false,
+  danger = false,
+  trailing,
+}: {
+  label: string;
+  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  disabled?: boolean;
+  danger?: boolean;
+  trailing?: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex w-full items-center justify-between gap-3 rounded-[6px] px-3 py-2 text-left text-[14px] font-medium transition-colors ${
+        disabled
+          ? danger
+            ? 'cursor-not-allowed text-[#9c6469]'
+            : 'cursor-not-allowed text-[#6f737c]'
+          : danger
+            ? 'text-[#f28b82] hover:bg-[#3a2d31]'
+            : 'text-[#f2f3f5] hover:bg-[#35373c]'
+      }`}
+    >
+      <span className="truncate">{label}</span>
+      {trailing}
+    </button>
+  );
+}
+
+function MemberOverflowMenu({
+  member,
+  relationship,
+  x,
+  y,
+  canManageRanks,
+  onClose,
+  onOpenProfile,
+  onMessage,
+  onToggleBlock,
+  onOpenRolePicker,
+}: {
+  member: User | null;
+  relationship: RelationshipType;
+  x: number;
+  y: number;
+  canManageRanks: boolean;
+  onClose: () => void;
+  onOpenProfile: (member: User) => void;
+  onMessage: (member: User) => void;
+  onToggleBlock: (member: User) => void;
+  onOpenRolePicker: (member: User, rect: DOMRect) => void;
+}) {
+  if (!member) return null;
+
+  return (
+    <MenuOverlay x={x} y={y} onClose={onClose} zIndex={360}>
+      <div className="min-w-[188px] rounded-[8px] border border-[#1f2124] bg-[#2b2d31] p-1 shadow-[0_16px_40px_rgba(0,0,0,0.45)]" onContextMenu={(event) => event.preventDefault()}>
+        <div className="px-1">
+          <MemberActionRow label="Profile" onClick={() => onOpenProfile(member)} />
+          <MemberActionRow label="Message" onClick={() => onMessage(member)} />
+        </div>
+
+        {menuDivider()}
+
+        <div className="px-1">
+          <MemberActionRow label="Change Nickname" disabled />
+          <MemberActionRow label="Ignore" disabled />
+          <MemberActionRow label={relationship === 'blocked' ? 'Unblock' : 'Block'} danger={relationship !== 'blocked'} onClick={() => onToggleBlock(member)} />
+        </div>
+
+        {menuDivider()}
+
+        <div className="px-1">
+          <MemberActionRow
+            label="Role"
+            disabled={!canManageRanks}
+            trailing={
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 opacity-80">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            }
+            onClick={(event) => onOpenRolePicker(member, event.currentTarget.getBoundingClientRect())}
+          />
+          <MemberActionRow label="Open in Mod View" disabled />
+        </div>
+
+        {menuDivider()}
+
+        <div className="px-1">
+          <MemberActionRow label={`Timeout ${member.username}`} danger disabled />
+          <MemberActionRow label={`Kick ${member.username}`} danger disabled />
+          <MemberActionRow label={`Ban ${member.username}`} danger disabled />
+        </div>
+
+        {menuDivider()}
+
+        <div className="px-1">
+          <MemberActionRow
+            label="Copy User ID"
+            onClick={() => {
+              void navigator.clipboard.writeText(member.id);
+              onClose();
+            }}
+            trailing={<span className="rounded-[4px] bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#c9ccd3]">ID</span>}
+          />
+        </div>
+      </div>
+    </MenuOverlay>
+  );
+}
+
+function MemberRolePickerMenu({
   member,
   roles,
   busy,
+  x,
+  y,
   onClose,
   onToggleRole,
 }: {
-  hub: Hub;
   member: User | null;
   roles: HubRole[];
   busy: boolean;
+  x: number;
+  y: number;
   onClose: () => void;
   onToggleRole: (member: User, nextRoleId: string) => void;
 }) {
+  if (!member) return null;
+
   return (
-    <ModalOverlay isOpen={member !== null} onClose={onClose} zIndex={350} className="p-4" contentClassName="w-full max-w-[420px]">
-      <div className="rounded-2xl border border-[#16171a] bg-[#202227] shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
-        <div className="flex items-start justify-between gap-4 border-b border-white/5 px-5 py-4">
-          <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8f96a3]">Member Roles</p>
-            <h2 className="mt-1 text-[18px] font-semibold text-white">{member?.display_name ?? 'Member'}</h2>
-            <p className="mt-1 text-[12px] leading-relaxed text-[#aeb4bf]">
-              Toggle this member&apos;s custom role. Owner and admin access remain unchanged.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full p-2 text-[#8f96a3] transition-colors hover:bg-white/5 hover:text-white"
-            aria-label="Close role editor"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 6L6 18" />
-              <path d="M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {member && (
-          <div className="px-5 py-4">
-            <div className="mb-4 flex items-center gap-3 rounded-2xl border border-white/5 bg-[#17181c] px-3 py-3">
-              {member.avatar_url ? (
-                <img src={publicAssetUrl(member.avatar_url)} alt="" className="h-11 w-11 rounded-full object-cover" />
-              ) : (
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#5865f2] text-[12px] font-bold text-white">
-                  {member.display_name.slice(0, 2).toUpperCase()}
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[14px] font-medium text-white">{member.display_name}</p>
-                <p className="truncate text-[12px] text-[#8f96a3]">@{member.username}</p>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              {roles.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-white/10 bg-[#17181c] px-4 py-5 text-[13px] text-[#8f96a3]">
-                  No custom roles are available in this server yet.
-                </div>
-              ) : (
-                roles.map((role) => {
-                  const checked = member.rank_id === role.id;
-                  return (
-                    <button
-                      key={role.id}
-                      type="button"
-                      disabled={busy}
-                      onClick={() => onToggleRole(member, checked ? '' : role.id)}
-                      className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-colors ${
-                        checked
-                          ? 'border-[#7d84f7]/50 bg-[#7d84f7]/12'
-                          : 'border-white/5 bg-[#17181c] hover:border-white/10 hover:bg-[#1c1e23]'
-                      } disabled:cursor-not-allowed disabled:opacity-60`}
-                    >
-                      <DarkCheckboxMark checked={checked} disabled={busy} />
-                      <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: role.color }} />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13px] font-medium text-white">{role.name}</span>
-                        <span className="block text-[11px] text-[#8f96a3]">
-                          {checked ? 'Click to remove this custom role.' : 'Click to assign this custom role.'}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-
-            <div className="mt-4 flex items-center justify-between gap-3 border-t border-white/5 pt-4">
-              <div className="flex flex-wrap gap-1.5">
-                {member.id === hub.owner_id && (
-                  <span className="rounded-full bg-[#5865f2]/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#d5d8ff]">
-                    Owner
-                  </span>
-                )}
-                {member.role === 'admin' && member.id !== hub.owner_id && (
-                  <span className="rounded-full bg-[#57f287]/16 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#8bf7ad]">
-                    Admin
-                  </span>
-                )}
-              </div>
+    <MenuOverlay x={x} y={y} onClose={onClose} zIndex={360}>
+      <div className="min-w-[168px] rounded-[8px] border border-[#1f2124] bg-[#2b2d31] p-1 shadow-[0_16px_40px_rgba(0,0,0,0.45)]" onContextMenu={(event) => event.preventDefault()}>
+        {roles.length === 0 ? (
+          <div className="px-3 py-2 text-[12px] text-[#8f96a3]">No custom roles available.</div>
+        ) : (
+          roles.map((role) => {
+            const checked = member.rank_id === role.id;
+            return (
               <button
+                key={role.id}
                 type="button"
-                onClick={onClose}
-                className="rounded-xl bg-[#2b2e34] px-3 py-2 text-[12px] font-medium text-[#d7dbe3] transition-colors hover:bg-[#33363d] hover:text-white"
+                disabled={busy}
+                onClick={() => onToggleRole(member, checked ? '' : role.id)}
+                className={`flex w-full items-center gap-3 rounded-[6px] px-2.5 py-2 text-left transition-colors ${checked ? 'bg-[#35373c]' : 'hover:bg-[#35373c]'} disabled:cursor-not-allowed disabled:opacity-60`}
               >
-                Close
+                <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: role.color }} />
+                <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-[#f2f3f5]">{role.name}</span>
+                <DarkCheckboxMark checked={checked} disabled={busy} />
               </button>
-            </div>
-          </div>
+            );
+          })
         )}
       </div>
-    </ModalOverlay>
+    </MenuOverlay>
   );
 }
 
@@ -870,13 +927,46 @@ function MembersDiscordTab({ hub }: { hub: Hub }) {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [assigningUserId, setAssigningUserId] = useState<string | null>(null);
-  const [roleEditorUserId, setRoleEditorUserId] = useState<string | null>(null);
+  const [relationships, setRelationships] = useState<Record<string, RelationshipType>>({});
+  const [rolePickerMenu, setRolePickerMenu] = useState<MemberOverlayState | null>(null);
+  const [memberMenu, setMemberMenu] = useState<MemberOverlayState | null>(null);
   const pageSize = 10;
   const setActiveConversation = useDMStore((s) => s.setActiveConversation);
   const loadConversations = useDMStore((s) => s.loadConversations);
   const currentUser = useAuthStore((s) => s.user);
+  const openProfileModal = useProfilePopoverStore((s) => s.openModal);
   const hubPermissions = useHubStore((s) => s.hubPermissions[hub.id]);
   const canManageRanks = hasPermission(hubPermissions, PermManageRanks);
+
+  const hydrateMembers = useCallback(async (memberData: User[]) => {
+    const normalizedMembers = normalizeUsers(memberData);
+    const missingCreatedAt = normalizedMembers.filter((member) => !isUsableMemberDate(member.created_at));
+
+    if (missingCreatedAt.length === 0) {
+      return normalizedMembers;
+    }
+
+    const resolvedUsers = await Promise.all(
+      missingCreatedAt.map(async (member) => {
+        try {
+          return normalizeUser(await api.getUser(member.id));
+        } catch {
+          return null;
+        }
+      }),
+    );
+
+    const canonicalById = new Map(
+      resolvedUsers.filter((user): user is User => user !== null).map((user) => [user.id, user]),
+    );
+
+    return normalizedMembers.map((member) => {
+      const canonical = canonicalById.get(member.id);
+      return canonical
+        ? { ...member, ...canonical, role: member.role, rank_id: member.rank_id, joined_at: member.joined_at }
+        : member;
+    });
+  }, []);
 
   const sortedRoles = useMemo(
     () => [...roles].sort((a, b) => b.position - a.position || a.name.localeCompare(b.name)),
@@ -888,8 +978,9 @@ function MembersDiscordTab({ hub }: { hub: Hub }) {
     setLoading(true);
     setError(null);
     Promise.all([api.getHubMembers(hub.id), api.getRoles(hub.id)])
-      .then(([memberData, roleData]) => {
-        if (!cancelled) setMembers(normalizeUsers(memberData));
+      .then(async ([memberData, roleData]) => {
+        const hydratedMembers = await hydrateMembers(memberData);
+        if (!cancelled) setMembers(hydratedMembers);
         if (!cancelled) setRoles(roleData);
       })
       .catch((err) => {
@@ -899,13 +990,21 @@ function MembersDiscordTab({ hub }: { hub: Hub }) {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [hub.id]);
+  }, [hub.id, hydrateMembers]);
 
   useEffect(() => {
-    if (roleEditorUserId && !members.some((member) => member.id === roleEditorUserId)) {
-      setRoleEditorUserId(null);
+    if (rolePickerMenu && !members.some((member) => member.id === rolePickerMenu.memberId)) {
+      setRolePickerMenu(null);
     }
-  }, [members, roleEditorUserId]);
+    if (memberMenu && !members.some((member) => member.id === memberMenu.memberId)) {
+      setMemberMenu(null);
+    }
+  }, [memberMenu, members, rolePickerMenu]);
+
+  const refreshMembers = useCallback(async () => {
+    const memberData = await api.getHubMembers(hub.id);
+    setMembers(await hydrateMembers(memberData));
+  }, [hub.id, hydrateMembers]);
 
   const handleRoleAssign = useCallback(async (member: User, nextRoleId: string) => {
     if (!canManageRanks || member.id === hub.owner_id) return;
@@ -913,22 +1012,72 @@ function MembersDiscordTab({ hub }: { hub: Hub }) {
     try {
       if (nextRoleId) await api.assignRole(hub.id, member.id, nextRoleId);
       else await api.removeRole(hub.id, member.id);
-      const data = await api.getHubMembers(hub.id);
-      setMembers(normalizeUsers(data));
+      await refreshMembers();
+      setRolePickerMenu(null);
+      setMemberMenu(null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to update role');
     } finally {
       setAssigningUserId(null);
     }
-  }, [canManageRanks, hub.id, hub.owner_id]);
+  }, [canManageRanks, hub.id, hub.owner_id, refreshMembers]);
 
   const handleMessage = useCallback(async (member: User) => {
     try {
       const conv = await api.createOrOpenDM(member.id);
       await loadConversations();
       await setActiveConversation(conv.id);
+      setMemberMenu(null);
     } catch { /* noop */ }
   }, [loadConversations, setActiveConversation]);
+
+  const handlePrimaryFriendAction = useCallback(async (member: User) => {
+    const relationship = relationships[member.id] ?? 'none';
+    try {
+      if (relationship === 'none') {
+        await useFriendStore.getState().sendRequest(member.id);
+        setRelationships((prev) => ({ ...prev, [member.id]: 'pending_outgoing' }));
+      } else if (relationship === 'pending_incoming') {
+        await useFriendStore.getState().acceptRequest(member.id);
+        setRelationships((prev) => ({ ...prev, [member.id]: 'friends' }));
+      }
+    } catch {
+      setError('Failed to update friendship');
+    }
+  }, [relationships]);
+
+  const handleToggleBlock = useCallback(async (member: User) => {
+    const relationship = relationships[member.id] ?? 'none';
+    try {
+      if (relationship === 'blocked') {
+        await useFriendStore.getState().unblockUser(member.id);
+        setRelationships((prev) => ({ ...prev, [member.id]: 'none' }));
+      } else {
+        await useFriendStore.getState().blockUser(member.id);
+        setRelationships((prev) => ({ ...prev, [member.id]: 'blocked' }));
+      }
+      setMemberMenu(null);
+    } catch {
+      setError('Failed to update block status');
+    }
+  }, [relationships]);
+
+  const openRolePicker = useCallback((member: User, rect: DOMRect) => {
+    setRolePickerMenu({
+      memberId: member.id,
+      x: Math.round(rect.right + 6),
+      y: Math.round(rect.top - 4),
+    });
+    setMemberMenu(null);
+  }, []);
+
+  const openMemberMenu = useCallback((member: User, rect: DOMRect) => {
+    setMemberMenu({
+      memberId: member.id,
+      x: Math.round(rect.left - 140),
+      y: Math.round(rect.bottom + 6),
+    });
+  }, []);
 
   const filtered = members.filter((m) => {
     if (!search) return true;
@@ -946,7 +1095,41 @@ function MembersDiscordTab({ hub }: { hub: Hub }) {
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const pageSafe = Math.min(page, totalPages);
   const slice = sorted.slice((pageSafe - 1) * pageSize, pageSafe * pageSize);
-  const roleEditorMember = members.find((member) => member.id === roleEditorUserId) ?? null;
+  const rolePickerMember = members.find((member) => member.id === rolePickerMenu?.memberId) ?? null;
+  const memberMenuMember = members.find((member) => member.id === memberMenu?.memberId) ?? null;
+
+  useEffect(() => {
+    const unresolved = slice
+      .filter((member) => member.id !== currentUser?.id && relationships[member.id] == null)
+      .map((member) => member.id);
+
+    if (unresolved.length === 0) return;
+
+    let cancelled = false;
+    Promise.all(
+      unresolved.map(async (memberId) => {
+        try {
+          const response = await api.getRelationship(memberId);
+          return [memberId, response.relationship] as const;
+        } catch {
+          return [memberId, 'none' as const] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) return;
+      setRelationships((prev) => {
+        const next = { ...prev };
+        entries.forEach(([memberId, relationship]) => {
+          next[memberId] = relationship;
+        });
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.id, relationships, slice]);
 
   const toggleAllPage = () => {
     const ids = slice.map((m) => m.id);
@@ -1011,7 +1194,7 @@ function MembersDiscordTab({ hub }: { hub: Hub }) {
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left text-[12px]">
+          <table className="w-full min-w-[820px] text-left text-[12px]">
             <thead className="border-b border-white/5 text-[#8f96a3] uppercase tracking-wide">
               <tr>
                 <th className="w-10 px-3 py-2.5">
@@ -1026,14 +1209,13 @@ function MembersDiscordTab({ hub }: { hub: Hub }) {
                 <th className="px-2 py-2.5 font-semibold">Joined Rift</th>
                 <th className="px-2 py-2.5 font-semibold">Join Method</th>
                 <th className="px-2 py-2.5 font-semibold">Roles</th>
-                <th className="px-2 py-2.5 font-semibold w-10">Signals</th>
-                <th className="w-10 px-2" aria-label="Row menu" />
+                <th className="px-2 py-2.5 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {slice.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-[13px] text-[#8f96a3]">
+                  <td colSpan={7} className="px-4 py-12 text-center text-[13px] text-[#8f96a3]">
                     No members match your current filters.
                   </td>
                 </tr>
@@ -1041,125 +1223,122 @@ function MembersDiscordTab({ hub }: { hub: Hub }) {
                 slice.map((member) => {
                   const role = member.rank_id ? roles.find((entry) => entry.id === member.rank_id) : undefined;
                   const canEditRoles = canManageRanks && member.id !== hub.owner_id;
+                  const relationship = relationships[member.id] ?? 'none';
+                  const friendButtonLabel = relationship === 'pending_incoming'
+                    ? 'Accept'
+                    : relationship === 'pending_outgoing'
+                      ? 'Pending'
+                      : relationship === 'friends'
+                        ? 'Friends'
+                        : relationship === 'blocked'
+                          ? 'Blocked'
+                          : 'Add Friend';
+                  const friendButtonDisabled = member.id === currentUser?.id || relationship === 'pending_outgoing' || relationship === 'friends' || relationship === 'blocked';
+
                   return (
                     <tr key={member.id} className="border-b border-white/5 transition-colors hover:bg-white/[0.03]">
-                    <td className="px-3 py-2 align-middle">
-                      <DarkCheckbox
-                        checked={selected.has(member.id)}
-                        onToggle={() => {
-                          setSelected((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(member.id)) next.delete(member.id);
-                            else next.add(member.id);
-                            return next;
-                          });
-                        }}
-                        ariaLabel={`Select ${member.display_name}`}
-                      />
-                    </td>
-                    <td className="px-2 py-2 align-middle">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="relative shrink-0">
-                          {member.avatar_url ? (
-                            <img src={publicAssetUrl(member.avatar_url)} alt="" className="w-8 h-8 rounded-full object-cover" />
-                          ) : (
-                            <div className="w-8 h-8 rounded-full bg-[#5865f2] flex items-center justify-center text-[10px] font-bold text-white">
-                              {member.display_name.slice(0, 2).toUpperCase()}
-                            </div>
-                          )}
-                          <StatusDot userId={member.id} fallbackStatus={member.status} size="sm" className="absolute -bottom-0.5 -right-0.5 border-2 border-[#23262d]" />
+                      <td className="px-3 py-2 align-middle">
+                        <DarkCheckbox
+                          checked={selected.has(member.id)}
+                          onToggle={() => {
+                            setSelected((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(member.id)) next.delete(member.id);
+                              else next.add(member.id);
+                              return next;
+                            });
+                          }}
+                          ariaLabel={`Select ${member.display_name}`}
+                        />
+                      </td>
+                      <td className="px-2 py-2 align-middle">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="relative shrink-0">
+                            {member.avatar_url ? (
+                              <img src={publicAssetUrl(member.avatar_url)} alt="" className="w-8 h-8 rounded-full object-cover" />
+                            ) : (
+                              <div className="w-8 h-8 rounded-full bg-[#5865f2] flex items-center justify-center text-[10px] font-bold text-white">
+                                {member.display_name.slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
+                            <StatusDot userId={member.id} fallbackStatus={member.status} size="sm" className="absolute -bottom-0.5 -right-0.5 border-2 border-[#23262d]" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[13px] text-white font-medium truncate">{member.display_name}</p>
+                            <p className="text-[11px] text-[#949ba4] truncate">@{member.username}</p>
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-[13px] text-white font-medium truncate">{member.display_name}</p>
-                          <p className="text-[11px] text-[#949ba4] truncate">@{member.username}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-2 py-2 text-[#b5bac1] whitespace-nowrap">
-                      {formatMemberTableDate(member.joined_at)}
-                    </td>
-                    <td className="px-2 py-2 text-[#b5bac1] whitespace-nowrap">
-                      {formatMemberTableDate(member.created_at)}
-                    </td>
-                    <td className="px-2 py-2">
-                      <span className="inline-flex items-center gap-1 text-[#00a8fc]">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                        </svg>
-                        Invite
-                      </span>
-                    </td>
-                    <td className="px-2 py-2">
-                      <div
-                        className={`group relative min-h-[42px] rounded-xl border border-transparent px-2 py-1.5 transition-colors ${
-                          canEditRoles ? 'cursor-pointer hover:border-white/5 hover:bg-[#17181c]' : ''
-                        }`}
-                        onClick={canEditRoles ? () => setRoleEditorUserId(member.id) : undefined}
-                        onKeyDown={canEditRoles ? (event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            setRoleEditorUserId(member.id);
-                          }
-                        } : undefined}
-                        role={canEditRoles ? 'button' : undefined}
-                        tabIndex={canEditRoles ? 0 : undefined}
-                      >
-                        <div className="flex max-w-[180px] flex-wrap items-center gap-1 pr-10">
-                          {member.id === hub.owner_id && (
-                            <span className="rounded-full bg-[#5865f2]/25 px-1.5 py-0.5 text-[10px] font-semibold text-[#c9cdfb]">Owner</span>
-                          )}
-                          {member.role === 'admin' && member.id !== hub.owner_id && (
-                            <span className="rounded-full bg-[#57f287]/20 px-1.5 py-0.5 text-[10px] font-semibold text-[#57f287]">Admin</span>
-                          )}
-                          {role ? (
-                            <span className="max-w-[118px] truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ backgroundColor: `${role.color}33`, color: role.color }}>
-                              {role.name}
-                            </span>
-                          ) : (
-                            <span className="text-[11px] text-[#7f8692]">No custom role</span>
+                      </td>
+                      <td className="px-2 py-2 text-[#b5bac1] whitespace-nowrap">{formatMemberSinceDate(member)}</td>
+                      <td className="px-2 py-2 text-[#b5bac1] whitespace-nowrap">{formatMemberTableDate(member.created_at)}</td>
+                      <td className="px-2 py-2">
+                        <span className="inline-flex items-center gap-1 text-[#00a8fc]">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                          </svg>
+                          Invite
+                        </span>
+                      </td>
+                      <td className="px-2 py-2">
+                        <div className={`group relative min-h-[40px] rounded-xl border border-transparent px-2 py-1.5 transition-colors ${canEditRoles ? 'hover:border-white/5 hover:bg-[#17181c]' : ''}`}>
+                          <div className="flex max-w-[180px] flex-wrap items-center gap-1 pr-10">
+                            {member.id === hub.owner_id && (
+                              <span className="rounded-full bg-[#5865f2]/25 px-1.5 py-0.5 text-[10px] font-semibold text-[#c9cdfb]">Owner</span>
+                            )}
+                            {member.role === 'admin' && member.id !== hub.owner_id && (
+                              <span className="rounded-full bg-[#57f287]/20 px-1.5 py-0.5 text-[10px] font-semibold text-[#57f287]">Admin</span>
+                            )}
+                            {role && (
+                              <span className="max-w-[118px] truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold" style={{ backgroundColor: `${role.color}33`, color: role.color }}>
+                                {role.name}
+                              </span>
+                            )}
+                          </div>
+                          {canEditRoles && (
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openRolePicker(member, event.currentTarget.getBoundingClientRect());
+                              }}
+                              className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-[#2c3038] text-[#d4d8df] opacity-0 transition-all hover:bg-[#353943] hover:text-white group-hover:opacity-100 group-focus-within:opacity-100"
+                              aria-label={`Edit roles for ${member.display_name}`}
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                                <path d="M12 5v14" />
+                                <path d="M5 12h14" />
+                              </svg>
+                            </button>
                           )}
                         </div>
-                        {canEditRoles && (
+                      </td>
+                      <td className="px-2 py-2 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {member.id !== currentUser?.id && (
+                            <button
+                              type="button"
+                              disabled={friendButtonDisabled}
+                              onClick={() => void handlePrimaryFriendAction(member)}
+                              className="rounded-[8px] border border-[#404249] bg-[#17181c] px-3 py-1.5 text-[11px] font-semibold text-[#d7d9dd] transition-colors hover:bg-[#202229] disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {friendButtonLabel}
+                            </button>
+                          )}
                           <button
                             type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setRoleEditorUserId(member.id);
-                            }}
-                            className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-[#2c3038] text-[#d4d8df] opacity-0 transition-all hover:bg-[#353943] hover:text-white group-hover:opacity-100 group-focus-within:opacity-100"
-                            aria-label={`Edit roles for ${member.display_name}`}
+                            onClick={(event) => openMemberMenu(member, event.currentTarget.getBoundingClientRect())}
+                            className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-[#404249] bg-[#17181c] text-[#c2c7cf] transition-colors hover:bg-[#202229] hover:text-white"
+                            aria-label={`Open actions for ${member.display_name}`}
                           >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-                              <path d="M12 5v14" />
-                              <path d="M5 12h14" />
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                              <circle cx="5" cy="12" r="1.6" />
+                              <circle cx="12" cy="12" r="1.6" />
+                              <circle cx="19" cy="12" r="1.6" />
                             </svg>
                           </button>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-2 py-2 text-[#949ba4]">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-60">
-                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                      </svg>
-                    </td>
-                    <td className="px-2 py-2 text-right">
-                      {member.id !== currentUser?.id && (
-                        <button
-                          type="button"
-                          onClick={() => void handleMessage(member)}
-                          className="p-1 rounded text-[#b5bac1] hover:text-white hover:bg-[#404249]"
-                          title="Message"
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                            <circle cx="5" cy="12" r="1.5" />
-                            <circle cx="12" cy="12" r="1.5" />
-                            <circle cx="19" cy="12" r="1.5" />
-                          </svg>
-                        </button>
-                      )}
-                    </td>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })
@@ -1202,13 +1381,34 @@ function MembersDiscordTab({ hub }: { hub: Hub }) {
         </div>
       </div>
 
-      <MemberRoleEditorModal
-        hub={hub}
-        member={roleEditorMember}
+      <MemberRolePickerMenu
+        member={rolePickerMember}
         roles={sortedRoles}
-        busy={assigningUserId === roleEditorMember?.id}
-        onClose={() => setRoleEditorUserId(null)}
+        busy={assigningUserId === rolePickerMember?.id}
+        x={rolePickerMenu?.x ?? 0}
+        y={rolePickerMenu?.y ?? 0}
+        onClose={() => setRolePickerMenu(null)}
         onToggleRole={(member, nextRoleId) => void handleRoleAssign(member, nextRoleId)}
+      />
+
+      <MemberOverflowMenu
+        member={memberMenuMember}
+        relationship={memberMenuMember ? (relationships[memberMenuMember.id] ?? 'none') : 'none'}
+        x={memberMenu?.x ?? 0}
+        y={memberMenu?.y ?? 0}
+        canManageRanks={Boolean(canManageRanks && memberMenuMember?.id !== hub.owner_id)}
+        onClose={() => setMemberMenu(null)}
+        onOpenProfile={(member) => {
+          openProfileModal(member);
+          setMemberMenu(null);
+        }}
+        onMessage={(member) => {
+          void handleMessage(member);
+        }}
+        onToggleBlock={(member) => {
+          void handleToggleBlock(member);
+        }}
+        onOpenRolePicker={openRolePicker}
       />
     </div>
   );

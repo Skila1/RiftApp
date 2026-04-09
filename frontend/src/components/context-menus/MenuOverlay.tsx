@@ -14,11 +14,13 @@ export function MenuOverlay({
   x,
   y,
   onClose,
+  zIndex = 240,
   children,
 }: {
   x: number;
   y: number;
   onClose: () => void;
+  zIndex?: number;
   children: ReactNode;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -45,14 +47,15 @@ export function MenuOverlay({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[240]"
+      className="fixed inset-0"
+      style={{ zIndex }}
       role="presentation"
       onMouseDown={onClose}
     >
       <div
         ref={wrapRef}
-        className="fixed z-[241] min-w-[200px] animate-scale-in"
-        style={{ left: pos.x, top: pos.y }}
+        className="fixed min-w-[200px] animate-scale-in"
+        style={{ left: pos.x, top: pos.y, zIndex: zIndex + 1 }}
         onMouseDown={(e) => e.stopPropagation()}
       >
         {children}
