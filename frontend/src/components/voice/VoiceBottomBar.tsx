@@ -355,7 +355,7 @@ function VoiceConnectionPopover({
   return (
     <div
       ref={popoverRef}
-      className="absolute bottom-full left-0 z-40 mb-2 w-[320px] rounded-[8px] border border-white/[0.08] bg-[#23262d] p-4 shadow-[0_18px_44px_rgba(0,0,0,0.45)]"
+      className="absolute bottom-full left-0 z-40 mb-2 w-[320px] rounded-[8px] border border-riftapp-border/60 bg-riftapp-panel p-4 shadow-modal"
       role="dialog"
       aria-label="Voice connection details"
     >
@@ -364,7 +364,7 @@ function VoiceConnectionPopover({
         <button
           type="button"
           onClick={onClose}
-          className="-mr-1 -mt-1 flex h-7 w-7 items-center justify-center rounded-md text-[#b5bac1] transition-colors hover:bg-white/[0.06] hover:text-[#f2f3f5]"
+          className="-mr-1 -mt-1 flex h-7 w-7 items-center justify-center rounded-md text-[#b5bac1] transition-colors hover:bg-riftapp-chrome-hover hover:text-[#f2f3f5]"
           aria-label="Close voice connection details"
         >
           <CloseIcon size={16} />
@@ -858,7 +858,7 @@ export default function VoiceBottomBar() {
     : 'Voice Channel';
 
   return (
-    <div className="relative flex-shrink-0 border-t border-black/30 bg-[linear-gradient(180deg,#25262b_0%,#232428_100%)]">
+    <div className="relative flex-shrink-0 border-t border-riftapp-border/60 bg-riftapp-chrome">
       {inVoice ? (
         <>
           <VoiceHeader
