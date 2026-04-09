@@ -108,7 +108,7 @@ func main() {
 
 	// Report & moderation system
 	reportRepo := repository.NewReportRepo(db)
-	reportSvc := service.NewReportService(reportRepo, modSvc)
+	reportSvc := service.NewReportService(reportRepo, modSvc, msgRepo, userRepo, notifSvc)
 	hubModRepo := repository.NewHubModerationRepo(db)
 
 	// Upload handler (S3-compatible storage, e.g. Cloudflare R2)
@@ -129,6 +129,7 @@ func main() {
 	router := api.NewRouter(api.RouterDeps{
 		AuthService:             authService,
 		UserService:             userService,
+		UserRepo:                userRepo,
 		HubService:              hubSvc,
 		StreamService:           streamSvc,
 		CategoryService:         catSvc,

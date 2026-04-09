@@ -221,12 +221,14 @@ func (h *UploadHandler) moderateImage(attachID, publicURL string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	fullURL := publicURL
-	if strings.HasPrefix(publicURL, "/s3/") {
-		fullURL = "http://localhost:" + h.cfg.Port + "/api" + publicURL
+	objectName := strings.TrimPrefix(publicURL, fmt.Sprintf("/s3/%s/", h.bucket))
+	presignedURL, err := h.client.PresignedGetObject(ctx, h.bucket, objectName, 5*time.Minute, nil)
+	if err != nil {
+		log.Printf("moderation: failed to generate presigned URL for %s: %v", attachID, err)
+		return
 	}
 
-	result := h.modSvc.CheckImage(ctx, fullURL)
+	result := h.modSvc.CheckImage(ctx, presignedURL.String())
 	if result != nil && result.Flagged {
 		log.Printf("moderation: flagged image %s (category=%s confidence=%.2f)", attachID, result.Category, result.Confidence)
 		_, _ = h.db.Exec(ctx, `UPDATE attachments SET moderation_status = 'flagged' WHERE id = $1`, attachID)

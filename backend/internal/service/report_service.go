@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,15 +11,31 @@ import (
 	"github.com/riftapp-cloud/riftapp/internal/apperror"
 	"github.com/riftapp-cloud/riftapp/internal/moderation"
 	"github.com/riftapp-cloud/riftapp/internal/repository"
+	"github.com/riftapp-cloud/riftapp/internal/user"
 )
 
 type ReportService struct {
-	repo   *repository.ReportRepo
-	modSvc *moderation.Service
+	repo     *repository.ReportRepo
+	modSvc   *moderation.Service
+	msgRepo  *repository.MessageRepo
+	userRepo *user.Repo
+	notifSvc *NotificationService
 }
 
-func NewReportService(repo *repository.ReportRepo, modSvc *moderation.Service) *ReportService {
-	return &ReportService{repo: repo, modSvc: modSvc}
+func NewReportService(
+	repo *repository.ReportRepo,
+	modSvc *moderation.Service,
+	msgRepo *repository.MessageRepo,
+	userRepo *user.Repo,
+	notifSvc *NotificationService,
+) *ReportService {
+	return &ReportService{
+		repo:     repo,
+		modSvc:   modSvc,
+		msgRepo:  msgRepo,
+		userRepo: userRepo,
+		notifSvc: notifSvc,
+	}
 }
 
 type CreateReportInput struct {
@@ -98,6 +115,7 @@ func (s *ReportService) TakeAction(ctx context.Context, reportID, performedBy st
 	if input.ActionType == "" {
 		return apperror.BadRequest("action_type is required")
 	}
+
 	action := &repository.ModerationAction{
 		ID:           uuid.New().String(),
 		ReportID:     &reportID,
@@ -107,7 +125,64 @@ func (s *ReportService) TakeAction(ctx context.Context, reportID, performedBy st
 		PerformedBy:  performedBy,
 		CreatedAt:    time.Now(),
 	}
-	return s.repo.CreateAction(ctx, action)
+	if err := s.repo.CreateAction(ctx, action); err != nil {
+		return apperror.Internal("failed to record action", err)
+	}
+
+	switch input.ActionType {
+	case "ban":
+		return s.executeBan(ctx, input.TargetUserID, reportID, performedBy)
+	case "warn":
+		return s.executeWarn(ctx, input.TargetUserID, reportID, performedBy)
+	case "delete_message":
+		return s.executeDeleteMessage(ctx, reportID)
+	}
+
+	return nil
+}
+
+func (s *ReportService) executeBan(ctx context.Context, targetUserID *string, reportID, performedBy string) error {
+	if targetUserID == nil || *targetUserID == "" {
+		return apperror.BadRequest("target_user_id is required for ban action")
+	}
+	if s.userRepo == nil {
+		return apperror.Internal("user repository not available", nil)
+	}
+	if err := s.userRepo.BanUser(ctx, *targetUserID); err != nil {
+		return apperror.Internal("failed to ban user", err)
+	}
+	log.Printf("moderation: user %s banned by %s (report %s)", *targetUserID, performedBy, reportID)
+	return nil
+}
+
+func (s *ReportService) executeWarn(ctx context.Context, targetUserID *string, reportID, performedBy string) error {
+	if targetUserID == nil || *targetUserID == "" {
+		return apperror.BadRequest("target_user_id is required for warn action")
+	}
+	if s.notifSvc != nil {
+		body := "A moderator has reviewed reported content associated with your account. Please review our community guidelines."
+		s.notifSvc.Create(ctx, *targetUserID, "moderation", "You have received a warning", &body, &reportID, nil, nil, nil)
+	}
+	log.Printf("moderation: user %s warned by %s (report %s)", *targetUserID, performedBy, reportID)
+	return nil
+}
+
+func (s *ReportService) executeDeleteMessage(ctx context.Context, reportID string) error {
+	if s.msgRepo == nil {
+		return apperror.Internal("message repository not available", nil)
+	}
+	report, err := s.repo.GetByID(ctx, reportID)
+	if err != nil {
+		return apperror.Internal("failed to load report for message deletion", err)
+	}
+	if report.MessageID == nil || *report.MessageID == "" {
+		return apperror.BadRequest("report has no associated message")
+	}
+	if err := s.msgRepo.Delete(ctx, *report.MessageID); err != nil {
+		return apperror.Internal("failed to delete message", err)
+	}
+	log.Printf("moderation: message %s deleted (report %s)", *report.MessageID, reportID)
+	return nil
 }
 
 func (s *ReportService) Stats(ctx context.Context) (map[string]interface{}, error) {

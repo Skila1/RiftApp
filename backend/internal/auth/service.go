@@ -20,6 +20,7 @@ var (
 	ErrUsernameTaken      = errors.New("username already taken")
 	ErrEmailTaken         = errors.New("email already taken")
 	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrAccountSuspended   = errors.New("account suspended")
 	ErrUserNotFound       = errors.New("user not found")
 )
 
@@ -103,18 +104,23 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (*AuthRespo
 
 func (s *Service) Login(ctx context.Context, input LoginInput) (*AuthResponse, error) {
 	var user models.User
+	var bannedAt *time.Time
 	err := s.db.QueryRow(ctx,
-		`SELECT id, username, email, password_hash, display_name, avatar_url, bio, status, created_at, updated_at
+		`SELECT id, username, email, password_hash, display_name, avatar_url, bio, status, created_at, updated_at, banned_at
 		 FROM users WHERE username = $1`,
 		input.Username,
 	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash,
-		&user.DisplayName, &user.AvatarURL, &user.Bio, &user.Status, &user.CreatedAt, &user.UpdatedAt)
+		&user.DisplayName, &user.AvatarURL, &user.Bio, &user.Status, &user.CreatedAt, &user.UpdatedAt, &bannedAt)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrInvalidCredentials
 		}
 		return nil, err
+	}
+
+	if bannedAt != nil {
+		return nil, ErrAccountSuspended
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(input.Password)); err != nil {
@@ -163,6 +169,12 @@ func (s *Service) RefreshTokens(ctx context.Context, refreshToken string) (*Auth
 	}
 
 	s.db.Exec(ctx, `DELETE FROM refresh_tokens WHERE id = $1`, tokenID)
+
+	var bannedAt *time.Time
+	_ = s.db.QueryRow(ctx, `SELECT banned_at FROM users WHERE id = $1`, claims.UserID).Scan(&bannedAt)
+	if bannedAt != nil {
+		return nil, ErrAccountSuspended
+	}
 
 	user, err := s.GetUser(ctx, claims.UserID)
 	if err != nil {

@@ -12,6 +12,10 @@ type contextKey string
 
 const UserIDKey contextKey = "user_id"
 
+type BanChecker interface {
+	IsBanned(ctx context.Context, userID string) (bool, error)
+}
+
 func Auth(authService *auth.Service) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -35,6 +39,21 @@ func Auth(authService *auth.Service) func(http.Handler) http.Handler {
 
 			ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
 			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+func BanCheck(checker BanChecker) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			userID := GetUserID(r.Context())
+			if userID != "" {
+				if banned, _ := checker.IsBanned(r.Context(), userID); banned {
+					http.Error(w, `{"error":"account suspended"}`, http.StatusForbidden)
+					return
+				}
+			}
+			next.ServeHTTP(w, r.WithContext(r.Context()))
 		})
 	}
 }

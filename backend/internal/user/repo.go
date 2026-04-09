@@ -31,6 +31,7 @@ func scanUser(row pgx.Row) (*models.User, error) {
 		&u.ID, &u.Username, &u.Email,
 		&u.DisplayName, &u.AvatarURL, &u.Bio,
 		&u.Status, &u.LastSeen, &u.CreatedAt, &u.UpdatedAt,
+		&u.BannedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -41,7 +42,7 @@ func scanUser(row pgx.Row) (*models.User, error) {
 	return &u, nil
 }
 
-const userColumns = `id, username, email, display_name, avatar_url, bio, status, last_seen, created_at, updated_at`
+const userColumns = `id, username, email, display_name, avatar_url, bio, status, last_seen, created_at, updated_at, banned_at`
 
 // GetByID returns a user by primary key.
 func (r *Repo) GetByID(ctx context.Context, id string) (*models.User, error) {
@@ -147,4 +148,17 @@ func (r *Repo) GetCoMemberIDs(ctx context.Context, userID string) ([]string, err
 		ids = append(ids, id)
 	}
 	return ids, rows.Err()
+}
+
+func (r *Repo) BanUser(ctx context.Context, userID string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE users SET banned_at = now(), status = 0, updated_at = now() WHERE id = $1`, userID)
+	return err
+}
+
+func (r *Repo) IsBanned(ctx context.Context, userID string) (bool, error) {
+	var banned bool
+	err := r.db.QueryRow(ctx,
+		`SELECT banned_at IS NOT NULL FROM users WHERE id = $1`, userID).Scan(&banned)
+	return banned, err
 }

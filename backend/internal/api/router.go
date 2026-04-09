@@ -22,6 +22,7 @@ import (
 type RouterDeps struct {
 	AuthService             *auth.Service
 	UserService             *user.Service
+	UserRepo                *user.Repo
 	HubService              *service.HubService
 	StreamService           *service.StreamService
 	CategoryService         *service.CategoryService
@@ -129,6 +130,9 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 	authRL := middleware.NewRateLimiter(rate.Every(time.Second), 120)
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth(deps.AuthService))
+		if deps.UserRepo != nil {
+			r.Use(middleware.BanCheck(deps.UserRepo))
+		}
 		r.Use(middleware.RateLimit(authRL))
 
 		r.Get("/api/users/@me", userH.GetMe)

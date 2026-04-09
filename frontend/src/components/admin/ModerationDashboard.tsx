@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import type { Report } from '../../types';
 import { useNavigate } from 'react-router-dom';
@@ -20,6 +20,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export default function ModerationDashboard() {
+  const latestReportsRequestRef = useRef(0);
   const navigate = useNavigate();
   const [reports, setReports] = useState<Report[]>([]);
   const [total, setTotal] = useState(0);
@@ -31,6 +32,7 @@ export default function ModerationDashboard() {
   const [actionNote, setActionNote] = useState('');
   const [error, setError] = useState('');
   const [accessDenied, setAccessDenied] = useState(false);
+  const [mutatingReportId, setMutatingReportId] = useState<string | null>(null);
 
   const isAccessDeniedError = (err: unknown) =>
     err instanceof Error &&
@@ -38,20 +40,26 @@ export default function ModerationDashboard() {
       err.message.toLowerCase().includes('missing permissions'));
 
   const loadReports = async () => {
+    const requestId = ++latestReportsRequestRef.current;
     setLoading(true);
     setError('');
     try {
       const res = await api.listReports({ status: statusFilter || undefined, category: categoryFilter || undefined, limit: 50 });
+      if (requestId !== latestReportsRequestRef.current) return;
       setReports(res.reports);
       setTotal(res.total);
     } catch (err) {
+      if (requestId !== latestReportsRequestRef.current) return;
       if (isAccessDeniedError(err)) {
         setAccessDenied(true);
       } else {
         setError(err instanceof Error ? err.message : 'Failed to load reports');
       }
+    } finally {
+      if (requestId === latestReportsRequestRef.current) {
+        setLoading(false);
+      }
     }
-    setLoading(false);
   };
 
   const loadStats = async () => {
@@ -70,7 +78,9 @@ export default function ModerationDashboard() {
   useEffect(() => { loadReports(); loadStats(); }, [statusFilter, categoryFilter]);
 
   const handleUpdateStatus = async (id: string, status: string) => {
+    if (mutatingReportId) return;
     setError('');
+    setMutatingReportId(id);
     try {
       await api.updateReport(id, { status, note: actionNote || undefined });
       setActionNote('');
@@ -79,16 +89,22 @@ export default function ModerationDashboard() {
       loadStats();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed');
+    } finally {
+      setMutatingReportId(null);
     }
   };
 
   const handleAction = async (reportId: string, actionType: string, targetUserId?: string) => {
+    if (mutatingReportId) return;
     setError('');
+    setMutatingReportId(reportId);
     try {
       await api.takeReportAction(reportId, { action_type: actionType, target_user_id: targetUserId });
       loadReports();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed');
+    } finally {
+      setMutatingReportId(null);
     }
   };
 
@@ -148,7 +164,15 @@ export default function ModerationDashboard() {
               <div
                 key={r.id}
                 className={`bg-riftapp-content-elevated border border-riftapp-border/30 rounded-lg p-4 cursor-pointer hover:border-riftapp-border/60 transition-colors ${selectedReport?.id === r.id ? 'ring-1 ring-riftapp-accent' : ''}`}
+                role="button"
+                tabIndex={0}
                 onClick={() => setSelectedReport(selectedReport?.id === r.id ? null : r)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedReport(selectedReport?.id === r.id ? null : r);
+                  }
+                }}
               >
                 <div className="flex items-center gap-3 mb-2">
                   <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${STATUS_COLORS[r.status] || 'bg-gray-500/20 text-gray-400'}`}>
@@ -201,28 +225,28 @@ export default function ModerationDashboard() {
 
                     <div className="flex flex-wrap gap-2">
                       {r.status === 'open' && (
-                        <button onClick={() => handleUpdateStatus(r.id, 'reviewing')} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors">
+                        <button disabled={mutatingReportId === r.id} onClick={() => handleUpdateStatus(r.id, 'reviewing')} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                           Mark Reviewing
                         </button>
                       )}
-                      <button onClick={() => handleUpdateStatus(r.id, 'resolved')} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors">
+                      <button disabled={mutatingReportId === r.id} onClick={() => handleUpdateStatus(r.id, 'resolved')} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                         Resolve
                       </button>
-                      <button onClick={() => handleUpdateStatus(r.id, 'dismissed')} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-500/20 text-gray-400 hover:bg-gray-500/30 transition-colors">
+                      <button disabled={mutatingReportId === r.id} onClick={() => handleUpdateStatus(r.id, 'dismissed')} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-500/20 text-gray-400 hover:bg-gray-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                         Dismiss
                       </button>
                       {r.reported_user_id && (
                         <>
-                          <button onClick={() => handleAction(r.id, 'warn', r.reported_user_id!)} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 transition-colors">
+                          <button disabled={mutatingReportId === r.id} onClick={() => handleAction(r.id, 'warn', r.reported_user_id!)} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                             Warn User
                           </button>
-                          <button onClick={() => handleAction(r.id, 'ban', r.reported_user_id!)} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors">
+                          <button disabled={mutatingReportId === r.id} onClick={() => handleAction(r.id, 'ban', r.reported_user_id!)} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                             Ban User
                           </button>
                         </>
                       )}
                       {r.message_id && (
-                        <button onClick={() => handleAction(r.id, 'delete_message')} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors">
+                        <button disabled={mutatingReportId === r.id} onClick={() => handleAction(r.id, 'delete_message')} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                           Delete Message
                         </button>
                       )}

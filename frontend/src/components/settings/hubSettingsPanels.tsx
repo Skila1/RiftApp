@@ -578,13 +578,20 @@ export function BansPanel({ hubId }: { hubId?: string }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!hubId) return;
+    let active = true;
+    if (!hubId) {
+      setBans([]);
+      setError('');
+      setLoading(false);
+      return () => { active = false; };
+    }
     setLoading(true);
     setError('');
     api.listBans(hubId)
-      .then((res) => setBans(res.bans))
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load bans'))
-      .finally(() => setLoading(false));
+      .then((res) => { if (active) setBans(res.bans); })
+      .catch((err) => { if (active) setError(err instanceof Error ? err.message : 'Failed to load bans'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [hubId]);
 
   const handleUnban = async (userId: string) => {
@@ -656,18 +663,20 @@ export function AutoModPanel({ hubId }: { hubId?: string }) {
   const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
+    let active = true;
     if (!hubId) {
       setSettings(null);
       setLoadingSettings(false);
-      return;
+      return () => { active = false; };
     }
     setLoadingSettings(true);
     setSettings(null);
     setSaveError('');
     api.getAutoModSettings(hubId)
-      .then(setSettings)
-      .catch((err) => setSaveError(err instanceof Error ? err.message : 'Failed to load settings'))
-      .finally(() => setLoadingSettings(false));
+      .then((s) => { if (active) setSettings(s); })
+      .catch((err) => { if (active) setSaveError(err instanceof Error ? err.message : 'Failed to load settings'); })
+      .finally(() => { if (active) setLoadingSettings(false); });
+    return () => { active = false; };
   }, [hubId]);
 
   const handleToggle = async (enabled: boolean) => {
@@ -721,6 +730,7 @@ export function AutoModPanel({ hubId }: { hubId?: string }) {
         <p className="text-[#949ba4] text-[13px] mb-4">Loading settings...</p>
       ) : settings && (
         <>
+          {saveError && <p className="text-[#ed4245] text-[13px] mb-3">{saveError}</p>}
           <ToggleRow
             label="Enable AutoMod"
             description="When enabled, messages in this server are automatically checked by AI moderation."
@@ -747,7 +757,6 @@ export function AutoModPanel({ hubId }: { hubId?: string }) {
               >
                 {saving ? 'Saving...' : 'Save Changes'}
               </button>
-              {saveError && <p className="text-[#ed4245] text-[13px] mt-2">{saveError}</p>}
               <SettingsDivider />
             </>
           )}

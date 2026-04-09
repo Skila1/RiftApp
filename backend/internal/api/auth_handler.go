@@ -53,6 +53,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusUnauthorized, "invalid credentials")
 			return
 		}
+		if errors.Is(err, auth.ErrAccountSuspended) {
+			writeError(w, http.StatusForbidden, "account suspended")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -71,6 +75,10 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.service.RefreshTokens(r.Context(), body.RefreshToken)
 	if err != nil {
+		if errors.Is(err, auth.ErrAccountSuspended) {
+			writeError(w, http.StatusForbidden, "account suspended")
+			return
+		}
 		writeError(w, http.StatusUnauthorized, "invalid refresh token")
 		return
 	}
