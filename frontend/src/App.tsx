@@ -16,6 +16,18 @@ const LandingPage = lazy(() => import('./components/marketing/LandingPage'));
 const DiscoverPage = lazy(() => import('./components/marketing/DiscoverPage'));
 const SupportPage = lazy(() => import('./components/marketing/SupportPage'));
 
+const DevPortalLayout = lazy(() => import('./components/developers/DevPortalLayout'));
+const ApplicationsListPage = lazy(() => import('./components/developers/ApplicationsListPage'));
+const GeneralInformationPage = lazy(() => import('./components/developers/GeneralInformationPage'));
+const InstallationPage = lazy(() => import('./components/developers/InstallationPage'));
+const OAuth2Page = lazy(() => import('./components/developers/OAuth2Page'));
+const BotPage = lazy(() => import('./components/developers/BotPage'));
+const EmojisPage = lazy(() => import('./components/developers/EmojisPage'));
+const WebhooksPage = lazy(() => import('./components/developers/WebhooksPage'));
+const RichPresencePage = lazy(() => import('./components/developers/RichPresencePage'));
+const AppTestersPage = lazy(() => import('./components/developers/AppTestersPage'));
+const AppVerificationPage = lazy(() => import('./components/developers/AppVerificationPage'));
+
 type SettingsModalModule = typeof import('./components/settings/SettingsModal');
 type SettingsModalComponent = ComponentType;
 
@@ -210,6 +222,20 @@ export default function App() {
               <Route path="/app/dms/:conversationId" element={<RequireAuth><AppLayout /></RequireAuth>} />
               <Route path="/app/dms" element={<RequireAuth><AppLayout /></RequireAuth>} />
               <Route path="/app" element={<RequireAuth><AppLayout /></RequireAuth>} />
+
+              {/* Developer Portal */}
+              <Route path="/developers" element={<RequireAuth><DevPortalLayout /></RequireAuth>}>
+                <Route index element={<ApplicationsListPage />} />
+                <Route path="applications/:appId/information" element={<GeneralInformationPage />} />
+                <Route path="applications/:appId/installation" element={<InstallationPage />} />
+                <Route path="applications/:appId/oauth2" element={<OAuth2Page />} />
+                <Route path="applications/:appId/bot" element={<BotPage />} />
+                <Route path="applications/:appId/emojis" element={<EmojisPage />} />
+                <Route path="applications/:appId/webhooks" element={<WebhooksPage />} />
+                <Route path="applications/:appId/rich-presence" element={<RichPresencePage />} />
+                <Route path="applications/:appId/testers" element={<AppTestersPage />} />
+                <Route path="applications/:appId/verification" element={<AppVerificationPage />} />
+              </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

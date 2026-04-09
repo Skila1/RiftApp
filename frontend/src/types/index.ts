@@ -288,3 +288,77 @@ export interface WSEvent {
   op: string;
   d: unknown;
 }
+
+// Developer Portal types
+export interface Application {
+  id: string;
+  owner_id: string;
+  name: string;
+  description: string;
+  icon?: string | null;
+  bot_user_id?: string;
+  bot_public: boolean;
+  bot_require_code_grant: boolean;
+  verify_key: string;
+  tags: string[];
+  terms_of_service_url?: string | null;
+  privacy_policy_url?: string | null;
+  interactions_endpoint_url?: string | null;
+  role_connections_verification_url?: string | null;
+  custom_install_url?: string | null;
+  install_params?: string | null;
+  flags: number;
+  created_at: string;
+  updated_at: string;
+  owner?: User;
+  bot?: User;
+  approximate_guild_count?: number;
+  approximate_user_install_count?: number;
+}
+
+export interface OAuth2Redirect {
+  id: string;
+  application_id: string;
+  redirect_uri: string;
+  created_at: string;
+}
+
+export interface AppEmoji {
+  id: string;
+  application_id: string;
+  name: string;
+  image_hash: string;
+  created_at: string;
+}
+
+export interface AppWebhook {
+  id: string;
+  application_id: string;
+  url: string;
+  secret: string;
+  event_types: string[];
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AppTester {
+  application_id: string;
+  user_id: string;
+  status: string;
+  created_at: string;
+  user?: User;
+}
+
+export interface RichPresenceAsset {
+  id: string;
+  application_id: string;
+  name: string;
+  type: string;
+  image_hash: string;
+  created_at: string;
+}
+
+export interface DeveloperMeResponse {
+  is_super_admin: boolean;
+}
