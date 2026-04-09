@@ -415,8 +415,8 @@ const MessageItem = memo(function MessageItem({
           </span>
         )}
       </span>
-      <span className="min-w-0 flex items-center gap-1 overflow-hidden text-[12px] leading-4">
-        <span className="rift-reply-mention shrink-0 truncate">
+      <span className="flex min-w-0 items-center gap-1 text-[12px] leading-4">
+        <span className="rift-reply-mention">
           @{replyAuthorLabel}
         </span>
         <span className={`min-w-0 truncate transition-colors ${replyPreviewToneClass}`}>
@@ -428,14 +428,14 @@ const MessageItem = memo(function MessageItem({
 
   const replyPreviewBlock = hasReplyPreview ? (
     interactionsDisabled || !replyTargetId ? (
-      <div className="rift-reply-preview mb-0.5 max-w-[580px] pr-2 text-left">
+      <div className="rift-reply-preview mb-0.5 w-full pr-2 text-left">
         {replyPreviewBody}
       </div>
     ) : (
       <button
         type="button"
         onClick={handleReplyPreviewClick}
-        className="rift-reply-preview group/reply mb-0.5 max-w-[580px] pr-2 text-left"
+        className="rift-reply-preview group/reply mb-0.5 w-full pr-2 text-left"
       >
         {replyPreviewBody}
       </button>
@@ -694,7 +694,7 @@ const MessageItem = memo(function MessageItem({
           <div
             onClick={interactionsDisabled ? undefined : handleProfileClick}
             onContextMenu={interactionsDisabled ? undefined : handleUserContextMenu}
-            className={`h-10 w-10 overflow-hidden rounded-full ${replyPreviewBlock ? 'row-start-2 mt-0.5' : 'row-start-1 mt-0.5'} ${interactionsDisabled ? '' : 'cursor-pointer transition-opacity hover:opacity-80'}`}
+            className={`h-10 w-10 self-start overflow-hidden rounded-full ${replyPreviewBlock ? 'row-start-2 mt-0.5' : 'row-start-1 mt-0.5'} ${interactionsDisabled ? '' : 'cursor-pointer transition-opacity hover:opacity-80'}`}
           >
             {author?.avatar_url ? (
               <img src={publicAssetUrl(author.avatar_url)} alt={authorName} className="w-full h-full object-cover" />
@@ -704,17 +704,17 @@ const MessageItem = memo(function MessageItem({
               </div>
             )}
           </div>
-          <div className={`col-start-2 min-w-0 ${replyPreviewBlock ? 'row-start-2' : 'row-start-1'}`}>
-            <div className="flex items-baseline gap-2 mb-0.5">
-              <span onClick={interactionsDisabled ? undefined : handleProfileClick} onContextMenu={interactionsDisabled ? undefined : handleUserContextMenu} className={`font-semibold text-[15px] ${interactionsDisabled ? '' : 'cursor-pointer hover:underline'} ${isOwn ? 'text-riftapp-accent-hover' : color}`}>
+          <div className={`col-start-2 min-w-0 ${replyPreviewBlock ? 'row-start-2' : 'row-start-1'} self-start`}>
+            <div className="mb-0.5 flex min-w-0 items-baseline">
+              <span onClick={interactionsDisabled ? undefined : handleProfileClick} onContextMenu={interactionsDisabled ? undefined : handleUserContextMenu} className={`shrink-0 whitespace-nowrap font-semibold text-[15px] ${interactionsDisabled ? '' : 'cursor-pointer hover:underline'} ${isOwn ? 'text-riftapp-accent-hover' : color}`}>
                 {authorName}
               </span>
-              {author?.is_bot && <BotBadge />}
-              <span className="text-[11px] text-riftapp-text-dim/80 select-none">
+              {author?.is_bot && <span className="ml-1.5 shrink-0"><BotBadge /></span>}
+              <span className="ml-1.5 shrink-0 whitespace-nowrap text-[11px] text-riftapp-text-dim/80 select-none">
                 {renderTimestamp(message.created_at)}
               </span>
               {message.edited_at && (
-                <span className="text-[10px] text-riftapp-text-dim/60 select-none" title={`Edited ${renderTimestamp(message.edited_at)}`}>(edited)</span>
+                <span className="ml-1 shrink-0 whitespace-nowrap text-[10px] text-riftapp-text-dim/60 select-none" title={`Edited ${renderTimestamp(message.edited_at)}`}>(edited)</span>
               )}
             </div>
             {contentBlock}
