@@ -375,6 +375,7 @@ const MessageItem = memo(function MessageItem({
   const replyAuthor = message.reply_to?.author;
   const replyAuthorLabel = useMemo(() => getReplyAuthorLabel(message.reply_to), [message.reply_to]);
   const replyPreview = useMemo(() => getReplyPreviewMeta(message.reply_to), [message.reply_to]);
+  const replyAuthorColor = useMemo(() => nameColor(replyAuthorLabel), [replyAuthorLabel]);
   const replyAuthorBg = useMemo(() => avatarBg(replyAuthorLabel), [replyAuthorLabel]);
   const repliesToSelf = useMemo(() => {
     if (!currentUserId || !message.reply_to) return false;
@@ -397,34 +398,34 @@ const MessageItem = memo(function MessageItem({
     <>
       <span
         aria-hidden
-        className="mt-[11px] mr-[-2px] h-[14px] w-7 shrink-0 rounded-tl-[8px] border-l-2 border-t-2 border-riftapp-text-dim/45"
+        className="mt-[8px] h-[9px] w-6 shrink-0 rounded-tl-[6px] border-l-2 border-t-2 border-[#5b6068]"
       />
       <span
-        className={`mt-[6px] flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-riftapp-content shadow-[0_0_0_1px_rgba(255,255,255,0.06)] ${
+        className={`mt-[1px] flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full ${
           replyAuthor ? replyAuthorBg : 'bg-riftapp-content-elevated text-riftapp-text-dim/75'
         }`}
       >
         {replyAuthor?.avatar_url ? (
           <img src={publicAssetUrl(replyAuthor.avatar_url)} alt={replyAuthorLabel} className="h-full w-full object-cover" />
         ) : (
-          <span className={`text-[9px] font-semibold uppercase leading-none ${replyAuthor ? 'text-white/90' : 'text-riftapp-text-dim/75'}`}>
+          <span className={`text-[8px] font-semibold uppercase leading-none ${replyAuthor ? 'text-white/90' : 'text-riftapp-text-dim/75'}`}>
             {replyAuthor ? replyAuthorLabel.slice(0, 1).toUpperCase() : '?'}
           </span>
         )}
       </span>
       <span
-        className="mt-px flex min-w-0 items-center gap-1.5"
+        className="mt-px flex min-w-0 items-center gap-1 overflow-hidden text-[12px] leading-4"
       >
-        <span className="max-w-[38%] shrink-0 truncate text-[12px] font-semibold leading-4 text-riftapp-text-dim/90 transition-colors group-hover/reply:text-riftapp-text">
-          {replyAuthorLabel}
+        <span className={`max-w-[42%] shrink-0 truncate font-medium ${replyAuthorColor} transition-colors group-hover/reply:brightness-110`}>
+          @{replyAuthorLabel}
         </span>
         <span
-          className={`min-w-0 truncate text-[12px] leading-4 transition-colors ${
+          className={`min-w-0 truncate transition-colors ${
             replyPreview.tone === 'default'
-              ? 'text-riftapp-text-dim/75 group-hover/reply:text-riftapp-text-dim'
+              ? 'text-riftapp-text-dim/85 group-hover/reply:text-riftapp-text-dim'
               : replyPreview.tone === 'attachment'
-                ? 'text-riftapp-text-dim/65 group-hover/reply:text-riftapp-text-dim/85'
-                : 'text-riftapp-text-dim/55 group-hover/reply:text-riftapp-text-dim/70'
+                ? 'text-riftapp-text-dim/70 group-hover/reply:text-riftapp-text-dim/85'
+                : 'text-riftapp-text-dim/60 group-hover/reply:text-riftapp-text-dim/75'
           }`}
         >
           {replyPreview.text}
