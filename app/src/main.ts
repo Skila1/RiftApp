@@ -218,7 +218,7 @@ function configureDisplayMediaHandling(): void {
           return;
         }
 
-        if (request.audioRequested && process.platform === "win32" && source.id.startsWith("screen:")) {
+        if (request.audioRequested && process.platform === "win32") {
           callback({ video: source, audio: "loopback" });
           return;
         }

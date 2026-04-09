@@ -1172,9 +1172,11 @@ function screenSharePublishEncoding(fps: ScreenShareFps, resolution: ScreenShare
 function buildScreenShareOptions(kind: ScreenShareKind, fps: ScreenShareFps = 30, resolution: ScreenShareResolution = '1080p') {
   const resConstraints = SCREEN_SHARE_RESOLUTIONS[resolution];
   const options: Record<string, unknown> = {
+    audio: true,
     resolution: { ...resConstraints, frameRate: fps },
     contentHint: 'detail',
     surfaceSwitching: 'include',
+    systemAudio: 'include',
   };
   if (kind === 'tab') {
     options.preferCurrentTab = true;
@@ -1291,7 +1293,7 @@ async function startScreenShare(
       isScreenSharing: true,
       screenShareRequesting: false,
       screenShareSurfaceLabel: options?.surfaceLabel ?? inferSurfaceLabel(state.screenShareKind),
-      screenShareModalOpen: true,
+      screenShareModalOpen: false,
     });
     if (streamId) wsSend('voice_screen_share_update', { stream_id: streamId, sharing: true });
   } catch (err) {
