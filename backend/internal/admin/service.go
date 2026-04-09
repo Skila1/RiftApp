@@ -53,13 +53,14 @@ func (s *Service) IsSeedAdmin(email string) bool {
 }
 
 type LoginResult struct {
-	AdminToken   string   `json:"admin_token,omitempty"`
-	LoginToken   string   `json:"login_token,omitempty"`
-	Requires2FA  bool     `json:"requires_2fa"`
-	NeedsSetup   bool     `json:"needs_setup"`
-	TOTPMethod   string   `json:"totp_method,omitempty"`
-	Role         string   `json:"role,omitempty"`
-	User         *Account `json:"user,omitempty"`
+	AdminToken       string   `json:"admin_token,omitempty"`
+	LoginToken       string   `json:"login_token,omitempty"`
+	Requires2FA      bool     `json:"requires_2fa"`
+	NeedsSetup       bool     `json:"needs_setup"`
+	NeedsPasswordSet bool     `json:"needs_password_set"`
+	TOTPMethod       string   `json:"totp_method,omitempty"`
+	Role             string   `json:"role,omitempty"`
+	User             *Account `json:"user,omitempty"`
 }
 
 func (s *Service) Login(ctx context.Context, email, password, ip, ua string) (*LoginResult, error) {
@@ -69,6 +70,18 @@ func (s *Service) Login(ctx context.Context, email, password, ip, ua string) (*L
 			return nil, ErrInvalidCredentials
 		}
 		return nil, err
+	}
+
+	if acct.MustChangePassword {
+		loginToken, err := s.jwt.GenerateLoginToken(acct.UserID, acct.ID)
+		if err != nil {
+			return nil, err
+		}
+		return &LoginResult{
+			LoginToken:       loginToken,
+			NeedsPasswordSet: true,
+			Role:             acct.Role,
+		}, nil
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(acct.PasswordHash), []byte(password)); err != nil {
@@ -330,14 +343,15 @@ func (s *Service) EnsureSeedAdmins(ctx context.Context) {
 		hash, _ := bcrypt.GenerateFromPassword([]byte(randomPass), bcrypt.DefaultCost)
 		now := time.Now()
 		acct := &Account{
-			ID:           uuid.New().String(),
-			UserID:       userID,
-			PasswordHash: string(hash),
-			TOTPEnabled:  false,
-			TOTPMethod:   "app",
-			Role:         RoleSuperAdmin,
-			CreatedAt:    now,
-			UpdatedAt:    now,
+			ID:                 uuid.New().String(),
+			UserID:             userID,
+			PasswordHash:       string(hash),
+			TOTPEnabled:        false,
+			TOTPMethod:         "app",
+			Role:               RoleSuperAdmin,
+			MustChangePassword: true,
+			CreatedAt:          now,
+			UpdatedAt:          now,
 		}
 		if err := s.repo.Create(ctx, acct); err != nil {
 			log.Printf("admin: failed to seed admin %s: %v", email, err)
@@ -345,6 +359,25 @@ func (s *Service) EnsureSeedAdmins(ctx context.Context) {
 			log.Printf("admin: seeded super_admin account for %s — set password via admin UI or CLI before use", email)
 		}
 	}
+}
+
+func (s *Service) SetInitialPassword(ctx context.Context, loginToken, newPass string) error {
+	claims, err := s.jwt.ValidateLoginToken(loginToken)
+	if err != nil {
+		return ErrInvalidCredentials
+	}
+	acct, err := s.repo.GetByID(ctx, claims.SessionID)
+	if err != nil {
+		return ErrInvalidCredentials
+	}
+	if !acct.MustChangePassword {
+		return ErrAccessDenied
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPass), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	return s.repo.UpdatePassword(ctx, acct.ID, string(hash))
 }
 
 func (s *Service) ChangePassword(ctx context.Context, accountID, oldPass, newPass string) error {

@@ -366,6 +366,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 			r.Post("/verify-2fa", adminAuthH.Verify2FA)
 			r.Post("/setup-totp", adminAuthH.SetupTOTP)
 			r.Post("/confirm-totp", adminAuthH.ConfirmTOTP)
+			r.Post("/set-password", adminAuthH.SetPassword)
 		})
 
 		// Authenticated admin logout

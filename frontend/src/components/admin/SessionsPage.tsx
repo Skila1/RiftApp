@@ -30,6 +30,7 @@ function AdminSessions() {
   const [error, setError] = useState('');
 
   const load = () => {
+    setError('');
     setLoading(true);
     adminApi.listAdminSessions()
       .then((r) => setSessions(r.sessions))
@@ -97,6 +98,7 @@ function UserSessions() {
   const limit = 50;
 
   const load = () => {
+    setError('');
     setLoading(true);
     adminApi.listUserSessions({ limit, offset })
       .then((r) => { setSessions(r.sessions); setTotal(r.total); })

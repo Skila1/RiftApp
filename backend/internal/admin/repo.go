@@ -22,12 +22,12 @@ var ErrNotFound = errors.New("admin: not found")
 func (r *Repo) GetByUserID(ctx context.Context, userID string) (*Account, error) {
 	a := &Account{}
 	err := r.db.QueryRow(ctx,
-		`SELECT a.id, a.user_id, a.password_hash, a.totp_secret, a.totp_enabled, a.totp_method, a.role, a.created_at, a.updated_at,
+		`SELECT a.id, a.user_id, a.password_hash, a.totp_secret, a.totp_enabled, a.totp_method, a.role, a.must_change_password, a.created_at, a.updated_at,
 		        u.username, u.email, u.display_name, u.avatar_url
 		 FROM admin_accounts a
 		 JOIN users u ON a.user_id = u.id
 		 WHERE a.user_id = $1`, userID,
-	).Scan(&a.ID, &a.UserID, &a.PasswordHash, &a.TOTPSecret, &a.TOTPEnabled, &a.TOTPMethod, &a.Role, &a.CreatedAt, &a.UpdatedAt,
+	).Scan(&a.ID, &a.UserID, &a.PasswordHash, &a.TOTPSecret, &a.TOTPEnabled, &a.TOTPMethod, &a.Role, &a.MustChangePassword, &a.CreatedAt, &a.UpdatedAt,
 		&a.Username, &a.Email, &a.DisplayName, &a.AvatarURL)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -41,12 +41,12 @@ func (r *Repo) GetByUserID(ctx context.Context, userID string) (*Account, error)
 func (r *Repo) GetByEmail(ctx context.Context, email string) (*Account, error) {
 	a := &Account{}
 	err := r.db.QueryRow(ctx,
-		`SELECT a.id, a.user_id, a.password_hash, a.totp_secret, a.totp_enabled, a.totp_method, a.role, a.created_at, a.updated_at,
+		`SELECT a.id, a.user_id, a.password_hash, a.totp_secret, a.totp_enabled, a.totp_method, a.role, a.must_change_password, a.created_at, a.updated_at,
 		        u.username, u.email, u.display_name, u.avatar_url
 		 FROM admin_accounts a
 		 JOIN users u ON a.user_id = u.id
 		 WHERE u.email = $1`, email,
-	).Scan(&a.ID, &a.UserID, &a.PasswordHash, &a.TOTPSecret, &a.TOTPEnabled, &a.TOTPMethod, &a.Role, &a.CreatedAt, &a.UpdatedAt,
+	).Scan(&a.ID, &a.UserID, &a.PasswordHash, &a.TOTPSecret, &a.TOTPEnabled, &a.TOTPMethod, &a.Role, &a.MustChangePassword, &a.CreatedAt, &a.UpdatedAt,
 		&a.Username, &a.Email, &a.DisplayName, &a.AvatarURL)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -60,12 +60,12 @@ func (r *Repo) GetByEmail(ctx context.Context, email string) (*Account, error) {
 func (r *Repo) GetByID(ctx context.Context, id string) (*Account, error) {
 	a := &Account{}
 	err := r.db.QueryRow(ctx,
-		`SELECT a.id, a.user_id, a.password_hash, a.totp_secret, a.totp_enabled, a.totp_method, a.role, a.created_at, a.updated_at,
+		`SELECT a.id, a.user_id, a.password_hash, a.totp_secret, a.totp_enabled, a.totp_method, a.role, a.must_change_password, a.created_at, a.updated_at,
 		        u.username, u.email, u.display_name, u.avatar_url
 		 FROM admin_accounts a
 		 JOIN users u ON a.user_id = u.id
 		 WHERE a.id = $1`, id,
-	).Scan(&a.ID, &a.UserID, &a.PasswordHash, &a.TOTPSecret, &a.TOTPEnabled, &a.TOTPMethod, &a.Role, &a.CreatedAt, &a.UpdatedAt,
+	).Scan(&a.ID, &a.UserID, &a.PasswordHash, &a.TOTPSecret, &a.TOTPEnabled, &a.TOTPMethod, &a.Role, &a.MustChangePassword, &a.CreatedAt, &a.UpdatedAt,
 		&a.Username, &a.Email, &a.DisplayName, &a.AvatarURL)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -78,15 +78,15 @@ func (r *Repo) GetByID(ctx context.Context, id string) (*Account, error) {
 
 func (r *Repo) Create(ctx context.Context, a *Account) error {
 	_, err := r.db.Exec(ctx,
-		`INSERT INTO admin_accounts (id, user_id, password_hash, totp_secret, totp_enabled, totp_method, role, created_at, updated_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-		a.ID, a.UserID, a.PasswordHash, a.TOTPSecret, a.TOTPEnabled, a.TOTPMethod, a.Role, a.CreatedAt, a.UpdatedAt)
+		`INSERT INTO admin_accounts (id, user_id, password_hash, totp_secret, totp_enabled, totp_method, role, must_change_password, created_at, updated_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		a.ID, a.UserID, a.PasswordHash, a.TOTPSecret, a.TOTPEnabled, a.TOTPMethod, a.Role, a.MustChangePassword, a.CreatedAt, a.UpdatedAt)
 	return err
 }
 
 func (r *Repo) UpdatePassword(ctx context.Context, id, hash string) error {
 	cmd, err := r.db.Exec(ctx,
-		`UPDATE admin_accounts SET password_hash = $2, updated_at = now() WHERE id = $1`, id, hash)
+		`UPDATE admin_accounts SET password_hash = $2, must_change_password = false, updated_at = now() WHERE id = $1`, id, hash)
 	if err != nil {
 		return err
 	}
@@ -134,7 +134,7 @@ func (r *Repo) Delete(ctx context.Context, id string) error {
 
 func (r *Repo) List(ctx context.Context) ([]Account, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT a.id, a.user_id, a.password_hash, a.totp_secret, a.totp_enabled, a.totp_method, a.role, a.created_at, a.updated_at,
+		`SELECT a.id, a.user_id, a.password_hash, a.totp_secret, a.totp_enabled, a.totp_method, a.role, a.must_change_password, a.created_at, a.updated_at,
 		        u.username, u.email, u.display_name, u.avatar_url
 		 FROM admin_accounts a
 		 JOIN users u ON a.user_id = u.id
@@ -147,7 +147,7 @@ func (r *Repo) List(ctx context.Context) ([]Account, error) {
 	var list []Account
 	for rows.Next() {
 		var a Account
-		if err := rows.Scan(&a.ID, &a.UserID, &a.PasswordHash, &a.TOTPSecret, &a.TOTPEnabled, &a.TOTPMethod, &a.Role, &a.CreatedAt, &a.UpdatedAt,
+		if err := rows.Scan(&a.ID, &a.UserID, &a.PasswordHash, &a.TOTPSecret, &a.TOTPEnabled, &a.TOTPMethod, &a.Role, &a.MustChangePassword, &a.CreatedAt, &a.UpdatedAt,
 			&a.Username, &a.Email, &a.DisplayName, &a.AvatarURL); err != nil {
 			return nil, err
 		}
@@ -199,15 +199,28 @@ func (r *Repo) RevokeSession(ctx context.Context, id string) error {
 }
 
 func (r *Repo) ListSessions(ctx context.Context, accountID string) ([]Session, error) {
-	rows, err := r.db.Query(ctx,
-		`SELECT s.id, s.admin_account_id, s.ip_address, s.user_agent, s.created_at, s.expires_at, s.revoked_at,
-		        u.username, u.email, u.display_name
-		 FROM admin_sessions s
-		 JOIN admin_accounts a ON s.admin_account_id = a.id
-		 JOIN users u ON a.user_id = u.id
-		 WHERE ($1 = '' OR s.admin_account_id = $1)
-		 ORDER BY s.created_at DESC
-		 LIMIT 100`, accountID)
+	const baseCols = `s.id, s.admin_account_id, s.ip_address, s.user_agent, s.created_at, s.expires_at, s.revoked_at,
+		        u.username, u.email, u.display_name`
+	var rows pgx.Rows
+	var err error
+	if accountID == "" {
+		rows, err = r.db.Query(ctx,
+			`SELECT `+baseCols+`
+			 FROM admin_sessions s
+			 JOIN admin_accounts a ON s.admin_account_id = a.id
+			 JOIN users u ON a.user_id = u.id
+			 ORDER BY s.created_at DESC
+			 LIMIT 100`)
+	} else {
+		rows, err = r.db.Query(ctx,
+			`SELECT `+baseCols+`
+			 FROM admin_sessions s
+			 JOIN admin_accounts a ON s.admin_account_id = a.id
+			 JOIN users u ON a.user_id = u.id
+			 WHERE s.admin_account_id = $1
+			 ORDER BY s.created_at DESC
+			 LIMIT 100`, accountID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -249,11 +262,18 @@ func (r *Repo) ListUserSessions(ctx context.Context, limit, offset int) ([]UserS
 	if limit <= 0 {
 		limit = 50
 	}
-	var total int
-	if err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM refresh_tokens WHERE expires_at > now()`).Scan(&total); err != nil {
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
 		return nil, 0, err
 	}
-	rows, err := r.db.Query(ctx,
+	defer tx.Rollback(ctx)
+
+	var total int
+	if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM refresh_tokens WHERE expires_at > now()`).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := tx.Query(ctx,
 		`SELECT rt.id, rt.user_id, rt.expires_at, rt.created_at, u.username, u.email
 		 FROM refresh_tokens rt
 		 JOIN users u ON rt.user_id = u.id
@@ -273,7 +293,12 @@ func (r *Repo) ListUserSessions(ctx context.Context, limit, offset int) ([]UserS
 		}
 		list = append(list, s)
 	}
-	return list, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	_ = tx.Commit(ctx)
+	return list, total, nil
 }
 
 func (r *Repo) RevokeUserSession(ctx context.Context, id string) error {

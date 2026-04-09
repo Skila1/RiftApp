@@ -143,7 +143,7 @@ func main() {
 	adminRepo := admin.NewRepo(db)
 	adminSvc := admin.NewService(adminRepo, cfg.JWTSecret, seedEmails)
 	adminSvc.SetEmailSender(smtpSvc)
-	if len(seedEmails) > 0 {
+	if len(seedEmails) > 0 && os.Getenv("RIFTAPP_BOOTSTRAP_ADMIN_SEED") == "true" {
 		adminSvc.EnsureSeedAdmins(context.Background())
 	}
 

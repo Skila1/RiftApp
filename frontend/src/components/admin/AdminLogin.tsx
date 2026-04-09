@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { adminApi } from '../../api/adminClient';
 import { useAdminStore } from '../../stores/adminStore';
 
-type Step = 'credentials' | '2fa' | 'setup-totp' | 'confirm-totp';
+type Step = 'credentials' | 'set-password' | '2fa' | 'setup-totp' | 'confirm-totp';
 
 export default function AdminLogin() {
   const loginSuccess = useAdminStore((s) => s.loginSuccess);
@@ -17,8 +17,10 @@ export default function AdminLogin() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -33,7 +35,9 @@ export default function AdminLogin() {
         return;
       }
       setLoginToken(res.login_token);
-      if (res.needs_setup) {
+      if (res.needs_password_set) {
+        setStep('set-password');
+      } else if (res.needs_setup) {
         const setup = await adminApi.setupTotp(res.login_token);
         setQrUri(setup.qr_uri);
         setTotpSecret(setup.secret);
@@ -48,7 +52,33 @@ export default function AdminLogin() {
     }
   };
 
-  const handleVerify2FA = async (e: React.FormEvent) => {
+  const handleSetPassword = async (e: FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+    if (newPassword.length < 12) {
+      setError('Password must be at least 12 characters');
+      return;
+    }
+    setError('');
+    setLoading(true);
+    try {
+      await adminApi.setPassword(loginToken, newPassword);
+      setPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setStep('credentials');
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to set password');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerify2FA = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -62,7 +92,7 @@ export default function AdminLogin() {
     }
   };
 
-  const handleConfirmTotp = async (e: React.FormEvent) => {
+  const handleConfirmTotp = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -107,6 +137,43 @@ export default function AdminLogin() {
               <button type="submit" disabled={loading}
                 className="w-full bg-[#00a8fc] hover:bg-[#0090d6] text-white font-medium py-3 rounded-lg transition-colors disabled:opacity-50">
                 {loading ? 'Signing in...' : 'Sign In'}
+              </button>
+            </form>
+          )}
+
+          {step === 'set-password' && (
+            <form onSubmit={handleSetPassword} className="space-y-5">
+              <div className="text-center mb-2">
+                <div className="w-14 h-14 bg-[#fee75c]/10 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-7 h-7 text-[#fee75c]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                </div>
+                <h2 className="text-lg font-bold text-white">Set Your Admin Password</h2>
+                <p className="text-[#949ba4] text-sm mt-1">This account requires a password to be set before first use.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase text-[#b5bac1] mb-2">New Password</label>
+                <input
+                  type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required autoFocus
+                  autoComplete="new-password" minLength={12}
+                  className="w-full bg-[#1e1f22] border border-[#3f4147]/50 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-[#00a8fc] transition-colors"
+                  placeholder="At least 12 characters"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase text-[#b5bac1] mb-2">Confirm Password</label>
+                <input
+                  type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required
+                  autoComplete="new-password"
+                  className="w-full bg-[#1e1f22] border border-[#3f4147]/50 rounded-lg px-4 py-3 text-white text-sm focus:outline-none focus:border-[#00a8fc] transition-colors"
+                  placeholder="Repeat your password"
+                />
+              </div>
+              {error && <p className="text-[#ed4245] text-sm">{error}</p>}
+              <button type="submit" disabled={loading}
+                className="w-full bg-[#00a8fc] hover:bg-[#0090d6] text-white font-medium py-3 rounded-lg transition-colors disabled:opacity-50">
+                {loading ? 'Setting password...' : 'Set Password & Continue'}
               </button>
             </form>
           )}

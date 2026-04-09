@@ -129,6 +129,39 @@ func (h *AdminAuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *AdminAuthHandler) SetPassword(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		LoginToken  string `json:"login_token"`
+		NewPassword string `json:"new_password"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if body.LoginToken == "" || body.NewPassword == "" {
+		writeError(w, http.StatusBadRequest, "login_token and new_password required")
+		return
+	}
+	if len(body.NewPassword) < 12 {
+		writeError(w, http.StatusBadRequest, "password must be at least 12 characters")
+		return
+	}
+
+	if err := h.svc.SetInitialPassword(r.Context(), body.LoginToken, body.NewPassword); err != nil {
+		if errors.Is(err, admin.ErrInvalidCredentials) {
+			writeError(w, http.StatusUnauthorized, "invalid or expired login token")
+			return
+		}
+		if errors.Is(err, admin.ErrAccessDenied) {
+			writeError(w, http.StatusForbidden, "password change not required for this account")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to set password")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func extractClientIP(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		if ip := strings.TrimSpace(strings.SplitN(xff, ",", 2)[0]); ip != "" {

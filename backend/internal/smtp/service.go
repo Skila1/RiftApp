@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	gosmtp "net/smtp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -112,7 +113,7 @@ func (s *Service) TestConnection(ctx context.Context) error {
 	if cfg.Host == "" {
 		return fmt.Errorf("smtp: host not configured")
 	}
-	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	addr := net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
 	conn, err := net.DialTimeout("tcp", addr, 10*time.Second)
 	if err != nil {
 		return fmt.Errorf("smtp: cannot connect to %s: %w", addr, err)
@@ -122,7 +123,7 @@ func (s *Service) TestConnection(ctx context.Context) error {
 }
 
 func sendMail(cfg *Config, to, subject, htmlBody string) error {
-	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	addr := net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
 	from := cfg.FromAddress
 
 	headers := fmt.Sprintf("From: %s <%s>\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=\"utf-8\"\r\n\r\n",

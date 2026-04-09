@@ -36,8 +36,14 @@ class AdminApiClient {
 
   // Auth
   login(email: string, password: string) {
-    return this.request<{ admin_token?: string; login_token?: string; requires_2fa?: boolean; needs_setup?: boolean; totp_method?: string; role?: string }>('/admin/auth/login', {
+    return this.request<{ admin_token?: string; login_token?: string; requires_2fa?: boolean; needs_setup?: boolean; needs_password_set?: boolean; totp_method?: string; role?: string }>('/admin/auth/login', {
       method: 'POST', body: JSON.stringify({ email, password }),
+    });
+  }
+
+  setPassword(loginToken: string, newPassword: string) {
+    return this.request<{ status: string }>('/admin/auth/set-password', {
+      method: 'POST', body: JSON.stringify({ login_token: loginToken, new_password: newPassword }),
     });
   }
 

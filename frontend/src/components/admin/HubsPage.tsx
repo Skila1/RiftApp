@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { adminApi, type AdminHub } from '../../api/adminClient';
 
 export default function HubsPage() {
@@ -30,7 +30,7 @@ export default function HubsPage() {
 
   useEffect(() => { load(); }, [offset, committedSearch]);
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = (e: FormEvent) => {
     e.preventDefault();
     setOffset(0);
     setCommittedSearch(search);

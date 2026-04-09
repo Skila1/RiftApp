@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { adminApi, type AdminAccount } from '../../api/adminClient';
 import { useAdminStore } from '../../stores/adminStore';
+
+const ROLES = ['super_admin', 'admin', 'moderator'] as const;
 
 export default function AdminSettingsPage() {
   const currentAdminUser = useAdminStore((s) => s.adminUser);
@@ -23,7 +25,7 @@ export default function AdminSettingsPage() {
 
   useEffect(() => { load(); }, []);
 
-  const handleAdd = async (e: React.FormEvent) => {
+  const handleAdd = async (e: FormEvent) => {
     e.preventDefault();
     if (!newUserId || !newPassword) return;
     setAdding(true); setError('');
@@ -61,8 +63,6 @@ export default function AdminSettingsPage() {
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-[#00a8fc] border-t-transparent rounded-full animate-spin" /></div>;
 
-  const ROLES = ['super_admin', 'admin', 'moderator'];
-
   return (
     <div className="p-8 max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6">
@@ -88,6 +88,7 @@ export default function AdminSettingsPage() {
             <div>
               <label className="block text-xs font-semibold uppercase text-[#b5bac1] mb-1.5">Admin Password</label>
               <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Set admin password"
+                autoComplete="new-password"
                 className="w-full bg-[#1e1f22] border border-[#3f4147]/50 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#00a8fc]" />
             </div>
           </div>
@@ -140,8 +141,8 @@ export default function AdminSettingsPage() {
                   )}
                 </td>
                 <td className="px-5 py-3 text-right space-x-2">
-                  <button onClick={() => handleResetTotp(a.id)} className="px-2 py-1 text-xs rounded bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 transition-colors">Reset 2FA</button>
-                  <button onClick={() => handleDelete(a.id)} className="px-2 py-1 text-xs rounded bg-[#ed4245]/20 text-[#ed4245] hover:bg-[#ed4245]/30 transition-colors">Remove</button>
+                  <button onClick={() => handleResetTotp(a.id)} aria-label={`Reset 2FA for ${a.email || a.username || a.id}`} className="px-2 py-1 text-xs rounded bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 transition-colors">Reset 2FA</button>
+                  <button onClick={() => handleDelete(a.id)} aria-label={`Remove account ${a.email || a.username || a.id}`} className="px-2 py-1 text-xs rounded bg-[#ed4245]/20 text-[#ed4245] hover:bg-[#ed4245]/30 transition-colors">Remove</button>
                 </td>
               </tr>
             ))}

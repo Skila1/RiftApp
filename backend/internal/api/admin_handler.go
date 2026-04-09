@@ -412,11 +412,17 @@ func (h *AdminHandler) RevokeSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	claims := admin.GetAdminClaims(r.Context())
+
 	var err error
 	switch body.Type {
 	case "user":
 		err = h.adminSvc.RevokeUserSession(r.Context(), id)
 	case "admin":
+		if admin.RoleLevel(claims.Role) < admin.RoleLevel(admin.RoleSuperAdmin) {
+			writeError(w, http.StatusForbidden, "only super admins can revoke admin sessions")
+			return
+		}
 		err = h.adminSvc.RevokeAdminSession(r.Context(), id)
 	default:
 		writeError(w, http.StatusBadRequest, "type must be 'user' or 'admin'")

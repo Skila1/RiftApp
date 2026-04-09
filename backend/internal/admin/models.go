@@ -3,15 +3,16 @@ package admin
 import "time"
 
 type Account struct {
-	ID           string    `json:"id"`
-	UserID       string    `json:"user_id"`
-	PasswordHash string    `json:"-"`
-	TOTPSecret   *string   `json:"-"`
-	TOTPEnabled  bool      `json:"totp_enabled"`
-	TOTPMethod   string    `json:"totp_method"`
-	Role         string    `json:"role"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID                 string    `json:"id"`
+	UserID             string    `json:"user_id"`
+	PasswordHash       string    `json:"-"`
+	TOTPSecret         *string   `json:"-"`
+	TOTPEnabled        bool      `json:"totp_enabled"`
+	TOTPMethod         string    `json:"totp_method"`
+	Role               string    `json:"role"`
+	MustChangePassword bool      `json:"-"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 
 	Username    string  `json:"username,omitempty"`
 	Email       *string `json:"email,omitempty"`
