@@ -21,6 +21,11 @@ import { hasPermission, PermManageMessages } from '../../utils/permissions';
 import { getReplyAuthorLabel, getReplyPreviewMeta } from '../../utils/replyPreview';
 import { jumpToMessageId } from '../../utils/messageJump';
 
+type MessageMenuMedia = {
+  url: string;
+  kind: 'image' | 'video';
+};
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return bytes + ' B';
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -303,7 +308,7 @@ const MessageItem = memo(function MessageItem({
   const [deleting, setDeleting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showForwardModal, setShowForwardModal] = useState(false);
-  const [messageMenu, setMessageMenu] = useState<{ x: number; y: number; mediaUrl?: string } | null>(null);
+  const [messageMenu, setMessageMenu] = useState<{ x: number; y: number; media?: MessageMenuMedia } | null>(null);
   const [editing, setEditing] = useState(false);
   const [editDraft, setEditDraft] = useState(message.content);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -458,19 +463,15 @@ const MessageItem = memo(function MessageItem({
   const handleMessageContextMenu = useCallback((e: React.MouseEvent) => {
     if (interactionsDisabled) return;
     e.preventDefault();
-    // Detect if the right-click target is a media element
     const target = e.target as HTMLElement;
-    let mediaUrl: string | undefined;
-    if (target instanceof HTMLImageElement && target.src) {
-      mediaUrl = target.src;
-    } else if (target instanceof HTMLVideoElement && target.src) {
-      mediaUrl = target.src;
-    } else {
-      // Check if target is inside a media wrapper (e.g. play overlay on video)
-      const video = target.closest('.group\\/video')?.querySelector('video');
-      if (video?.src) mediaUrl = video.src;
+    let media: MessageMenuMedia | undefined;
+    const mediaNode = target.closest<HTMLElement>('[data-message-media]');
+    const mediaKind = mediaNode?.getAttribute('data-message-media');
+    const mediaUrl = mediaNode?.getAttribute('data-message-media-url');
+    if (mediaUrl && (mediaKind === 'image' || mediaKind === 'video')) {
+      media = { url: mediaUrl, kind: mediaKind };
     }
-    setMessageMenu({ x: e.clientX, y: e.clientY, mediaUrl });
+    setMessageMenu({ x: e.clientX, y: e.clientY, media });
   }, [interactionsDisabled]);
 
   useEffect(() => {
@@ -736,7 +737,7 @@ const MessageItem = memo(function MessageItem({
           canEdit={canEdit}
           canDelete={canDelete}
           canPin={canPin}
-          mediaUrl={messageMenu.mediaUrl}
+          media={messageMenu.media}
           onClose={() => setMessageMenu(null)}
           onForward={() => {
             setMessageMenu(null);
@@ -1233,6 +1234,8 @@ function VideoPlayer({ src, compact = false }: { src: string; compact?: boolean 
   return (
     <div
       ref={containerRef}
+      data-message-media="video"
+      data-message-media-url={src}
       className={`mt-1 ${compact ? 'w-full max-w-full rounded-lg' : 'max-w-[420px] rounded-xl border border-riftapp-border/40'} overflow-hidden bg-black relative select-none group/video`}
       tabIndex={0}
       onContextMenu={(e) => e.preventDefault()}
@@ -1388,6 +1391,8 @@ function InlineMediaImage({ url, type, compact = false }: { url: string; type: '
       <button
         type="button"
         onClick={() => setLightbox(true)}
+        data-message-media="image"
+        data-message-media-url={url}
         className={`relative block rounded-xl overflow-hidden mt-1 cursor-pointer text-left group/inline-media
           ${isSticker ? '' : compact ? '' : 'border border-riftapp-border/40 bg-riftapp-bg/40 hover:brightness-110 hover:scale-[1.02] hover:shadow-elevation-md'}
           transition-all duration-200`}
@@ -1427,6 +1432,8 @@ function ImageThumb({
     <button
       type="button"
       onClick={onClick}
+      data-message-media="image"
+      data-message-media-url={src}
       className={`relative block overflow-hidden transition-all duration-200 cursor-pointer text-left group/thumb ${compact ? 'rounded-lg' : 'rounded-xl border border-riftapp-border/40 bg-riftapp-bg/40 hover:brightness-110 hover:scale-[1.02] hover:shadow-elevation-md'}`}
     >
       {/* Skeleton placeholder */}
@@ -1612,6 +1619,8 @@ function ImageGrid({
             key={img.id}
             type="button"
             onClick={() => onOpen(idx)}
+            data-message-media="image"
+            data-message-media-url={img.src}
             className={`relative overflow-hidden transition-all duration-200 cursor-pointer ${compact ? 'rounded-lg' : 'rounded-xl border border-riftapp-border/40 bg-riftapp-bg/40 hover:brightness-110 hover:scale-[1.02] hover:shadow-elevation-md'}`}
             style={{ aspectRatio: '4/3' }}
           >
