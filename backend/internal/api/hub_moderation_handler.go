@@ -80,6 +80,10 @@ func (h *HubModerationHandler) BanMember(w http.ResponseWriter, r *http.Request)
 	hubID := chi.URLParam(r, "hubID")
 	targetID := chi.URLParam(r, "userID")
 	userID := middleware.GetUserID(r.Context())
+	if targetID == userID {
+		writeError(w, http.StatusBadRequest, "cannot ban yourself")
+		return
+	}
 	if !h.hubSvc.HasPermission(r.Context(), hubID, userID, models.PermBanMembers) {
 		writeError(w, http.StatusForbidden, "missing permissions")
 		return

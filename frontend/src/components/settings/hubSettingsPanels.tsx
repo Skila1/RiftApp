@@ -575,19 +575,28 @@ export function BansPanel({ hubId }: { hubId?: string }) {
   const [bans, setBans] = useState<import('../../types').HubBan[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!hubId) return;
     setLoading(true);
-    api.listBans(hubId).then((res) => setBans(res.bans)).catch(() => {}).finally(() => setLoading(false));
+    setError('');
+    api.listBans(hubId)
+      .then((res) => setBans(res.bans))
+      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load bans'))
+      .finally(() => setLoading(false));
   }, [hubId]);
 
   const handleUnban = async (userId: string) => {
     if (!hubId) return;
+    const previousBans = bans;
+    setBans((prev) => prev.filter((b) => b.user_id !== userId));
     try {
       await api.unbanMember(hubId, userId);
-      setBans((prev) => prev.filter((b) => b.user_id !== userId));
-    } catch { /* ignore */ }
+    } catch (err) {
+      setBans(previousBans);
+      setError(err instanceof Error ? err.message : 'Failed to revoke ban');
+    }
   };
 
   const filtered = search.trim()
@@ -612,6 +621,7 @@ export function BansPanel({ hubId }: { hubId?: string }) {
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search Bans by User Id or Username" className={hsTw.input + ' pl-10'} />
         </div>
       </div>
+      {error && <p className="text-[#ed4245] text-[13px] mb-3">{error}</p>}
       <div className={`${hsTw.card} divide-y divide-[#1e1f22]`}>
         {loading ? (
           <p className="p-6 text-[13px] text-[#949ba4] text-center">Loading...</p>
@@ -646,7 +656,9 @@ export function AutoModPanel({ hubId }: { hubId?: string }) {
 
   useEffect(() => {
     if (!hubId) return;
-    api.getAutoModSettings(hubId).then(setSettings).catch(() => {});
+    api.getAutoModSettings(hubId).then(setSettings).catch((err) => {
+      setSaveError(err instanceof Error ? err.message : 'Failed to load settings');
+    });
   }, [hubId]);
 
   const handleToggle = async (enabled: boolean) => {
@@ -693,6 +705,8 @@ export function AutoModPanel({ hubId }: { hubId?: string }) {
       <p className={`${hsTw.subtitle} mt-2 mb-6`}>
         Content moderation powered by LocalMod AI. Automatically filter messages for toxicity, spam, and NSFW content.
       </p>
+
+      {saveError && !settings && <p className="text-[#ed4245] text-[13px] mb-4">{saveError}</p>}
 
       {settings && (
         <>

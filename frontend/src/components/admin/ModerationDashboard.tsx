@@ -56,6 +56,8 @@ export default function ModerationDashboard() {
     } catch (err) {
       if (err instanceof Error && err.message.toLowerCase().includes('forbidden')) {
         setAccessDenied(true);
+      } else {
+        console.warn('Failed to load moderation stats:', err);
       }
     }
   };
@@ -174,7 +176,7 @@ export default function ModerationDashboard() {
                             <div key={i} className="flex items-center gap-2">
                               <span className={`w-2 h-2 rounded-full ${res.flagged ? 'bg-red-500' : 'bg-green-500'}`} />
                               <span className="font-medium">{res.classifier}</span>
-                              <span className="text-riftapp-text-dim">{(res.confidence * 100).toFixed(0)}%</span>
+                              <span className="text-riftapp-text-dim">{res.confidence != null ? `${(res.confidence * 100).toFixed(0)}%` : '–'}</span>
                               {res.severity !== 'none' && <span className="text-xs text-riftapp-text-dim">({res.severity})</span>}
                             </div>
                           ))}
