@@ -26,11 +26,11 @@ jobs:
         working-directory: app
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -172,17 +172,57 @@ jobs:
 
       # GitHub Release (optional but kept)
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.version.outputs.value }}
-          name: Rift v${{ steps.version.outputs.value }}
-          body: |
-            Rift Desktop v${{ steps.version.outputs.value }}
-
-            Download **Rift Setup ${{ steps.version.outputs.value }}.exe** below.
-          files: |
-            app/dist-electron/*.exe
-            app/dist-electron/*.blockmap
-            app/dist-electron/latest.yml
+        shell: pwsh
+        working-directory: .
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          function Invoke-Gh {
+            param(
+              [Parameter(ValueFromRemainingArguments = $true)]
+              [string[]]$Arguments
+            )
+
+            & gh @Arguments
+            if ($LASTEXITCODE -ne 0) {
+              throw "gh $($Arguments -join ' ') failed with exit code $LASTEXITCODE"
+            }
+          }
+
+          $tag = "v${{ steps.version.outputs.value }}"
+          $title = "Rift v${{ steps.version.outputs.value }}"
+          $notesPath = Join-Path $env:RUNNER_TEMP "rift-release-notes.md"
+
+          @"
+          Rift Desktop v${{ steps.version.outputs.value }}
+
+          Download **Rift Setup ${{ steps.version.outputs.value }}.exe** below.
+          "@ | Set-Content -Path $notesPath -Encoding UTF8
+
+          $assetPatterns = @(
+            "app/dist-electron/*.exe"
+            "app/dist-electron/*.blockmap"
+            "app/dist-electron/latest.yml"
+          )
+
+          $assets = foreach ($pattern in $assetPatterns) {
+            Get-ChildItem -Path $pattern -File -ErrorAction SilentlyContinue |
+              ForEach-Object { $_.FullName }
+          }
+
+          if (-not $assets) {
+            throw "No release assets found."
+          }
+
+          & gh release view $tag *> $null
+          $releaseExists = $LASTEXITCODE -eq 0
+
+          if ($releaseExists) {
+            Invoke-Gh release edit $tag --title $title --notes-file $notesPath
+          } else {
+            Invoke-Gh release create $tag --verify-tag --title $title --notes-file $notesPath
+          }
+
+          foreach ($asset in $assets) {
+            Invoke-Gh release upload $tag $asset --clobber
+          }
