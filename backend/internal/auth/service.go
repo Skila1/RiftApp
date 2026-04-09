@@ -119,12 +119,12 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (*AuthResponse, e
 		return nil, err
 	}
 
-	if bannedAt != nil {
-		return nil, ErrAccountSuspended
-	}
-
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(input.Password)); err != nil {
 		return nil, ErrInvalidCredentials
+	}
+
+	if bannedAt != nil {
+		return nil, ErrAccountSuspended
 	}
 
 	resp, err := s.generateTokens(&user)
@@ -171,7 +171,9 @@ func (s *Service) RefreshTokens(ctx context.Context, refreshToken string) (*Auth
 	s.db.Exec(ctx, `DELETE FROM refresh_tokens WHERE id = $1`, tokenID)
 
 	var bannedAt *time.Time
-	_ = s.db.QueryRow(ctx, `SELECT banned_at FROM users WHERE id = $1`, claims.UserID).Scan(&bannedAt)
+	if err := s.db.QueryRow(ctx, `SELECT banned_at FROM users WHERE id = $1`, claims.UserID).Scan(&bannedAt); err != nil {
+		return nil, err
+	}
 	if bannedAt != nil {
 		return nil, ErrAccountSuspended
 	}

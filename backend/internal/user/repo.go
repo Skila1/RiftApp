@@ -151,9 +151,15 @@ func (r *Repo) GetCoMemberIDs(ctx context.Context, userID string) ([]string, err
 }
 
 func (r *Repo) BanUser(ctx context.Context, userID string) error {
-	_, err := r.db.Exec(ctx,
+	cmd, err := r.db.Exec(ctx,
 		`UPDATE users SET banned_at = now(), status = 0, updated_at = now() WHERE id = $1`, userID)
-	return err
+	if err != nil {
+		return err
+	}
+	if cmd.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (r *Repo) IsBanned(ctx context.Context, userID string) (bool, error) {

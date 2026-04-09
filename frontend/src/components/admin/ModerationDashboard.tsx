@@ -21,6 +21,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 export default function ModerationDashboard() {
   const latestReportsRequestRef = useRef(0);
+  const latestStatsRequestRef = useRef(0);
   const navigate = useNavigate();
   const [reports, setReports] = useState<Report[]>([]);
   const [total, setTotal] = useState(0);
@@ -63,14 +64,17 @@ export default function ModerationDashboard() {
   };
 
   const loadStats = async () => {
+    const requestId = ++latestStatsRequestRef.current;
     try {
       const s = await api.getModerationStats();
+      if (requestId !== latestStatsRequestRef.current) return;
       setStats(s);
     } catch (err) {
+      if (requestId !== latestStatsRequestRef.current) return;
       if (isAccessDeniedError(err)) {
         setAccessDenied(true);
       } else {
-        console.warn('Failed to load moderation stats:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load stats');
       }
     }
   };
@@ -166,11 +170,13 @@ export default function ModerationDashboard() {
                 className={`bg-riftapp-content-elevated border border-riftapp-border/30 rounded-lg p-4 cursor-pointer hover:border-riftapp-border/60 transition-colors ${selectedReport?.id === r.id ? 'ring-1 ring-riftapp-accent' : ''}`}
                 role="button"
                 tabIndex={0}
-                onClick={() => setSelectedReport(selectedReport?.id === r.id ? null : r)}
+                aria-expanded={selectedReport?.id === r.id}
+                onClick={() => { setSelectedReport(selectedReport?.id === r.id ? null : r); setActionNote(''); }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
                     setSelectedReport(selectedReport?.id === r.id ? null : r);
+                    setActionNote('');
                   }
                 }}
               >

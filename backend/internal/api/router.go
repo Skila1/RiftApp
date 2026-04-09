@@ -288,6 +288,9 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 	customWriteRL := middleware.NewRateLimiter(rate.Every(10*time.Second), 5)
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth(deps.AuthService))
+		if deps.UserRepo != nil {
+			r.Use(middleware.BanCheck(deps.UserRepo))
+		}
 		r.Use(middleware.RateLimit(customWriteRL))
 
 		r.Post("/api/hubs/{hubID}/emojis", customH.CreateEmoji)

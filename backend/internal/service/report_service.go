@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/riftapp-cloud/riftapp/internal/apperror"
 	"github.com/riftapp-cloud/riftapp/internal/moderation"
@@ -84,7 +86,10 @@ func (s *ReportService) Create(ctx context.Context, reporterID string, input Cre
 func (s *ReportService) Get(ctx context.Context, id string) (*repository.Report, error) {
 	rpt, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return nil, apperror.NotFound("report not found")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperror.NotFound("report not found")
+		}
+		return nil, err
 	}
 	return rpt, nil
 }
@@ -111,9 +116,29 @@ type TakeActionInput struct {
 	TargetHubID  *string `json:"target_hub_id"`
 }
 
+var allowedActionTypes = map[string]bool{
+	"ban": true, "warn": true, "delete_message": true,
+}
+
 func (s *ReportService) TakeAction(ctx context.Context, reportID, performedBy string, input TakeActionInput) error {
 	if input.ActionType == "" {
 		return apperror.BadRequest("action_type is required")
+	}
+	if !allowedActionTypes[input.ActionType] {
+		return apperror.BadRequest("unknown action_type: " + input.ActionType)
+	}
+
+	var execErr error
+	switch input.ActionType {
+	case "ban":
+		execErr = s.executeBan(ctx, input.TargetUserID, reportID, performedBy)
+	case "warn":
+		execErr = s.executeWarn(ctx, input.TargetUserID, reportID, performedBy)
+	case "delete_message":
+		execErr = s.executeDeleteMessage(ctx, reportID)
+	}
+	if execErr != nil {
+		return execErr
 	}
 
 	action := &repository.ModerationAction{
@@ -126,16 +151,7 @@ func (s *ReportService) TakeAction(ctx context.Context, reportID, performedBy st
 		CreatedAt:    time.Now(),
 	}
 	if err := s.repo.CreateAction(ctx, action); err != nil {
-		return apperror.Internal("failed to record action", err)
-	}
-
-	switch input.ActionType {
-	case "ban":
-		return s.executeBan(ctx, input.TargetUserID, reportID, performedBy)
-	case "warn":
-		return s.executeWarn(ctx, input.TargetUserID, reportID, performedBy)
-	case "delete_message":
-		return s.executeDeleteMessage(ctx, reportID)
+		log.Printf("moderation: action %s succeeded but audit log failed: %v", input.ActionType, err)
 	}
 
 	return nil

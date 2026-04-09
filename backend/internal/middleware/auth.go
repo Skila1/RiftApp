@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strings"
 
@@ -48,7 +49,13 @@ func BanCheck(checker BanChecker) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			userID := GetUserID(r.Context())
 			if userID != "" {
-				if banned, _ := checker.IsBanned(r.Context(), userID); banned {
+				banned, err := checker.IsBanned(r.Context(), userID)
+				if err != nil {
+					log.Printf("ban-check: failed to check ban status for %s: %v", userID, err)
+					http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+					return
+				}
+				if banned {
 					http.Error(w, `{"error":"account suspended"}`, http.StatusForbidden)
 					return
 				}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   SettingsDivider,
   InfoBanner,
@@ -587,6 +587,7 @@ export function BansPanel({ hubId }: { hubId?: string }) {
     }
     setLoading(true);
     setError('');
+    setBans([]);
     api.listBans(hubId)
       .then((res) => { if (active) setBans(res.bans); })
       .catch((err) => { if (active) setError(err instanceof Error ? err.message : 'Failed to load bans'); })
@@ -661,19 +662,22 @@ export function AutoModPanel({ hubId }: { hubId?: string }) {
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const lastSavedRef = useRef<import('../../types').HubAutoModSettings | null>(null);
 
   useEffect(() => {
     let active = true;
     if (!hubId) {
       setSettings(null);
+      lastSavedRef.current = null;
       setLoadingSettings(false);
       return () => { active = false; };
     }
     setLoadingSettings(true);
     setSettings(null);
+    lastSavedRef.current = null;
     setSaveError('');
     api.getAutoModSettings(hubId)
-      .then((s) => { if (active) setSettings(s); })
+      .then((s) => { if (active) { setSettings(s); lastSavedRef.current = s; } })
       .catch((err) => { if (active) setSaveError(err instanceof Error ? err.message : 'Failed to load settings'); })
       .finally(() => { if (active) setLoadingSettings(false); });
     return () => { active = false; };
@@ -681,7 +685,6 @@ export function AutoModPanel({ hubId }: { hubId?: string }) {
 
   const handleToggle = async (enabled: boolean) => {
     if (!settings || !hubId) return;
-    const previous = settings;
     const updated = { ...settings, enabled };
     setSettings(updated);
     setSaving(true);
@@ -689,8 +692,9 @@ export function AutoModPanel({ hubId }: { hubId?: string }) {
     try {
       const res = await api.updateAutoModSettings(hubId, updated);
       setSettings(res);
+      lastSavedRef.current = res;
     } catch (err) {
-      setSettings(previous);
+      setSettings(lastSavedRef.current);
       setSaveError(err instanceof Error ? err.message : 'Failed to save');
     }
     setSaving(false);
@@ -704,14 +708,14 @@ export function AutoModPanel({ hubId }: { hubId?: string }) {
 
   const handleSave = async () => {
     if (!settings || !hubId) return;
-    const previous = settings;
     setSaving(true);
     setSaveError('');
     try {
       const res = await api.updateAutoModSettings(hubId, settings);
       setSettings(res);
+      lastSavedRef.current = res;
     } catch (err) {
-      setSettings(previous);
+      setSettings(lastSavedRef.current);
       setSaveError(err instanceof Error ? err.message : 'Failed to save');
     }
     setSaving(false);
