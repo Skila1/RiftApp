@@ -125,7 +125,9 @@ func (h *DeveloperHandler) UpdateApplication(w http.ResponseWriter, r *http.Requ
 	if v, ok := body["description"].(string); ok {
 		app.Description = v
 	}
+	iconChanged := false
 	if v, ok := body["icon"]; ok {
+		iconChanged = true
 		if s, ok := v.(string); ok {
 			app.Icon = &s
 		} else {
@@ -188,6 +190,9 @@ func (h *DeveloperHandler) UpdateApplication(w http.ResponseWriter, r *http.Requ
 	if err := h.svc.UpdateApplication(r.Context(), app); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if iconChanged && app.BotUserID != nil {
+		_ = h.svc.UpdateBotUserAvatar(r.Context(), *app.BotUserID, app.Icon)
 	}
 	writeJSON(w, http.StatusOK, app)
 }
@@ -280,6 +285,9 @@ func (h *DeveloperHandler) UpdateBotSettings(w http.ResponseWriter, r *http.Requ
 		if botUser != nil {
 			_ = h.svc.UpdateBotUser(r.Context(), *app.BotUserID, botUser.Username, botUser.DisplayName, avatarPtr)
 		}
+	}
+	if avatarPtr != nil {
+		app.Icon = avatarPtr
 	}
 	if v, ok := body["bot_public"].(bool); ok {
 		app.BotPublic = v

@@ -137,6 +137,10 @@ func (s *DeveloperService) UpdateBotUser(ctx context.Context, id, username, disp
 	return s.repo.UpdateBotUser(ctx, id, username, displayName, avatarURL)
 }
 
+func (s *DeveloperService) UpdateBotUserAvatar(ctx context.Context, id string, avatarURL *string) error {
+	return s.repo.UpdateBotUserAvatar(ctx, id, avatarURL)
+}
+
 func (s *DeveloperService) CountGuildsForBotUser(ctx context.Context, botUserID string) (int, error) {
 	return s.repo.CountGuildsForBotUser(ctx, botUserID)
 }

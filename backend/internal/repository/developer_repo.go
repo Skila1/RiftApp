@@ -179,6 +179,11 @@ func (r *DeveloperRepo) UpdateBotUser(ctx context.Context, id, username, display
 	return err
 }
 
+func (r *DeveloperRepo) UpdateBotUserAvatar(ctx context.Context, id string, avatarURL *string) error {
+	_, err := r.db.Exec(ctx, `UPDATE users SET avatar_url=$2,updated_at=now() WHERE id=$1`, id, avatarURL)
+	return err
+}
+
 func (r *DeveloperRepo) GetUserByID(ctx context.Context, id string) (*models.User, error) {
 	u := &models.User{}
 	err := r.db.QueryRow(ctx, `
