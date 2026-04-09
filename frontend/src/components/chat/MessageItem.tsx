@@ -376,6 +376,10 @@ const MessageItem = memo(function MessageItem({
   const replyAuthorLabel = useMemo(() => getReplyAuthorLabel(message.reply_to), [message.reply_to]);
   const replyPreview = useMemo(() => getReplyPreviewMeta(message.reply_to), [message.reply_to]);
   const replyAuthorBg = useMemo(() => avatarBg(replyAuthorLabel), [replyAuthorLabel]);
+  const repliesToSelf = useMemo(() => {
+    if (!currentUserId || !message.reply_to) return false;
+    return message.reply_to.author_id === currentUserId || message.reply_to.author?.id === currentUserId;
+  }, [currentUserId, message.reply_to]);
 
   // Detect whether the current user is mentioned in this message
   const mentionsSelf = useMemo(() => {
@@ -393,10 +397,10 @@ const MessageItem = memo(function MessageItem({
     <>
       <span
         aria-hidden
-        className="mt-[9px] h-[10px] w-6 shrink-0 rounded-tl-[6px] border-l-2 border-t-2 border-riftapp-border/35"
+        className="mt-[8px] mr-[-4px] h-[12px] w-7 shrink-0 rounded-tl-[7px] border-l-2 border-t-2 border-riftapp-border-light/70"
       />
       <span
-        className={`mt-px flex h-4 w-4 shrink-0 items-center justify-center overflow-hidden rounded-full ${
+        className={`mt-px flex h-4.5 w-4.5 shrink-0 items-center justify-center overflow-hidden rounded-full ring-1 ring-riftapp-border/30 ${
           replyAuthor ? replyAuthorBg : 'bg-riftapp-content-elevated text-riftapp-text-dim/75'
         }`}
       >
@@ -631,7 +635,7 @@ const MessageItem = memo(function MessageItem({
       className={isPreview
         ? 'relative rounded-xl'
         : `group relative py-0.5 -mx-4 px-4 transition-colors duration-100 ${
-            mentionsSelf
+            mentionsSelf || repliesToSelf
               ? 'bg-riftapp-mention-highlight-bg border-l-[3px] border-riftapp-mention-highlight-border hover:bg-riftapp-mention-highlight-hover'
               : 'hover:bg-riftapp-content-elevated/60'
           } ${
@@ -692,7 +696,7 @@ const MessageItem = memo(function MessageItem({
           <div
             onClick={interactionsDisabled ? undefined : handleProfileClick}
             onContextMenu={interactionsDisabled ? undefined : handleUserContextMenu}
-            className={`w-10 h-10 rounded-full flex-shrink-0 mt-0.5 overflow-hidden ${interactionsDisabled ? '' : 'cursor-pointer hover:opacity-80 transition-opacity'}`}
+            className={`h-9 w-9 rounded-full flex-shrink-0 mt-0.5 overflow-hidden ${interactionsDisabled ? '' : 'cursor-pointer hover:opacity-80 transition-opacity'}`}
           >
             {author?.avatar_url ? (
               <img src={publicAssetUrl(author.avatar_url)} alt={authorName} className="w-full h-full object-cover" />
@@ -720,7 +724,7 @@ const MessageItem = memo(function MessageItem({
           </div>
         </div>
       ) : (
-        <div className="pl-[52px]">
+        <div className="pl-12">
           {replyPreviewBlock}
           {contentBlock}
         </div>
