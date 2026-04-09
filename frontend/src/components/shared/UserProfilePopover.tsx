@@ -6,6 +6,7 @@ import { useFriendStore } from '../../stores/friendStore';
 import { useDMStore } from '../../stores/dmStore';
 import { api } from '../../api/client';
 import StatusDot, { statusLabel } from './StatusDot';
+import BotBadge from './BotBadge';
 import type { RelationshipType } from '../../types';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 
@@ -165,7 +166,10 @@ export default function UserProfilePopover() {
 
         {/* Body */}
         <div className="pt-10 px-4 pb-4">
-          <p className="text-lg font-bold leading-tight">{user.display_name || user.username}</p>
+          <p className="text-lg font-bold leading-tight flex items-center gap-1.5">
+            {user.display_name || user.username}
+            {user.is_bot && <BotBadge />}
+          </p>
           <p className="text-sm text-riftapp-text-dim">@{user.username}</p>
 
           <div className="mt-3 pt-3 border-t border-riftapp-border/40 space-y-2.5">

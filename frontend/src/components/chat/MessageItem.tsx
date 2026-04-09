@@ -14,6 +14,7 @@ import EmojiPicker, { type EmojiSelection } from '../shared/EmojiPicker';
 import MessageContextMenu from '../context-menus/MessageContextMenu';
 import DeleteMessageModal from '../modals/DeleteMessageModal';
 import ModalCloseButton from '../shared/ModalCloseButton';
+import BotBadge from '../shared/BotBadge';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { hasPermission, PermManageMessages } from '../../utils/permissions';
 import { getReplyAuthorLabel, getReplyPreviewMeta } from '../../utils/replyPreview';
@@ -704,6 +705,7 @@ const MessageItem = memo(function MessageItem({
               <span onClick={interactionsDisabled ? undefined : handleProfileClick} onContextMenu={interactionsDisabled ? undefined : handleUserContextMenu} className={`font-semibold text-[15px] ${interactionsDisabled ? '' : 'cursor-pointer hover:underline'} ${isOwn ? 'text-riftapp-accent-hover' : color}`}>
                 {authorName}
               </span>
+              {author?.is_bot && <BotBadge />}
               <span className="text-[11px] text-riftapp-text-dim/80 select-none">
                 {renderTimestamp(message.created_at)}
               </span>

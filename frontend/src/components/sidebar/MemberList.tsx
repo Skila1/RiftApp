@@ -4,6 +4,7 @@ import { useStreamStore } from '../../stores/streamStore';
 import { useProfilePopoverStore } from '../../stores/profilePopoverStore';
 import { useUserContextMenuStore } from '../../stores/userContextMenuStore';
 import StatusDot, { statusLabel } from '../shared/StatusDot';
+import BotBadge from '../shared/BotBadge';
 import type { User } from '../../types';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { dispatchChatSearchRequest } from '../../utils/chatSearchBridge';
@@ -79,7 +80,10 @@ function UserRow({ user }: { user: User }) {
         </div>
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium leading-tight text-[#e4e6eb]">{user.display_name || user.username}</p>
+        <p className="truncate text-sm font-medium leading-tight text-[#e4e6eb] flex items-center gap-1.5">
+          <span className="truncate">{user.display_name || user.username}</span>
+          {user.is_bot && <BotBadge />}
+        </p>
       </div>
       <span className="text-[10px] text-[#777d88] opacity-0 transition-opacity group-hover:opacity-100">
         {statusLabel(status)}

@@ -7,6 +7,7 @@ import type { User } from '../../types';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { normalizeUser } from '../../utils/entityAssets';
 import StatusDot from '../shared/StatusDot';
+import BotBadge from '../shared/BotBadge';
 
 export default function DMSidebar() {
   const conversations = useDMStore((s) => s.conversations);
@@ -237,8 +238,9 @@ export default function DMSidebar() {
 
                   {/* Name + last message */}
                   <div className="flex-1 min-w-0 text-left">
-                    <div className="text-sm font-medium truncate">
-                      {conv.recipient.display_name}
+                    <div className="text-sm font-medium truncate flex items-center gap-1.5">
+                      <span className="truncate">{conv.recipient.display_name}</span>
+                      {conv.recipient.is_bot && <BotBadge />}
                     </div>
                     {conv.last_message && (
                       <div className="text-xs text-riftapp-text-dim truncate">

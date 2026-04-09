@@ -12,6 +12,7 @@ import { useAppSettingsStore } from '../../stores/appSettingsStore';
 import { useHubStore } from '../../stores/hubStore';
 import type { HubRole, RelationshipType, User } from '../../types';
 import ModalCloseButton from './ModalCloseButton';
+import BotBadge from './BotBadge';
 import StatusDot, { statusLabel } from './StatusDot';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { normalizeUser } from '../../utils/entityAssets';
@@ -201,7 +202,10 @@ export default function FullProfileModal() {
         <div className="px-8 pt-20 pb-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
-              <h2 className="text-[28px] font-black tracking-tight leading-none">{user.display_name || user.username}</h2>
+              <h2 className="text-[28px] font-black tracking-tight leading-none flex items-center gap-2">
+                {user.display_name || user.username}
+                {user.is_bot && <BotBadge className="text-[11px] px-1.5 py-0.5" />}
+              </h2>
               <p className="mt-2 text-sm text-riftapp-text-dim">@{user.username}</p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center rounded-full border border-riftapp-border/50 bg-riftapp-panel/60 px-3 py-1 text-[12px] font-semibold text-riftapp-text-muted">
