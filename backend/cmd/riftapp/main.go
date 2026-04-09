@@ -80,6 +80,10 @@ func main() {
 	friendSvc := service.NewFriendService(friendRepo, blockRepo, wsHub)
 	rankSvc := service.NewRankService(rankRepo, hubRepo)
 
+	// Developer portal
+	devRepo := repository.NewDeveloperRepo(db)
+	devSvc := service.NewDeveloperService(devRepo, cfg.JWTSecret)
+
 	// Upload handler (S3-compatible storage, e.g. Cloudflare R2)
 	uploadH, err := api.NewUploadHandler(cfg, db)
 	if err != nil {
@@ -105,6 +109,12 @@ func main() {
 		RankService:             rankSvc,
 		HubCustomizationService: customSvc,
 		HubCustomizationRepo:    customRepo,
+		DeveloperService:        devSvc,
+		DeveloperRepo:           devRepo,
+		HubRepo:                 hubRepo,
+		StreamRepo:              streamRepo,
+		MsgRepo:                 msgRepo,
+		RankRepo:                rankRepo,
 		WSHub:                   wsHub,
 		Config:                  cfg,
 		UploadHandler:           uploadH,
