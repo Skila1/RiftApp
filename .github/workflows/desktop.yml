@@ -26,11 +26,11 @@ jobs:
         working-directory: app
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
 
@@ -78,7 +78,7 @@ jobs:
           $pkg.version = "${{ steps.version.outputs.value }}"
           $pkg | ConvertTo-Json -Depth 20 | Set-Content package.json -Encoding UTF8
 
-      - run: npm install
+      - run: npm ci --omit=optional --omit=peer
 
       # 🔥 Install Wrangler (NEW)
       - name: Install Wrangler

@@ -4,10 +4,11 @@
  * "Rift" in Task Manager, search, and Alt-Tab instead of "Electron".
  *
  * We do this here because signAndEditExecutable is false (winCodeSign
- * symlink errors on non-admin Windows), so electron-builder skips rcedit.
+ * symlink errors on non-admin Windows), so electron-builder does not patch
+ * the Windows executable metadata for us.
  */
 const path = require("path");
-const { rcedit } = require("rcedit");
+const { patchWindowsMetadata } = require("./patch-windows-metadata.cjs");
 
 module.exports = async function afterPack(context) {
   if (context.electronPlatformName !== "win32") return;
@@ -19,18 +20,13 @@ module.exports = async function afterPack(context) {
 
   console.log(`  • afterPack: patching ${productName}.exe metadata`);
 
-  await rcedit(exePath, {
-    icon: icoPath,
-    "version-string": {
-      ProductName: productName,
-      FileDescription: productName,
-      CompanyName: pkg.author || "RiftApp",
-      LegalCopyright: pkg.build.copyright || "",
-      OriginalFilename: `${productName}.exe`,
-      InternalName: productName,
-    },
-    "file-version": pkg.version,
-    "product-version": pkg.version,
+  patchWindowsMetadata({
+    exePath,
+    icoPath,
+    version: pkg.version,
+    productName,
+    companyName: pkg.author || "RiftApp",
+    copyright: pkg.build.copyright || "",
   });
 
   console.log(`  • afterPack: done`);

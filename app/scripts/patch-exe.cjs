@@ -1,10 +1,10 @@
 /**
  * Patches Rift.exe with the correct icon, product name, and file description
  * so Task Manager / Windows Search show "Rift" instead of "Electron".
- * Runs after electron-builder (which skips rcedit due to signAndEditExecutable: false).
+ * Runs after electron-builder because signAndEditExecutable is false.
  */
 const path = require("path");
-const rcedit = require("rcedit");
+const { patchWindowsMetadata } = require("./patch-windows-metadata.cjs");
 const pkg = require("../package.json");
 
 const exePath = path.join(
@@ -19,18 +19,13 @@ const version = pkg.version;
 
 async function main() {
   console.log(`Patching ${exePath} …`);
-  await rcedit(exePath, {
-    icon: icoPath,
-    "version-string": {
-      ProductName: pkg.build.productName,
-      FileDescription: pkg.build.productName,
-      CompanyName: pkg.author || "RiftApp",
-      LegalCopyright: pkg.build.copyright,
-      OriginalFilename: `${pkg.build.productName}.exe`,
-      InternalName: pkg.build.productName,
-    },
-    "file-version": version,
-    "product-version": version,
+  patchWindowsMetadata({
+    exePath,
+    icoPath,
+    version,
+    productName: pkg.build.productName,
+    companyName: pkg.author || "RiftApp",
+    copyright: pkg.build.copyright || "",
   });
   console.log("Done — exe metadata updated.");
 }
