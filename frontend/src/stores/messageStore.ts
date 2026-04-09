@@ -168,7 +168,7 @@ interface MessageState {
   /** Per-stream message history for the session (instant hub/channel switching). */
   streamMessagesCache: Record<string, { messages: Message[]; updatedAt: number }>;
 
-  loadMessages: (streamId: string, opts?: { force?: boolean }) => Promise<void>;
+  loadMessages: (streamId: string, opts?: { force?: boolean; silent?: boolean }) => Promise<void>;
   ensureMessageLoaded: (streamId: string, messageId: string) => Promise<boolean>;
   sendMessage: (content: string, attachmentIds?: string[], replyToMessageId?: string) => Promise<void>;
   addMessage: (message: Message) => void;
@@ -237,6 +237,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
   loadMessages: async (streamId, opts) => {
     const myId = ++loadMessagesRequestId;
     const cachedEntry = get().streamMessagesCache[streamId];
+    const preserveVisibleMessages = opts?.silent === true && (cachedEntry?.messages?.length ?? 0) > 0;
     const activeOk = () =>
       myId === loadMessagesRequestId && useStreamStore.getState().activeStreamId === streamId;
 
@@ -248,7 +249,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
 
     if (!activeOk()) return;
     set({
-      messagesLoading: true,
+      messagesLoading: !preserveVisibleMessages,
       messages: cachedEntry?.messages?.length ? cachedEntry.messages : [],
     });
 

@@ -21,7 +21,7 @@ interface DMState {
   openDM: (recipientId: string) => Promise<void>;
   setActiveConversation: (convId: string) => Promise<void>;
   clearActive: () => void;
-  loadDMMessages: (convId: string) => Promise<void>;
+  loadDMMessages: (convId: string, opts?: { silent?: boolean }) => Promise<void>;
   ensureMessageLoaded: (convId: string, messageId: string) => Promise<boolean>;
   sendDMMessage: (content: string, attachmentIds?: string[], replyToMessageId?: string) => Promise<void>;
   addDMMessage: (message: Message) => void;
@@ -85,8 +85,12 @@ export const useDMStore = create<DMState>((set, get) => ({
     set({ activeConversationId: null, dmMessages: [] });
   },
 
-  loadDMMessages: async (convId) => {
-    set({ dmMessagesLoading: true });
+  loadDMMessages: async (convId, opts) => {
+    const currentState = get();
+    const hasVisibleMessages = currentState.activeConversationId === convId
+      && currentState.dmMessages.some((message) => message.conversation_id === convId);
+
+    set({ dmMessagesLoading: !(opts?.silent === true && hasVisibleMessages) });
     try {
       const fetched = normalizeMessages(await api.getDMMessages(convId));
       set((s) => {

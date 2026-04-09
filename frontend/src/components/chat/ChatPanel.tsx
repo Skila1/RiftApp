@@ -842,7 +842,7 @@ export default function ChatPanel({
 
       if (isDMMode && activeConversationId) {
         const convId = activeConversationId;
-        void useDMStore.getState().loadDMMessages(convId).finally(() => {
+        void useDMStore.getState().loadDMMessages(convId, { silent: true }).finally(() => {
           if (useDMStore.getState().activeConversationId !== convId) return;
           restore();
         });
@@ -853,7 +853,7 @@ export default function ChatPanel({
         const streamId = activeStreamId;
         void useMessageStore
           .getState()
-          .loadMessages(streamId, { force: true })
+          .loadMessages(streamId, { force: true, silent: true })
           .finally(() => {
             if (useStreamStore.getState().activeStreamId !== streamId) return;
             restore();
