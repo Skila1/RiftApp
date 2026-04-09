@@ -15,11 +15,15 @@ function getAuthHeaders(): Record<string, string> {
 
 async function registerTokenOnServer(token: string, platform: string): Promise<void> {
   try {
-    await fetch(`${API_BASE}/device-tokens`, {
+    const resp = await fetch(`${API_BASE}/device-tokens`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({ token, platform }),
     });
+    if (!resp.ok) {
+      console.error('Device token registration returned', resp.status);
+      return;
+    }
     currentToken = token;
   } catch (err) {
     console.error('Failed to register device token:', err);
@@ -49,8 +53,6 @@ export async function initPushNotifications(
     return;
   }
 
-  await PushNotifications.register();
-
   await PushNotifications.addListener('registration', (token) => {
     const platform = Capacitor.getPlatform() as 'ios' | 'android';
     void registerTokenOnServer(token.value, platform);
@@ -59,6 +61,8 @@ export async function initPushNotifications(
   await PushNotifications.addListener('registrationError', (err) => {
     console.error('Push registration failed:', err);
   });
+
+  await PushNotifications.register();
 
   await PushNotifications.addListener('pushNotificationReceived', (notification) => {
     console.log('Push received in foreground:', notification);

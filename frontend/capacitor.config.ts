@@ -5,10 +5,8 @@ const config: CapacitorConfig = {
   appName: 'RiftApp',
   webDir: 'dist',
   server: {
-    // During local dev, point the native WebView at the Vite dev server
-    // so HMR works. Comment out (or remove) for production builds.
-    ...(process.env.CAPACITOR_DEV === '1'
-      ? { url: 'http://10.0.2.2:5173', cleartext: true }
+    ...(process.env.CAPACITOR_DEV_URL
+      ? { url: process.env.CAPACITOR_DEV_URL, cleartext: true }
       : {}),
     androidScheme: 'https',
   },

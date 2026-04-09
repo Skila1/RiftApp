@@ -53,6 +53,12 @@ func (h *DeviceTokenHandler) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *DeviceTokenHandler) Unregister(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
 	var body struct {
 		Token string `json:"token"`
 	}
@@ -66,7 +72,7 @@ func (h *DeviceTokenHandler) Unregister(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := h.repo.Delete(r.Context(), body.Token); err != nil {
+	if err := h.repo.Delete(r.Context(), userID, body.Token); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to unregister device token")
 		return
 	}

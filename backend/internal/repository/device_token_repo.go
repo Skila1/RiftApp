@@ -44,8 +44,8 @@ func (r *DeviceTokenRepo) Upsert(ctx context.Context, userID, token, platform st
 	return dt, nil
 }
 
-func (r *DeviceTokenRepo) Delete(ctx context.Context, token string) error {
-	_, err := r.db.Exec(ctx, `DELETE FROM device_tokens WHERE token = $1`, token)
+func (r *DeviceTokenRepo) Delete(ctx context.Context, userID, token string) error {
+	_, err := r.db.Exec(ctx, `DELETE FROM device_tokens WHERE user_id = $1 AND token = $2`, userID, token)
 	return err
 }
 

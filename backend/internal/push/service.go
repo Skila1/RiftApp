@@ -100,7 +100,7 @@ func (s *Service) SendToUser(ctx context.Context, userID string, p service.PushP
 			if r.Error != nil {
 				log.Printf("push: token %d failed: %v", i, r.Error)
 				if isTokenInvalid(r.Error) {
-					_ = s.tokenRepo.Delete(ctx, registrationTokens[i])
+					_ = s.tokenRepo.Delete(ctx, tokens[i].UserID, registrationTokens[i])
 				}
 			}
 		}
@@ -125,7 +125,6 @@ func isTokenInvalid(err error) bool {
 	for _, code := range []string{
 		"registration-token-not-registered",
 		"invalid-registration-token",
-		"messaging/invalid-argument",
 	} {
 		if containsStr(errStr, code) {
 			return true

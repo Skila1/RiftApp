@@ -109,6 +109,9 @@ func (s *NotificationService) Create(ctx context.Context, userID, ntype, title s
 
 	if s.pushSvc != nil {
 		go func() {
+			pushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
 			pushBody := title
 			if body != nil && *body != "" {
 				pushBody = *body
@@ -123,12 +126,14 @@ func (s *NotificationService) Create(ctx context.Context, userID, ntype, title s
 			if referenceID != nil {
 				data["reference_id"] = *referenceID
 			}
-			_ = s.pushSvc.SendToUser(context.Background(), userID, PushPayload{
+			if err := s.pushSvc.SendToUser(pushCtx, userID, PushPayload{
 				Title:       title,
 				Body:        pushBody,
 				Data:        data,
 				CollapseKey: ntype,
-			})
+			}); err != nil {
+				log.Printf("push: send to user %s failed: %v", userID, err)
+			}
 		}()
 	}
 }

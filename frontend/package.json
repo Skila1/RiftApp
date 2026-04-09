@@ -10,9 +10,9 @@
     "cap:sync": "npm run build && npx cap sync",
     "cap:open:ios": "npx cap open ios",
     "cap:open:android": "npx cap open android",
-    "build:mobile": "npm run build && npx cap sync",
-    "build:ios": "npm run build && npx cap sync ios && npx cap open ios",
-    "build:android": "npm run build && npx cap sync android && npx cap open android",
+    "build:mobile": "npx cross-env VITE_CAPACITOR=1 npm run build && npx cap sync",
+    "build:ios": "npx cross-env VITE_CAPACITOR=1 npm run build && npx cap sync ios && npx cap open ios",
+    "build:android": "npx cross-env VITE_CAPACITOR=1 npm run build && npx cap sync android && npx cap open android",
     "icons:generate": "npx @capacitor/assets generate --iconBackgroundColor #111214 --splashBackgroundColor #111214"
   },
   "dependencies": {
@@ -48,6 +48,7 @@
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.0",
     "autoprefixer": "^10.4.19",
+    "cross-env": "^10.1.0",
     "esbuild": "^0.27.7",
     "jsdom": "^29.0.1",
     "msw": "^2.12.14",

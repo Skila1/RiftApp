@@ -151,7 +151,7 @@ function NativeShellBridge() {
       void initPushNotifications((path) => navigate(path));
     }
     return () => {
-      if (!isAuthenticated && isNative()) {
+      if (isNative()) {
         void teardownPushNotifications();
       }
     };

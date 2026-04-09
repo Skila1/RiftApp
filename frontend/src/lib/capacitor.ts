@@ -81,7 +81,8 @@ export function setupDeepLinks(
 
   const listener = App.addListener('appUrlOpen', (event: URLOpenListenerEvent) => {
     const url = new URL(event.url);
-    const path = url.pathname + url.search + url.hash;
+    const hostPrefix = url.host && url.protocol !== 'https:' && url.protocol !== 'http:' ? `/${url.host}` : '';
+    const path = hostPrefix + url.pathname + url.search + url.hash;
     if (path) {
       navigate(path);
     }
