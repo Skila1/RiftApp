@@ -19,6 +19,14 @@ func NewRankHandler(svc *service.RankService, hub *ws.Hub) *RankHandler {
 	return &RankHandler{svc: svc, hub: hub}
 }
 
+func (h *RankHandler) broadcastRoleUpdate(hubID string) {
+	if h.hub == nil || hubID == "" {
+		return
+	}
+	h.hub.RefreshHubSubscriptions(hubID)
+	h.hub.BroadcastToHubMembers(hubID, ws.NewEvent(ws.OpRoleUpdate, map[string]string{"hub_id": hubID}))
+}
+
 func (h *RankHandler) List(w http.ResponseWriter, r *http.Request) {
 	hubID := chi.URLParam(r, "hubID")
 	userID := middleware.GetUserID(r.Context())
@@ -47,9 +55,7 @@ func (h *RankHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
-	if h.hub != nil {
-		h.hub.BroadcastToHubMembers(hubID, ws.NewEvent(ws.OpRoleUpdate, map[string]string{"hub_id": hubID}))
-	}
+	h.broadcastRoleUpdate(hubID)
 	writeData(w, http.StatusCreated, rank)
 }
 
@@ -72,9 +78,7 @@ func (h *RankHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
-	if h.hub != nil {
-		h.hub.BroadcastToHubMembers(hubID, ws.NewEvent(ws.OpRoleUpdate, map[string]string{"hub_id": hubID}))
-	}
+	h.broadcastRoleUpdate(hubID)
 	writeData(w, http.StatusOK, rank)
 }
 
@@ -86,9 +90,7 @@ func (h *RankHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
-	if h.hub != nil {
-		h.hub.BroadcastToHubMembers(hubID, ws.NewEvent(ws.OpRoleUpdate, map[string]string{"hub_id": hubID}))
-	}
+	h.broadcastRoleUpdate(hubID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -102,9 +104,7 @@ func (h *RankHandler) AssignRank(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
-	if h.hub != nil {
-		h.hub.BroadcastToHubMembers(hubID, ws.NewEvent(ws.OpRoleUpdate, map[string]string{"hub_id": hubID}))
-	}
+	h.broadcastRoleUpdate(hubID)
 	writeData(w, http.StatusOK, map[string]string{"status": "assigned"})
 }
 
@@ -117,8 +117,6 @@ func (h *RankHandler) RemoveRank(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
-	if h.hub != nil {
-		h.hub.BroadcastToHubMembers(hubID, ws.NewEvent(ws.OpRoleUpdate, map[string]string{"hub_id": hubID}))
-	}
+	h.broadcastRoleUpdate(hubID)
 	writeData(w, http.StatusOK, map[string]string{"status": "removed"})
 }

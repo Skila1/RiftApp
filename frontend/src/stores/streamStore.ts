@@ -168,6 +168,11 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       api.getStreams(hubId),
       api.getCategories(hubId),
     ]);
+    const isActiveHub = () => useHubStore.getState().activeHubId === hubId;
+    if (!isActiveHub()) {
+      return;
+    }
+
     set((s) => {
       const streamHubMap = { ...s.streamHubMap };
       for (const st of streams) {
@@ -186,6 +191,47 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       };
       return { streams, categories, streamHubMap, hubLayoutCache };
     });
+
+    if (!isActiveHub()) {
+      return;
+    }
+
+    const currentActiveStreamId = get().activeStreamId;
+    if (currentActiveStreamId && streams.some((stream) => stream.id === currentActiveStreamId)) {
+      return;
+    }
+
+    const nextActiveStreamId = streams.find((stream) => stream.type === 0)?.id ?? null;
+    if (!isActiveHub()) {
+      return;
+    }
+    useMessageStore.getState().clearMessages();
+    if (!isActiveHub()) {
+      return;
+    }
+    set({ activeStreamId: nextActiveStreamId });
+    if (!nextActiveStreamId) {
+      return;
+    }
+
+    if (!isActiveHub()) {
+      return;
+    }
+    await useMessageStore.getState().loadMessages(nextActiveStreamId);
+    if (!isActiveHub() || get().activeStreamId !== nextActiveStreamId) {
+      return;
+    }
+    if (useVoiceChannelUiStore.getState().isOpen) {
+      return;
+    }
+    if (!isActiveHub() || get().activeStreamId !== nextActiveStreamId) {
+      return;
+    }
+    await get().ackStream(nextActiveStreamId);
+    if (!isActiveHub() || get().activeStreamId !== nextActiveStreamId) {
+      return;
+    }
+    await useNotificationStore.getState().markStreamNotificationsRead(nextActiveStreamId);
   },
 
   setActiveStream: async (streamId) => {

@@ -29,8 +29,9 @@ type VoiceHandler struct {
 }
 
 const (
-	soundboardMaxPlays = 3
-	soundboardWindow   = 5 * time.Second
+	soundboardMaxPlays    = 3
+	soundboardWindow      = 5 * time.Second
+	moderatorMoveGrantTTL = 30 * time.Second
 )
 
 func NewVoiceHandler(cfg *config.Config, hubSvc *service.HubService, streamSvc *service.StreamService, hub *ws.Hub, customRepo *repository.HubCustomizationRepo) *VoiceHandler {
@@ -64,16 +65,17 @@ func (h *VoiceHandler) Token(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.hubSvc.GetStreamHubID(r.Context(), streamID, userID); err != nil {
+	stream, err := h.hubSvc.GetStreamForMember(r.Context(), streamID, userID)
+	if err != nil {
 		writeError(w, http.StatusForbidden, "stream not found or access denied")
 		return
 	}
-	stream, err := h.streamSvc.Get(r.Context(), streamID, userID)
-	if err != nil || stream.Type != 1 {
+	if stream.Type != 1 {
 		writeError(w, http.StatusBadRequest, "stream is not a voice channel")
 		return
 	}
-	if !h.hubSvc.HasStreamPermission(r.Context(), streamID, userID, models.PermConnectVoice) {
+	hasModeratorMoveGrant := h.hub != nil && h.hub.HasVoiceJoinGrant(userID, streamID)
+	if !h.hubSvc.HasStreamPermission(r.Context(), streamID, userID, models.PermConnectVoice) && !hasModeratorMoveGrant {
 		writeError(w, http.StatusForbidden, "you do not have permission to connect to voice")
 		return
 	}
@@ -181,6 +183,7 @@ func (h *VoiceHandler) MoveUser(w http.ResponseWriter, r *http.Request) {
 		writeData(w, http.StatusOK, map[string]string{"status": "noop"})
 		return
 	}
+	h.hub.GrantVoiceJoinGrant(input.UserID, input.TargetStreamID, moderatorMoveGrantTTL)
 	h.hub.SendToUser(input.UserID, ws.NewEvent(ws.OpVoiceMove, ws.VoiceMoveData{StreamID: input.TargetStreamID}))
 
 	writeData(w, http.StatusOK, map[string]string{"status": "moved"})

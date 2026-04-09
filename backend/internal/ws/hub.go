@@ -5,21 +5,38 @@ import (
 	"encoding/json"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+type StreamPermissionChecker interface {
+	CanViewStream(ctx context.Context, streamID, userID string) bool
+	CanSendMessages(ctx context.Context, streamID, userID string) bool
+	CanConnectVoice(ctx context.Context, streamID, userID string) bool
+}
+
+type streamSubscription struct {
+	client     *Client
+	authorized bool
+}
+
+const voiceJoinGrantTTL = 30 * time.Second
+
 type Hub struct {
-	clients       map[string]map[string]*Client // userID -> sessionID -> client
-	streamSubs    map[string]map[string]*Client // streamID -> sessionKey -> client
-	voiceState    map[string]map[string]bool    // streamID -> set of userIDs in voice
-	voiceDeafened map[string]map[string]bool    // streamID -> set of deafened userIDs
-	register      chan *Client
-	unregister    chan *Client
-	broadcast     chan *BroadcastMessage
-	mu            sync.RWMutex
-	db            *pgxpool.Pool
+	clients                map[string]map[string]*Client             // userID -> sessionID -> client
+	streamSubs             map[string]map[string]*streamSubscription // streamID -> sessionKey -> subscription
+	voiceState             map[string]map[string]bool                // streamID -> set of userIDs in voice
+	voiceDeafened          map[string]map[string]bool                // streamID -> set of deafened userIDs
+	voiceJoinGrants        map[string]map[string]time.Time           // userID -> streamID -> expiry
+	register               chan *Client
+	unregister             chan *Client
+	broadcast              chan *BroadcastMessage
+	mu                     sync.RWMutex
+	db                     *pgxpool.Pool
+	permChecker            StreamPermissionChecker
+	missingPermCheckerOnce sync.Once
 }
 
 type BroadcastMessage struct {
@@ -30,15 +47,20 @@ type BroadcastMessage struct {
 
 func NewHub(db *pgxpool.Pool) *Hub {
 	return &Hub{
-		clients:       make(map[string]map[string]*Client),
-		streamSubs:    make(map[string]map[string]*Client),
-		voiceState:    make(map[string]map[string]bool),
-		voiceDeafened: make(map[string]map[string]bool),
-		register:      make(chan *Client),
-		unregister:    make(chan *Client),
-		broadcast:     make(chan *BroadcastMessage, 256),
-		db:            db,
+		clients:         make(map[string]map[string]*Client),
+		streamSubs:      make(map[string]map[string]*streamSubscription),
+		voiceState:      make(map[string]map[string]bool),
+		voiceDeafened:   make(map[string]map[string]bool),
+		voiceJoinGrants: make(map[string]map[string]time.Time),
+		register:        make(chan *Client),
+		unregister:      make(chan *Client),
+		broadcast:       make(chan *BroadcastMessage, 256),
+		db:              db,
 	}
+}
+
+func (h *Hub) SetPermissionChecker(checker StreamPermissionChecker) {
+	h.permChecker = checker
 }
 
 func GenerateSessionID() string {
@@ -105,12 +127,11 @@ func (h *Hub) Run() {
 
 		case msg := <-h.broadcast:
 			h.mu.RLock()
-			seen := make(map[string]bool)
-			for _, client := range h.streamSubs[msg.StreamID] {
-				if client.userID != msg.Exclude && !seen[client.userID+":"+client.sessionID] {
-					seen[client.userID+":"+client.sessionID] = true
-					client.Send(msg.Data)
+			for _, sub := range h.streamSubs[msg.StreamID] {
+				if !sub.authorized || sub.client.userID == msg.Exclude {
+					continue
 				}
+				sub.client.Send(msg.Data)
 			}
 			h.mu.RUnlock()
 		}
@@ -184,6 +205,213 @@ func (h *Hub) setPresence(userID string, status int) {
 
 func (h *Hub) Register(client *Client) {
 	h.register <- client
+}
+
+func (h *Hub) logMissingPermissionChecker() {
+	h.missingPermCheckerOnce.Do(func() {
+		log.Printf("ws: permission checker missing; call SetPermissionChecker before serving websocket auth")
+	})
+}
+
+func (h *Hub) hubStreamIDs(hubID string) []string {
+	if h.db == nil {
+		return nil
+	}
+	ctx := context.Background()
+	rows, err := h.db.Query(ctx, `SELECT id FROM streams WHERE hub_id = $1`, hubID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	streamIDs := make([]string, 0)
+	for rows.Next() {
+		var streamID string
+		if err := rows.Scan(&streamID); err != nil {
+			continue
+		}
+		streamIDs = append(streamIDs, streamID)
+	}
+	return streamIDs
+}
+
+func (h *Hub) unsubscribeClientFromStream(client *Client, streamID string) {
+	client.Unsubscribe(streamID)
+	sessionKey := client.userID + ":" + client.sessionID
+	h.mu.Lock()
+	if subs, ok := h.streamSubs[streamID]; ok {
+		delete(subs, sessionKey)
+		if len(subs) == 0 {
+			delete(h.streamSubs, streamID)
+		}
+	}
+	h.mu.Unlock()
+}
+
+func (h *Hub) setStreamSubscription(client *Client, streamID string, authorized bool) {
+	client.Subscribe(streamID)
+	sessionKey := client.userID + ":" + client.sessionID
+	h.mu.Lock()
+	if h.streamSubs[streamID] == nil {
+		h.streamSubs[streamID] = make(map[string]*streamSubscription)
+	}
+	h.streamSubs[streamID][sessionKey] = &streamSubscription{client: client, authorized: authorized}
+	h.mu.Unlock()
+}
+
+func (h *Hub) DropStreamSubscriptions(streamID string) {
+	h.mu.Lock()
+	subs := h.streamSubs[streamID]
+	delete(h.streamSubs, streamID)
+	h.mu.Unlock()
+	for _, sub := range subs {
+		sub.client.Unsubscribe(streamID)
+	}
+}
+
+func (h *Hub) RefreshHubSubscriptions(hubID string) {
+	streamIDs := h.hubStreamIDs(hubID)
+	if len(streamIDs) == 0 {
+		return
+	}
+
+	type snapshot struct {
+		streamID   string
+		sessionKey string
+		userID     string
+	}
+
+	snapshots := make([]snapshot, 0)
+	h.mu.RLock()
+	for _, streamID := range streamIDs {
+		for sessionKey, sub := range h.streamSubs[streamID] {
+			snapshots = append(snapshots, snapshot{streamID: streamID, sessionKey: sessionKey, userID: sub.client.userID})
+		}
+	}
+	h.mu.RUnlock()
+
+	if len(snapshots) == 0 {
+		return
+	}
+
+	updates := make(map[string]map[string]bool, len(streamIDs))
+	checked := make(map[string]bool, len(snapshots))
+	for _, snap := range snapshots {
+		cacheKey := snap.streamID + ":" + snap.userID
+		allowed, ok := checked[cacheKey]
+		if !ok {
+			allowed = h.canViewStream(snap.streamID, snap.userID)
+			checked[cacheKey] = allowed
+		}
+		if updates[snap.streamID] == nil {
+			updates[snap.streamID] = make(map[string]bool)
+		}
+		updates[snap.streamID][snap.sessionKey] = allowed
+	}
+
+	h.mu.Lock()
+	for streamID, sessionUpdates := range updates {
+		subs, ok := h.streamSubs[streamID]
+		if !ok {
+			continue
+		}
+		for sessionKey, allowed := range sessionUpdates {
+			if sub, ok := subs[sessionKey]; ok {
+				sub.authorized = allowed
+			}
+		}
+	}
+	h.mu.Unlock()
+}
+
+func (h *Hub) GrantVoiceJoinGrant(userID, streamID string, ttl time.Duration) {
+	if userID == "" || streamID == "" || ttl <= 0 {
+		return
+	}
+	h.mu.Lock()
+	if h.voiceJoinGrants[userID] == nil {
+		h.voiceJoinGrants[userID] = make(map[string]time.Time)
+	}
+	h.voiceJoinGrants[userID][streamID] = time.Now().Add(ttl)
+	h.mu.Unlock()
+}
+
+func (h *Hub) HasVoiceJoinGrant(userID, streamID string) bool {
+	now := time.Now()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	streamGrants := h.voiceJoinGrants[userID]
+	if len(streamGrants) == 0 {
+		return false
+	}
+	expiresAt, ok := streamGrants[streamID]
+	if !ok {
+		return false
+	}
+	if now.After(expiresAt) {
+		delete(streamGrants, streamID)
+		if len(streamGrants) == 0 {
+			delete(h.voiceJoinGrants, userID)
+		}
+		return false
+	}
+	return true
+}
+
+func (h *Hub) clearVoiceJoinGrant(userID, streamID string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	streamGrants := h.voiceJoinGrants[userID]
+	if len(streamGrants) == 0 {
+		return
+	}
+	delete(streamGrants, streamID)
+	if len(streamGrants) == 0 {
+		delete(h.voiceJoinGrants, userID)
+	}
+}
+
+func (h *Hub) clearVoiceJoinGrants(userID string) {
+	h.mu.Lock()
+	delete(h.voiceJoinGrants, userID)
+	h.mu.Unlock()
+}
+
+func (h *Hub) canViewStream(streamID, userID string) bool {
+	if h.permChecker == nil {
+		h.logMissingPermissionChecker()
+		return false
+	}
+	return h.permChecker.CanViewStream(context.Background(), streamID, userID)
+}
+
+func (h *Hub) canSendMessages(streamID, userID string) bool {
+	if h.permChecker == nil {
+		h.logMissingPermissionChecker()
+		return false
+	}
+	return h.permChecker.CanSendMessages(context.Background(), streamID, userID)
+}
+
+func (h *Hub) canConnectVoice(streamID, userID string) bool {
+	if h.permChecker == nil {
+		h.logMissingPermissionChecker()
+		return false
+	}
+	return h.permChecker.CanConnectVoice(context.Background(), streamID, userID)
+}
+
+func (h *Hub) isUserInVoiceStream(streamID, userID string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.voiceState[streamID] != nil && h.voiceState[streamID][userID]
+}
+
+func (h *Hub) canJoinVoiceStream(streamID, userID string) bool {
+	if h.canConnectVoice(streamID, userID) {
+		return true
+	}
+	return h.GetUserVoiceStreamID(userID) == streamID
 }
 
 func (h *Hub) BroadcastToStream(streamID string, data []byte, excludeUserID string) {
@@ -294,14 +522,12 @@ func (h *Hub) handleClientEvent(c *Client, evt *Event) {
 		if err := json.Unmarshal(evt.Data, &data); err != nil || data.StreamID == "" {
 			return
 		}
-		c.Subscribe(data.StreamID)
-		sessionKey := c.userID + ":" + c.sessionID
-		h.mu.Lock()
-		if h.streamSubs[data.StreamID] == nil {
-			h.streamSubs[data.StreamID] = make(map[string]*Client)
+		authorized := h.canViewStream(data.StreamID, c.userID)
+		if !authorized {
+			h.unsubscribeClientFromStream(c, data.StreamID)
+			return
 		}
-		h.streamSubs[data.StreamID][sessionKey] = c
-		h.mu.Unlock()
+		h.setStreamSubscription(c, data.StreamID, authorized)
 
 	case OpUnsubscribe:
 		var data SubscribeData
@@ -324,6 +550,9 @@ func (h *Hub) handleClientEvent(c *Client, evt *Event) {
 		if err := json.Unmarshal(evt.Data, &data); err != nil || data.StreamID == "" {
 			return
 		}
+		if !h.canSendMessages(data.StreamID, c.userID) {
+			return
+		}
 		h.BroadcastToStream(data.StreamID, NewEvent(OpTypingStart, TypingStartData{
 			UserID:   c.userID,
 			StreamID: data.StreamID,
@@ -332,6 +561,9 @@ func (h *Hub) handleClientEvent(c *Client, evt *Event) {
 	case OpTypingStop:
 		var data TypingData
 		if err := json.Unmarshal(evt.Data, &data); err != nil || data.StreamID == "" {
+			return
+		}
+		if !h.canSendMessages(data.StreamID, c.userID) {
 			return
 		}
 		h.BroadcastToStream(data.StreamID, NewEvent(OpTypingStop, TypingStopData{
@@ -380,6 +612,19 @@ func (h *Hub) handleClientEvent(c *Client, evt *Event) {
 }
 
 func (h *Hub) handleVoiceState(userID, streamID, action string) {
+	switch action {
+	case "join":
+		if h.isUserInVoiceStream(streamID, userID) || !h.canJoinVoiceStream(streamID, userID) {
+			return
+		}
+	case "leave":
+		if !h.isUserInVoiceStream(streamID, userID) {
+			return
+		}
+	default:
+		return
+	}
+
 	h.mu.Lock()
 	switch action {
 	case "join":
@@ -402,6 +647,7 @@ func (h *Hub) handleVoiceState(userID, streamID, action string) {
 		}
 		h.voiceState[streamID][userID] = true
 		h.mu.Unlock()
+		h.clearVoiceJoinGrant(userID, streamID)
 		h.broadcastVoiceState(streamID, userID, "join")
 	case "leave":
 		if users, ok := h.voiceState[streamID]; ok {
@@ -417,6 +663,7 @@ func (h *Hub) handleVoiceState(userID, streamID, action string) {
 			}
 		}
 		h.mu.Unlock()
+		h.clearVoiceJoinGrant(userID, streamID)
 		h.broadcastVoiceState(streamID, userID, "leave")
 	default:
 		h.mu.Unlock()
@@ -424,17 +671,16 @@ func (h *Hub) handleVoiceState(userID, streamID, action string) {
 }
 
 func (h *Hub) broadcastVoiceState(streamID, userID, action string) {
-	h.broadcastToHubMembers(streamID, NewEvent(OpVoiceStateUpdate, VoiceStateData{
+	h.broadcastToStreamObservers(streamID, NewEvent(OpVoiceStateUpdate, VoiceStateData{
 		StreamID: streamID,
 		UserID:   userID,
 		Action:   action,
 	}))
 }
 
-// broadcastToHubMembers sends evt to every connected member of the hub that owns streamID.
-func (h *Hub) broadcastToHubMembers(streamID string, evt []byte) {
+func (h *Hub) getHubMemberIDsForStream(streamID string) []string {
 	if h.db == nil {
-		return
+		return nil
 	}
 	ctx := context.Background()
 
@@ -444,23 +690,33 @@ func (h *Hub) broadcastToHubMembers(streamID string, evt []byte) {
 		 JOIN streams s ON s.hub_id = hm.hub_id
 		 WHERE s.id = $1`, streamID)
 	if err != nil {
-		return
+		return nil
 	}
 	defer rows.Close()
 
-	h.mu.RLock()
+	userIDs := make([]string, 0)
 	for rows.Next() {
 		var memberID string
 		if err := rows.Scan(&memberID); err != nil {
 			continue
 		}
-		if sessions, ok := h.clients[memberID]; ok {
-			for _, client := range sessions {
-				client.Send(evt)
-			}
+		userIDs = append(userIDs, memberID)
+	}
+	return userIDs
+}
+
+func (h *Hub) broadcastToStreamObservers(streamID string, evt []byte) {
+	memberIDs := h.getHubMemberIDsForStream(streamID)
+	if len(memberIDs) == 0 {
+		return
+	}
+	recipients := make([]string, 0, len(memberIDs))
+	for _, memberID := range memberIDs {
+		if h.canViewStream(streamID, memberID) || h.isUserInVoiceStream(streamID, memberID) {
+			recipients = append(recipients, memberID)
 		}
 	}
-	h.mu.RUnlock()
+	h.sendToUsers(recipients, evt)
 }
 
 func (h *Hub) handleVoiceSpeaking(userID, streamID string, speaking bool) {
@@ -486,7 +742,7 @@ func (h *Hub) handleVoiceScreenShare(userID, streamID string, sharing bool) {
 		return
 	}
 
-	h.broadcastToHubMembers(streamID, NewEvent(OpVoiceScreenShareUpdate, VoiceScreenShareData{
+	h.broadcastToStreamObservers(streamID, NewEvent(OpVoiceScreenShareUpdate, VoiceScreenShareData{
 		StreamID: streamID,
 		UserID:   userID,
 		Sharing:  sharing,
@@ -516,7 +772,7 @@ func (h *Hub) handleVoiceDeafen(userID, streamID string, deafened bool) {
 		return
 	}
 
-	h.broadcastToHubMembers(streamID, NewEvent(OpVoiceDeafenUpdate, VoiceDeafenData{
+	h.broadcastToStreamObservers(streamID, NewEvent(OpVoiceDeafenUpdate, VoiceDeafenData{
 		StreamID: streamID,
 		UserID:   userID,
 		Deafened: deafened,
@@ -544,6 +800,7 @@ func (h *Hub) removeUserFromAllVoice(userID string) {
 			}
 		}
 	}
+	delete(h.voiceJoinGrants, userID)
 	h.mu.Unlock()
 
 	for _, streamID := range affectedStreams {
@@ -609,6 +866,7 @@ func (h *Hub) GetUserVoiceStreamID(userID string) string {
 
 // MoveUserToVoiceStream moves a user between voice channels and broadcasts the leave/join updates.
 func (h *Hub) MoveUserToVoiceStream(userID, targetStreamID string) (string, bool) {
+	h.clearVoiceJoinGrants(userID)
 	h.mu.Lock()
 	currentStreamID := ""
 	for streamID, users := range h.voiceState {

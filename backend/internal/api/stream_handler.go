@@ -22,6 +22,14 @@ func NewStreamHandler(svc *service.StreamService, hub *ws.Hub) *StreamHandler {
 	return &StreamHandler{svc: svc, hub: hub}
 }
 
+func (h *StreamHandler) broadcastStreamUpdate(hubID string) {
+	if h.hub == nil || hubID == "" {
+		return
+	}
+	h.hub.RefreshHubSubscriptions(hubID)
+	h.hub.BroadcastToHubMembers(hubID, ws.NewEvent(ws.OpStreamUpdate, map[string]string{"hub_id": hubID}))
+}
+
 func (h *StreamHandler) Create(w http.ResponseWriter, r *http.Request) {
 	hubID := chi.URLParam(r, "hubID")
 	userID := middleware.GetUserID(r.Context())
@@ -40,7 +48,7 @@ func (h *StreamHandler) Create(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
-	h.hub.BroadcastToHubMembers(hubID, ws.NewEvent(ws.OpStreamUpdate, map[string]string{"hub_id": hubID}))
+	h.broadcastStreamUpdate(hubID)
 	writeData(w, http.StatusCreated, stream)
 }
 
@@ -94,7 +102,7 @@ func (h *StreamHandler) PutPermissions(w http.ResponseWriter, r *http.Request) {
 	}
 	hubID, _ := h.svc.GetHubID(r.Context(), streamID)
 	if hubID != "" {
-		h.hub.BroadcastToHubMembers(hubID, ws.NewEvent(ws.OpStreamUpdate, map[string]string{"hub_id": hubID}))
+		h.broadcastStreamUpdate(hubID)
 	}
 	writeData(w, http.StatusOK, map[string]any{"permission_overwrites": overwrites})
 }
@@ -108,7 +116,10 @@ func (h *StreamHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if hubID != "" {
-		h.hub.BroadcastToHubMembers(hubID, ws.NewEvent(ws.OpStreamUpdate, map[string]string{"hub_id": hubID}))
+		if h.hub != nil {
+			h.hub.DropStreamSubscriptions(streamID)
+		}
+		h.broadcastStreamUpdate(hubID)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -136,7 +147,7 @@ func (h *StreamHandler) Patch(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
-	h.hub.BroadcastToHubMembers(stream.HubID, ws.NewEvent(ws.OpStreamUpdate, map[string]string{"hub_id": stream.HubID}))
+	h.broadcastStreamUpdate(stream.HubID)
 	writeData(w, http.StatusOK, stream)
 }
 
@@ -213,7 +224,7 @@ func (h *StreamHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
-	h.hub.BroadcastToHubMembers(hubID, ws.NewEvent(ws.OpStreamUpdate, map[string]string{"hub_id": hubID}))
+	h.broadcastStreamUpdate(hubID)
 	w.WriteHeader(http.StatusNoContent)
 }
 

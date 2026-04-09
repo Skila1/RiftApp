@@ -1,19 +1,27 @@
 package ws
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
 )
 
+type allowAllPermissionChecker struct{}
+
+func (allowAllPermissionChecker) CanViewStream(context.Context, string, string) bool   { return true }
+func (allowAllPermissionChecker) CanSendMessages(context.Context, string, string) bool { return true }
+func (allowAllPermissionChecker) CanConnectVoice(context.Context, string, string) bool { return true }
+
 func newTestHub() *Hub {
 	return &Hub{
-		clients:    make(map[string]map[string]*Client),
-		streamSubs: make(map[string]map[string]*Client),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		broadcast:  make(chan *BroadcastMessage, 256),
-		db:         nil,
+		clients:         make(map[string]map[string]*Client),
+		streamSubs:      make(map[string]map[string]*streamSubscription),
+		voiceJoinGrants: make(map[string]map[string]time.Time),
+		register:        make(chan *Client),
+		unregister:      make(chan *Client),
+		broadcast:       make(chan *BroadcastMessage, 256),
+		db:              nil,
 	}
 }
 
@@ -101,18 +109,8 @@ func TestHub_BroadcastToStream(t *testing.T) {
 	hub.register <- c2
 	drainOne(c2, time.Second)
 
-	c1.Subscribe("stream-a")
-	hub.mu.Lock()
-	if hub.streamSubs["stream-a"] == nil {
-		hub.streamSubs["stream-a"] = make(map[string]*Client)
-	}
-	hub.streamSubs["stream-a"]["user1:sess1"] = c1
-	hub.mu.Unlock()
-
-	c2.Subscribe("stream-a")
-	hub.mu.Lock()
-	hub.streamSubs["stream-a"]["user2:sess2"] = c2
-	hub.mu.Unlock()
+	hub.setStreamSubscription(c1, "stream-a", true)
+	hub.setStreamSubscription(c2, "stream-a", true)
 
 	hub.BroadcastToStream("stream-a", []byte(`{"op":"test"}`), "")
 
@@ -135,14 +133,8 @@ func TestHub_BroadcastToStream_Exclude(t *testing.T) {
 	hub.register <- c2
 	drainOne(c2, time.Second)
 
-	c1.Subscribe("stream-a")
-	hub.mu.Lock()
-	if hub.streamSubs["stream-a"] == nil {
-		hub.streamSubs["stream-a"] = make(map[string]*Client)
-	}
-	hub.streamSubs["stream-a"]["user1:sess1"] = c1
-	hub.streamSubs["stream-a"]["user2:sess2"] = c2
-	hub.mu.Unlock()
+	hub.setStreamSubscription(c1, "stream-a", true)
+	hub.setStreamSubscription(c2, "stream-a", true)
 
 	hub.BroadcastToStream("stream-a", []byte(`{"op":"test"}`), "user1")
 
@@ -240,6 +232,7 @@ func TestHub_HandleHeartbeat(t *testing.T) {
 
 func TestHub_HandleSubscribe(t *testing.T) {
 	hub := newTestHub()
+	hub.SetPermissionChecker(allowAllPermissionChecker{})
 	go hub.Run()
 
 	c := newTestClient(hub, "user1", "sess1")
@@ -266,6 +259,7 @@ func TestHub_HandleSubscribe(t *testing.T) {
 
 func TestHub_HandleUnsubscribe(t *testing.T) {
 	hub := newTestHub()
+	hub.SetPermissionChecker(allowAllPermissionChecker{})
 	go hub.Run()
 
 	c := newTestClient(hub, "user1", "sess1")
