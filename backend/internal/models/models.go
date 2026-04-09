@@ -18,13 +18,14 @@ type User struct {
 }
 
 type Hub struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	OwnerID   string    `json:"owner_id"`
-	IconURL   *string   `json:"icon_url,omitempty"`
-	BannerURL *string   `json:"banner_url,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID                 string    `json:"id"`
+	Name               string    `json:"name"`
+	OwnerID            string    `json:"owner_id"`
+	IconURL            *string   `json:"icon_url,omitempty"`
+	BannerURL          *string   `json:"banner_url,omitempty"`
+	DefaultPermissions int64     `json:"default_permissions,omitempty"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 type HubMember struct {
@@ -66,6 +67,20 @@ type Stream struct {
 	UserLimit  int       `json:"user_limit"`
 	Region     string    `json:"region"`
 	CreatedAt  time.Time `json:"created_at"`
+}
+
+const (
+	StreamPermissionTargetEveryone = "everyone"
+	StreamPermissionTargetRole     = "role"
+)
+
+type StreamPermissionOverwrite struct {
+	StreamID   string    `json:"stream_id,omitempty"`
+	TargetType string    `json:"target_type"`
+	TargetID   string    `json:"target_id"`
+	Allow      int64     `json:"allow"`
+	Deny       int64     `json:"deny"`
+	CreatedAt  time.Time `json:"created_at,omitempty"`
 }
 
 type Message struct {

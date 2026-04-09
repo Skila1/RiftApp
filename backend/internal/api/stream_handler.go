@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/riftapp-cloud/riftapp/internal/middleware"
+	"github.com/riftapp-cloud/riftapp/internal/models"
 	"github.com/riftapp-cloud/riftapp/internal/repository"
 	"github.com/riftapp-cloud/riftapp/internal/service"
 	"github.com/riftapp-cloud/riftapp/internal/ws"
@@ -45,7 +46,8 @@ func (h *StreamHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 func (h *StreamHandler) List(w http.ResponseWriter, r *http.Request) {
 	hubID := chi.URLParam(r, "hubID")
-	streams, err := h.svc.List(r.Context(), hubID)
+	userID := middleware.GetUserID(r.Context())
+	streams, err := h.svc.List(r.Context(), hubID, userID)
 	if err != nil {
 		writeAppError(w, err)
 		return
@@ -55,12 +57,46 @@ func (h *StreamHandler) List(w http.ResponseWriter, r *http.Request) {
 
 func (h *StreamHandler) Get(w http.ResponseWriter, r *http.Request) {
 	streamID := chi.URLParam(r, "streamID")
-	stream, err := h.svc.Get(r.Context(), streamID)
+	userID := middleware.GetUserID(r.Context())
+	stream, err := h.svc.Get(r.Context(), streamID, userID)
 	if err != nil {
 		writeAppError(w, err)
 		return
 	}
 	writeData(w, http.StatusOK, stream)
+}
+
+func (h *StreamHandler) GetPermissions(w http.ResponseWriter, r *http.Request) {
+	streamID := chi.URLParam(r, "streamID")
+	userID := middleware.GetUserID(r.Context())
+	overwrites, err := h.svc.GetPermissions(r.Context(), streamID, userID)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, map[string]any{"permission_overwrites": overwrites})
+}
+
+func (h *StreamHandler) PutPermissions(w http.ResponseWriter, r *http.Request) {
+	streamID := chi.URLParam(r, "streamID")
+	userID := middleware.GetUserID(r.Context())
+	var body struct {
+		PermissionOverwrites []models.StreamPermissionOverwrite `json:"permission_overwrites"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	overwrites, err := h.svc.UpdatePermissions(r.Context(), streamID, userID, body.PermissionOverwrites)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	hubID, _ := h.svc.GetHubID(r.Context(), streamID)
+	if hubID != "" {
+		h.hub.BroadcastToHubMembers(hubID, ws.NewEvent(ws.OpStreamUpdate, map[string]string{"hub_id": hubID}))
+	}
+	writeData(w, http.StatusOK, map[string]any{"permission_overwrites": overwrites})
 }
 
 func (h *StreamHandler) Delete(w http.ResponseWriter, r *http.Request) {

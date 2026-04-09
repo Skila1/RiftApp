@@ -64,17 +64,16 @@ func (h *VoiceHandler) Token(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hubID, err := h.hubSvc.GetStreamHubID(r.Context(), streamID, userID)
-	if err != nil {
+	if _, err := h.hubSvc.GetStreamHubID(r.Context(), streamID, userID); err != nil {
 		writeError(w, http.StatusForbidden, "stream not found or access denied")
 		return
 	}
-	stream, err := h.streamSvc.Get(r.Context(), streamID)
+	stream, err := h.streamSvc.Get(r.Context(), streamID, userID)
 	if err != nil || stream.Type != 1 {
 		writeError(w, http.StatusBadRequest, "stream is not a voice channel")
 		return
 	}
-	if !h.hubSvc.HasPermission(r.Context(), hubID, userID, models.PermConnectVoice) {
+	if !h.hubSvc.HasStreamPermission(r.Context(), streamID, userID, models.PermConnectVoice) {
 		writeError(w, http.StatusForbidden, "you do not have permission to connect to voice")
 		return
 	}
@@ -116,9 +115,20 @@ func (h *VoiceHandler) States(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID := middleware.GetUserID(r.Context())
+	visible, err := h.hubSvc.GetVisibleStreamIDSet(r.Context(), hubID, userID)
+	if err != nil {
+		writeError(w, http.StatusForbidden, "hub not found or access denied")
+		return
+	}
 	states := h.hub.GetVoiceStates(hubID)
 	if states == nil {
 		states = make(map[string][]string)
+	}
+	for streamID := range states {
+		if _, ok := visible[streamID]; !ok {
+			delete(states, streamID)
+		}
 	}
 	writeData(w, http.StatusOK, states)
 }
@@ -146,7 +156,7 @@ func (h *VoiceHandler) MoveUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "target stream is invalid")
 		return
 	}
-	targetStream, err := h.streamSvc.Get(r.Context(), input.TargetStreamID)
+	targetStream, err := h.streamSvc.Get(r.Context(), input.TargetStreamID, requesterID)
 	if err != nil || targetStream.Type != 1 {
 		writeError(w, http.StatusBadRequest, "target stream must be a voice channel")
 		return
@@ -224,11 +234,6 @@ func (h *VoiceHandler) PlaySound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.hubSvc.HasPermission(r.Context(), hubID, userID, models.PermUseSoundboard) {
-		writeError(w, http.StatusForbidden, "you do not have permission to use soundboard")
-		return
-	}
-
 	// Rate limit: max 3 plays per 5 seconds per user
 	if !h.soundboardAllow(userID) {
 		writeError(w, http.StatusTooManyRequests, "soundboard rate limit exceeded, try again shortly")
@@ -239,6 +244,15 @@ func (h *VoiceHandler) PlaySound(w http.ResponseWriter, r *http.Request) {
 	streamID := h.hub.GetUserVoiceStreamID(userID)
 	if streamID == "" {
 		writeError(w, http.StatusBadRequest, "you must be in a voice channel to play sounds")
+		return
+	}
+	currentHubID, err := h.hubSvc.GetStreamHubID(r.Context(), streamID, userID)
+	if err != nil || currentHubID != hubID {
+		writeError(w, http.StatusBadRequest, "you must be in a voice channel for this hub")
+		return
+	}
+	if !h.hubSvc.HasStreamPermission(r.Context(), streamID, userID, models.PermUseSoundboard) {
+		writeError(w, http.StatusForbidden, "you do not have permission to use soundboard")
 		return
 	}
 

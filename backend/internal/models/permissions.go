@@ -16,7 +16,7 @@ const (
 	PermAdministrator  int64 = 1 << 31
 
 	// Default permissions for @everyone
-	PermDefault = PermViewStreams | PermSendMessages | PermConnectVoice | PermSpeakVoice
+	PermDefault = PermViewStreams | PermSendMessages | PermConnectVoice | PermSpeakVoice | PermUseSoundboard
 )
 
 // Role constants
@@ -29,8 +29,8 @@ const (
 // RolePermissions maps each role to its effective permission bitfield.
 var RolePermissions = map[string]int64{
 	RoleOwner:  PermAdministrator,
-	RoleAdmin:  PermManageHub | PermManageStreams | PermManageMessages | PermSendMessages | PermViewStreams | PermKickMembers | PermUseSoundboard,
-	RoleMember: PermSendMessages | PermViewStreams | PermConnectVoice | PermSpeakVoice | PermUseSoundboard,
+	RoleAdmin:  PermManageHub | PermManageStreams | PermManageMessages | PermSendMessages | PermViewStreams | PermKickMembers | PermConnectVoice | PermSpeakVoice | PermUseSoundboard,
+	RoleMember: 0,
 }
 
 func HasPermission(perms, flag int64) bool {

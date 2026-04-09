@@ -22,12 +22,13 @@ func NewMessageHandler(svc *service.MessageService) *MessageHandler {
 
 func (h *MessageHandler) List(w http.ResponseWriter, r *http.Request) {
 	streamID := chi.URLParam(r, "streamID")
+	userID := middleware.GetUserID(r.Context())
 	limit := parseLimit(r)
 	var before *string
 	if b := r.URL.Query().Get("before"); b != "" {
 		before = &b
 	}
-	messages, err := h.svc.List(r.Context(), streamID, before, limit)
+	messages, err := h.svc.List(r.Context(), userID, streamID, before, limit)
 	if err != nil {
 		writeAppError(w, err)
 		return

@@ -1,4 +1,4 @@
-import type { AuthResponse, Hub, HubInvite, HubNotificationSettings, Stream, Category, Message, User, Attachment, Notification, Conversation, Friendship, Block, RelationshipType, HubEmoji, HubSticker, HubSound, HubRole, HubPermissions, MessageSearchFilters, StreamNotificationSettings } from '../types';
+import type { AuthResponse, Hub, HubInvite, HubNotificationSettings, Stream, Category, Message, User, Attachment, Notification, Conversation, Friendship, Block, RelationshipType, HubEmoji, HubSticker, HubSound, HubRole, HubPermissions, MessageSearchFilters, StreamNotificationSettings, DiscordTemplatePreview, StreamPermissionOverwrite } from '../types';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -114,6 +114,16 @@ class ApiClient {
 
   getHubs() { return this.request<Hub[]>('/hubs'); }
   createHub(name: string) { return this.request<Hub>('/hubs', { method: 'POST', body: JSON.stringify({ name }) }); }
+  importDiscordTemplate(input: string) {
+    return this.request<{ hub: Hub }>('/hubs/import-discord-template', {
+      method: 'POST',
+      body: JSON.stringify({ input }),
+    });
+  }
+  getDiscordTemplatePreview(input: string) {
+    const params = new URLSearchParams({ input });
+    return this.request<DiscordTemplatePreview>(`/discord/templates/preview?${params.toString()}`);
+  }
   getHub(hubId: string) { return this.request<Hub>(`/hubs/${hubId}`); }
   getHubMembers(hubId: string) { return this.request<User[]>(`/hubs/${hubId}/members`); }
   joinHub(hubId: string) { return this.request(`/hubs/${hubId}/join`, { method: 'POST' }); }
@@ -165,9 +175,18 @@ class ApiClient {
   }
 
   getStreams(hubId: string) { return this.request<Stream[]>(`/hubs/${hubId}/streams`); }
-  createStream(hubId: string, name: string, type: number = 0, categoryId?: string) { return this.request<Stream>(`/hubs/${hubId}/streams`, { method: 'POST', body: JSON.stringify({ name, type, category_id: categoryId }) }); }
+  createStream(hubId: string, name: string, type: number = 0, categoryId?: string, isPrivate?: boolean) { return this.request<Stream>(`/hubs/${hubId}/streams`, { method: 'POST', body: JSON.stringify({ name, type, category_id: categoryId, is_private: isPrivate }) }); }
   patchStream(streamId: string, body: { name?: string; bitrate?: number; user_limit?: number; region?: string; is_private?: boolean }) {
     return this.request<Stream>(`/streams/${streamId}`, { method: 'PATCH', body: JSON.stringify(body) });
+  }
+  getStreamPermissionOverwrites(streamId: string) {
+    return this.request<{ permission_overwrites: StreamPermissionOverwrite[] }>(`/streams/${streamId}/permissions`);
+  }
+  updateStreamPermissionOverwrites(streamId: string, permissionOverwrites: StreamPermissionOverwrite[]) {
+    return this.request<{ permission_overwrites: StreamPermissionOverwrite[] }>(`/streams/${streamId}/permissions`, {
+      method: 'PUT',
+      body: JSON.stringify({ permission_overwrites: permissionOverwrites }),
+    });
   }
   deleteStream(streamId: string) {
     return this.request<void>(`/streams/${streamId}`, { method: 'DELETE' });

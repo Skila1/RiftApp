@@ -40,7 +40,8 @@ func (h *CategoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 func (h *CategoryHandler) List(w http.ResponseWriter, r *http.Request) {
 	hubID := chi.URLParam(r, "hubID")
-	cats, err := h.svc.List(r.Context(), hubID)
+	userID := middleware.GetUserID(r.Context())
+	cats, err := h.svc.List(r.Context(), hubID, userID)
 	if err != nil {
 		writeAppError(w, err)
 		return

@@ -12,8 +12,11 @@ import (
 	"github.com/riftapp-cloud/riftapp/internal/repository"
 )
 
+const streamOverwriteAllowedMask = models.PermViewStreams | models.PermManageStreams | models.PermSendMessages | models.PermManageMessages | models.PermConnectVoice | models.PermSpeakVoice | models.PermUseSoundboard
+
 type StreamService struct {
 	streamRepo      *repository.StreamRepo
+	streamPermRepo  *repository.StreamPermissionRepo
 	hubService      *HubService
 	msgRepo         *repository.MessageRepo
 	notifRepo       *repository.NotificationRepo
@@ -22,6 +25,7 @@ type StreamService struct {
 
 func NewStreamService(
 	streamRepo *repository.StreamRepo,
+	streamPermRepo *repository.StreamPermissionRepo,
 	hubService *HubService,
 	msgRepo *repository.MessageRepo,
 	notifRepo *repository.NotificationRepo,
@@ -29,6 +33,7 @@ func NewStreamService(
 ) *StreamService {
 	return &StreamService{
 		streamRepo:      streamRepo,
+		streamPermRepo:  streamPermRepo,
 		hubService:      hubService,
 		msgRepo:         msgRepo,
 		notifRepo:       notifRepo,
@@ -61,18 +66,26 @@ func (s *StreamService) Create(ctx context.Context, hubID, userID, name string, 
 	if err := s.streamRepo.Create(ctx, stream); err != nil {
 		return nil, apperror.Internal("failed to create stream", err)
 	}
+	if s.streamPermRepo != nil {
+		overwrites := everyoneVisibilityOverwrite(isPrivate)
+		if len(overwrites) > 0 {
+			if err := s.streamPermRepo.ReplaceForStream(ctx, stream.ID, overwrites); err != nil {
+				_ = s.streamRepo.Delete(ctx, stream.ID)
+				return nil, apperror.Internal("failed to create stream permissions", err)
+			}
+		}
+	}
 	return stream, nil
 }
 
-func (s *StreamService) List(ctx context.Context, hubID string) ([]models.Stream, error) {
-	streams, err := s.streamRepo.ListByHub(ctx, hubID)
-	if err != nil {
-		return nil, apperror.Internal("internal error", err)
-	}
-	return streams, nil
+func (s *StreamService) List(ctx context.Context, hubID, userID string) ([]models.Stream, error) {
+	return s.hubService.GetVisibleStreams(ctx, hubID, userID)
 }
 
-func (s *StreamService) Get(ctx context.Context, streamID string) (*models.Stream, error) {
+func (s *StreamService) Get(ctx context.Context, streamID, userID string) (*models.Stream, error) {
+	if _, err := s.hubService.GetStreamHubID(ctx, streamID, userID); err != nil {
+		return nil, err
+	}
 	stream, err := s.streamRepo.GetByID(ctx, streamID)
 	if err != nil {
 		return nil, apperror.NotFound("stream not found")
@@ -81,11 +94,10 @@ func (s *StreamService) Get(ctx context.Context, streamID string) (*models.Strea
 }
 
 func (s *StreamService) Delete(ctx context.Context, streamID, userID string) error {
-	hubID, err := s.streamRepo.GetHubID(ctx, streamID)
-	if err != nil {
+	if _, err := s.streamRepo.GetByID(ctx, streamID); err != nil {
 		return apperror.NotFound("stream not found")
 	}
-	if !s.hubService.HasPermission(ctx, hubID, userID, models.PermManageStreams) {
+	if !s.hubService.HasStreamPermission(ctx, streamID, userID, models.PermManageStreams) {
 		return apperror.Forbidden("you do not have permission to manage channels")
 	}
 	if err := s.streamRepo.Delete(ctx, streamID); err != nil {
@@ -106,13 +118,106 @@ func normalizeStreamName(raw string) string {
 	return b.String()
 }
 
-// Patch updates editable stream fields (name, bitrate, user_limit, region, is_private). Requires manage channels permission.
-func (s *StreamService) Patch(ctx context.Context, streamID, userID string, name *string, bitrate *int, userLimit *int, region *string, isPrivate *bool) (*models.Stream, error) {
-	hubID, err := s.streamRepo.GetHubID(ctx, streamID)
+func (s *StreamService) validatePermissionOverwrites(ctx context.Context, hubID string, overwrites []models.StreamPermissionOverwrite) ([]models.StreamPermissionOverwrite, error) {
+	normalized := normalizeStreamPermissionOverwrites(overwrites)
+	validated := make([]models.StreamPermissionOverwrite, 0, len(normalized))
+	for _, overwrite := range normalized {
+		overwrite.Allow &= streamOverwriteAllowedMask
+		overwrite.Deny &= streamOverwriteAllowedMask
+		overwrite.Allow &^= overwrite.Deny
+		if overwrite.Allow == 0 && overwrite.Deny == 0 {
+			continue
+		}
+		switch overwrite.TargetType {
+		case models.StreamPermissionTargetEveryone:
+			overwrite.TargetID = models.StreamPermissionTargetEveryone
+		case models.StreamPermissionTargetRole:
+			if overwrite.TargetID == "" {
+				return nil, apperror.BadRequest("role overwrite target_id is required")
+			}
+			if s.hubService.rankRepo == nil {
+				return nil, apperror.BadRequest("role overwrites are unavailable")
+			}
+			rank, err := s.hubService.rankRepo.GetByID(ctx, overwrite.TargetID)
+			if err != nil || rank.HubID != hubID {
+				return nil, apperror.BadRequest("invalid role overwrite target")
+			}
+		default:
+			return nil, apperror.BadRequest("invalid overwrite target type")
+		}
+		validated = append(validated, overwrite)
+	}
+	return validated, nil
+}
+
+func setEveryonePrivacyOverwrite(overwrites []models.StreamPermissionOverwrite, isPrivate bool) []models.StreamPermissionOverwrite {
+	updated := make([]models.StreamPermissionOverwrite, 0, len(overwrites)+1)
+	found := false
+	for _, overwrite := range overwrites {
+		if overwrite.TargetType == models.StreamPermissionTargetEveryone && overwrite.TargetID == models.StreamPermissionTargetEveryone {
+			found = true
+			if isPrivate {
+				overwrite.Deny |= models.PermViewStreams
+				overwrite.Allow &^= models.PermViewStreams
+			} else {
+				overwrite.Deny &^= models.PermViewStreams
+			}
+			if overwrite.Allow == 0 && overwrite.Deny == 0 {
+				continue
+			}
+		}
+		updated = append(updated, overwrite)
+	}
+	if isPrivate && !found {
+		updated = append(updated, everyoneVisibilityOverwrite(true)...)
+	}
+	return normalizeStreamPermissionOverwrites(updated)
+}
+
+func (s *StreamService) GetPermissions(ctx context.Context, streamID, userID string) ([]models.StreamPermissionOverwrite, error) {
+	if !s.hubService.HasStreamPermission(ctx, streamID, userID, models.PermManageStreams) {
+		return nil, apperror.Forbidden("you do not have permission to manage channels")
+	}
+	if s.streamPermRepo == nil {
+		return []models.StreamPermissionOverwrite{}, nil
+	}
+	overwrites, err := s.streamPermRepo.ListByStream(ctx, streamID)
+	if err != nil {
+		return nil, apperror.Internal("failed to load stream permissions", err)
+	}
+	return overwrites, nil
+}
+
+func (s *StreamService) UpdatePermissions(ctx context.Context, streamID, userID string, overwrites []models.StreamPermissionOverwrite) ([]models.StreamPermissionOverwrite, error) {
+	if !s.hubService.HasStreamPermission(ctx, streamID, userID, models.PermManageStreams) {
+		return nil, apperror.Forbidden("you do not have permission to manage channels")
+	}
+	stream, err := s.streamRepo.GetByID(ctx, streamID)
 	if err != nil {
 		return nil, apperror.NotFound("stream not found")
 	}
-	if !s.hubService.HasPermission(ctx, hubID, userID, models.PermManageStreams) {
+	validated, err := s.validatePermissionOverwrites(ctx, stream.HubID, overwrites)
+	if err != nil {
+		return nil, err
+	}
+	if s.streamPermRepo != nil {
+		if err := s.streamPermRepo.ReplaceForStream(ctx, streamID, validated); err != nil {
+			return nil, apperror.Internal("failed to save stream permissions", err)
+		}
+	}
+	isPrivate := streamIsPrivateFromOverwrites(validated)
+	if err := s.streamRepo.UpdateIsPrivate(ctx, streamID, isPrivate); err != nil {
+		return nil, apperror.Internal("failed to update stream privacy", err)
+	}
+	return validated, nil
+}
+
+// Patch updates editable stream fields (name, bitrate, user_limit, region, is_private). Requires manage channels permission.
+func (s *StreamService) Patch(ctx context.Context, streamID, userID string, name *string, bitrate *int, userLimit *int, region *string, isPrivate *bool) (*models.Stream, error) {
+	if _, err := s.streamRepo.GetByID(ctx, streamID); err != nil {
+		return nil, apperror.NotFound("stream not found")
+	}
+	if !s.hubService.HasStreamPermission(ctx, streamID, userID, models.PermManageStreams) {
 		return nil, apperror.Forbidden("you do not have permission to manage channels")
 	}
 	if name != nil {
@@ -124,7 +229,6 @@ func (s *StreamService) Patch(ctx context.Context, streamID, userID string, name
 			return nil, apperror.Internal("failed to update stream", err)
 		}
 	}
-	// Voice-channel settings
 	if bitrate != nil || userLimit != nil || region != nil {
 		current, err := s.streamRepo.GetByID(ctx, streamID)
 		if err != nil {
@@ -153,6 +257,16 @@ func (s *StreamService) Patch(ctx context.Context, streamID, userID string, name
 		}
 	}
 	if isPrivate != nil {
+		currentOverwrites, err := s.GetPermissions(ctx, streamID, userID)
+		if err != nil {
+			return nil, err
+		}
+		updatedOverwrites := setEveryonePrivacyOverwrite(currentOverwrites, *isPrivate)
+		if s.streamPermRepo != nil {
+			if err := s.streamPermRepo.ReplaceForStream(ctx, streamID, updatedOverwrites); err != nil {
+				return nil, apperror.Internal("failed to update stream permissions", err)
+			}
+		}
 		if err := s.streamRepo.UpdateIsPrivate(ctx, streamID, *isPrivate); err != nil {
 			return nil, apperror.Internal("failed to update stream privacy", err)
 		}
@@ -164,6 +278,9 @@ func (s *StreamService) Ack(ctx context.Context, streamID, userID, messageID str
 	if messageID == "" {
 		return apperror.BadRequest("message_id is required")
 	}
+	if _, err := s.hubService.GetStreamHubID(ctx, streamID, userID); err != nil {
+		return err
+	}
 	if err := s.streamRepo.AckStream(ctx, userID, streamID, messageID); err != nil {
 		return apperror.Internal("failed to mark stream read", err)
 	}
@@ -171,11 +288,21 @@ func (s *StreamService) Ack(ctx context.Context, streamID, userID, messageID str
 }
 
 func (s *StreamService) ReadStates(ctx context.Context, hubID, userID string) ([]repository.ReadState, error) {
+	visible, err := s.hubService.GetVisibleStreamIDSet(ctx, hubID, userID)
+	if err != nil {
+		return nil, err
+	}
 	states, err := s.streamRepo.GetReadStates(ctx, hubID, userID)
 	if err != nil {
 		return nil, apperror.Internal("internal error", err)
 	}
-	return states, nil
+	filtered := make([]repository.ReadState, 0, len(states))
+	for _, state := range states {
+		if _, ok := visible[state.StreamID]; ok {
+			filtered = append(filtered, state)
+		}
+	}
+	return filtered, nil
 }
 
 func (s *StreamService) GetHubID(ctx context.Context, streamID string) (string, error) {
@@ -208,9 +335,10 @@ func (s *StreamService) UpdateNotificationSettings(ctx context.Context, streamID
 	return s.streamNotifRepo.Get(ctx, userID, streamID)
 }
 
-// MarkAllReadInHub marks every text stream in the hub read (latest message per stream) and clears hub notifications.
+// MarkAllReadInHub marks every visible text stream in the hub read and clears hub notifications.
 func (s *StreamService) MarkAllReadInHub(ctx context.Context, hubID, userID string) error {
-	if err := s.hubService.AssertHubMember(ctx, hubID, userID); err != nil {
+	visible, err := s.hubService.GetVisibleStreamIDSet(ctx, hubID, userID)
+	if err != nil {
 		return err
 	}
 	latest, err := s.msgRepo.LatestMessageIDsForHubTextStreams(ctx, hubID)
@@ -218,6 +346,9 @@ func (s *StreamService) MarkAllReadInHub(ctx context.Context, hubID, userID stri
 		return apperror.Internal("failed to list latest messages", err)
 	}
 	for streamID, msgID := range latest {
+		if _, ok := visible[streamID]; !ok {
+			continue
+		}
 		if err := s.streamRepo.AckStream(ctx, userID, streamID, msgID); err != nil {
 			return apperror.Internal("failed to ack stream", err)
 		}

@@ -111,6 +111,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 		r.Get("/api/users/{userID}", userH.GetUser)
 
 		r.Post("/api/hubs", hubH.Create)
+		r.Post("/api/hubs/import-discord-template", hubH.ImportDiscordTemplate)
 		r.Get("/api/hubs", hubH.List)
 		r.Get("/api/hubs/{hubID}", hubH.Get)
 		r.Patch("/api/hubs/{hubID}", hubH.Update)
@@ -131,6 +132,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 		r.Get("/api/hubs/{hubID}/emojis", customH.ListEmojis)
 		r.Get("/api/hubs/{hubID}/stickers", customH.ListStickers)
 		r.Get("/api/hubs/{hubID}/sounds", customH.ListSounds)
+		r.Get("/api/discord/templates/preview", hubH.PreviewDiscordTemplate)
 
 		r.Get("/api/invites/{code}", hubH.GetInviteInfo)
 		r.Post("/api/invites/{code}", hubH.JoinViaInvite)
@@ -149,6 +151,8 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 		r.Put("/api/hubs/{hubID}/categories/reorder", catH.Reorder)
 		r.Get("/api/streams/{streamID}", streamH.Get)
 		r.Patch("/api/streams/{streamID}", streamH.Patch)
+		r.Get("/api/streams/{streamID}/permissions", streamH.GetPermissions)
+		r.Put("/api/streams/{streamID}/permissions", streamH.PutPermissions)
 		r.Get("/api/streams/{streamID}/notification-settings", streamH.GetNotificationSettings)
 		r.Patch("/api/streams/{streamID}/notification-settings", streamH.PatchNotificationSettings)
 		r.Delete("/api/streams/{streamID}", streamH.Delete)

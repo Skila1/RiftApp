@@ -56,11 +56,11 @@ func validateName(name string) error {
 }
 
 func (s *HubCustomizationService) canManage(ctx context.Context, hubID, userID string) bool {
-	role := s.hubRepo.GetMemberRole(ctx, hubID, userID)
-	if role == "" {
+	memberCtx, err := s.hubRepo.GetMemberPermissionContext(ctx, hubID, userID)
+	if err != nil {
 		return false
 	}
-	perms := models.RolePermissions[role]
+	perms := memberCtx.DefaultPermissions | models.RolePermissions[memberCtx.Role]
 	if s.rankRepo != nil {
 		perms |= s.rankRepo.GetMemberRankPermissions(ctx, hubID, userID)
 	}

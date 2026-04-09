@@ -41,6 +41,33 @@ func (h *HubHandler) Create(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusCreated, hub)
 }
 
+func (h *HubHandler) PreviewDiscordTemplate(w http.ResponseWriter, r *http.Request) {
+	input := r.URL.Query().Get("input")
+	preview, err := h.svc.PreviewDiscordTemplate(r.Context(), input)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, preview)
+}
+
+func (h *HubHandler) ImportDiscordTemplate(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	var body struct {
+		Input string `json:"input"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeAppError(w, err)
+		return
+	}
+	hub, err := h.svc.ImportDiscordTemplate(r.Context(), userID, body.Input)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	writeData(w, http.StatusCreated, map[string]any{"hub": hub})
+}
+
 func (h *HubHandler) Get(w http.ResponseWriter, r *http.Request) {
 	hubID := chi.URLParam(r, "hubID")
 	userID := middleware.GetUserID(r.Context())

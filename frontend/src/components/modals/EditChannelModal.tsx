@@ -4,8 +4,9 @@ import { useHubStore } from '../../stores/hubStore';
 import ModalOverlay from '../shared/ModalOverlay';
 import ModalCloseButton from '../shared/ModalCloseButton';
 import ConfirmModal from './ConfirmModal';
-import type { Stream, HubRole } from '../../types';
+import type { Stream, HubRole, StreamPermissionOverwrite } from '../../types';
 import { api } from '../../api/client';
+import { PermConnectVoice, PermManageMessages, PermManageStreams, PermSendMessages, PermSpeakVoice, PermUseSoundboard, PermViewStreams } from '../../utils/permissions';
 
 /* ────────── constants ────────── */
 
@@ -184,6 +185,96 @@ function OverviewTab({
 /* ────────── Permissions tab ────────── */
 
 type PermState = 'neutral' | 'deny' | 'allow';
+type PermissionKey = 'view_channel' | 'manage_channel' | 'send_messages' | 'manage_messages' | 'connect' | 'speak' | 'use_soundboard';
+type PermissionOverrideState = Record<string, Partial<Record<PermissionKey, PermState>>>;
+
+const PERMISSION_BITS: Record<PermissionKey, number> = {
+  view_channel: PermViewStreams,
+  manage_channel: PermManageStreams,
+  send_messages: PermSendMessages,
+  manage_messages: PermManageMessages,
+  connect: PermConnectVoice,
+  speak: PermSpeakVoice,
+  use_soundboard: PermUseSoundboard,
+};
+
+const ALL_PERMISSION_KEYS = Object.keys(PERMISSION_BITS) as PermissionKey[];
+
+function normalizeChannelName(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+}
+
+function buildPermissionStateMap(overwrites: StreamPermissionOverwrite[]): PermissionOverrideState {
+  const next: PermissionOverrideState = {};
+  for (const overwrite of overwrites) {
+    const roleKey = overwrite.target_type === 'everyone' ? 'everyone' : overwrite.target_id;
+    const state: Partial<Record<PermissionKey, PermState>> = {};
+    for (const key of ALL_PERMISSION_KEYS) {
+      const bit = PERMISSION_BITS[key];
+      if ((overwrite.deny & bit) !== 0) {
+        state[key] = 'deny';
+      } else if ((overwrite.allow & bit) !== 0) {
+        state[key] = 'allow';
+      }
+    }
+    next[roleKey] = state;
+  }
+  return next;
+}
+
+function buildPermissionOverwrites(overrides: PermissionOverrideState, isPrivate: boolean): StreamPermissionOverwrite[] {
+  const roleKeys = Object.keys(overrides).sort((left, right) => {
+    if (left === 'everyone') return -1;
+    if (right === 'everyone') return 1;
+    return left.localeCompare(right);
+  });
+  const built: StreamPermissionOverwrite[] = [];
+  for (const roleKey of roleKeys) {
+    const state = overrides[roleKey] ?? {};
+    let allow = 0;
+    let deny = 0;
+    for (const key of ALL_PERMISSION_KEYS) {
+      const bit = PERMISSION_BITS[key];
+      const value = state[key] ?? 'neutral';
+      if (value === 'allow') allow |= bit;
+      if (value === 'deny') deny |= bit;
+    }
+    if (roleKey === 'everyone' && isPrivate) {
+      deny |= PermViewStreams;
+      allow &= ~PermViewStreams;
+    }
+    if (allow === 0 && deny === 0) continue;
+    built.push({
+      target_type: roleKey === 'everyone' ? 'everyone' : 'role',
+      target_id: roleKey === 'everyone' ? 'everyone' : roleKey,
+      allow,
+      deny,
+    });
+  }
+  if (isPrivate && !built.some((overwrite) => overwrite.target_type === 'everyone')) {
+    built.unshift({ target_type: 'everyone', target_id: 'everyone', allow: 0, deny: PermViewStreams });
+  }
+  return built;
+}
+
+function permissionSignature(overrides: PermissionOverrideState, isPrivate: boolean) {
+  return JSON.stringify(buildPermissionOverwrites(overrides, isPrivate).map((overwrite) => ({
+    target_type: overwrite.target_type,
+    target_id: overwrite.target_id,
+    allow: overwrite.allow,
+    deny: overwrite.deny,
+  })));
+}
+
+function applyPrivateToOverrides(overrides: PermissionOverrideState, isPrivate: boolean): PermissionOverrideState {
+  return {
+    ...overrides,
+    everyone: {
+      ...(overrides.everyone ?? {}),
+      view_channel: isPrivate ? 'deny' : 'neutral',
+    },
+  };
+}
 
 const GENERAL_PERMS = [
   { key: 'view_channel', name: 'View Channel', descText: (v: boolean) => `Allows members to ${v ? 'see' : 'view'} this channel.` },
@@ -193,6 +284,7 @@ const GENERAL_PERMS = [
 const VOICE_PERMS = [
   { key: 'connect', name: 'Connect', descText: () => 'Allows members to join this voice channel and hear others.' },
   { key: 'speak', name: 'Speak', descText: () => 'Allows members to talk in this voice channel.' },
+  { key: 'use_soundboard', name: 'Use Soundboard', descText: () => 'Allows members to play soundboard sounds in this voice channel.' },
 ] as const;
 
 const TEXT_PERMS = [
@@ -206,27 +298,25 @@ function PermissionsTab({
   setIsPrivate,
   roles,
   rolesLoading,
+  permissionsLoading,
+  permissionsError,
+  overrides,
+  onPermissionChange,
 }: {
   stream: Stream;
   isPrivate: boolean;
   setIsPrivate: (v: boolean) => void;
   roles: HubRole[];
   rolesLoading: boolean;
+  permissionsLoading: boolean;
+  permissionsError: string | null;
+  overrides: PermissionOverrideState;
+  onPermissionChange: (roleKey: string, permKey: PermissionKey, value: PermState) => void;
 }) {
   const isVoice = stream.type === 1;
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
-  // Per-role permission overrides: roleKey → permKey → state
-  const [overrides, setOverrides] = useState<Record<string, Record<string, PermState>>>({});
 
-  const getPermState = (roleKey: string, permKey: string): PermState =>
-    overrides[roleKey]?.[permKey] ?? 'neutral';
-
-  const setPermState = (roleKey: string, permKey: string, value: PermState) => {
-    setOverrides((prev) => ({
-      ...prev,
-      [roleKey]: { ...prev[roleKey], [permKey]: value },
-    }));
-  };
+  const getPermState = (roleKey: string, permKey: PermissionKey): PermState => overrides[roleKey]?.[permKey] ?? 'neutral';
 
   const selectedRoleInfo = selectedRole === 'everyone'
     ? { name: '@everyone', color: '#5865f2' }
@@ -266,10 +356,10 @@ function PermissionsTab({
           Roles / Members
         </h4>
 
-        {rolesLoading ? (
+        {rolesLoading || permissionsLoading ? (
           <div className="flex items-center gap-2 text-[13px] text-[#949ba4]">
             <div className="w-4 h-4 border-2 border-[#949ba4] border-t-transparent rounded-full animate-spin" />
-            Loading roles…
+            Loading permissions…
           </div>
         ) : (
           <div className="space-y-1">
@@ -342,7 +432,7 @@ function PermissionsTab({
                 name={p.name}
                 description={p.descText(isVoice)}
                 value={getPermState(selectedRole, p.key)}
-                onChange={(v) => setPermState(selectedRole, p.key, v)}
+                onChange={(v) => onPermissionChange(selectedRole, p.key, v)}
               />
             ))}
 
@@ -357,7 +447,7 @@ function PermissionsTab({
                 name={p.name}
                 description={p.descText()}
                 value={getPermState(selectedRole, p.key)}
-                onChange={(v) => setPermState(selectedRole, p.key, v)}
+                onChange={(v) => onPermissionChange(selectedRole, p.key, v)}
               />
             ))}
           </div>
@@ -371,6 +461,10 @@ function PermissionsTab({
           <p className="text-[13px] text-[#949ba4] mt-1">Click on a role above to view and edit its channel permissions.</p>
         </div>
       )}
+
+      {permissionsError && (
+		<p className="text-sm text-riftapp-danger">{permissionsError}</p>
+	  )}
     </div>
   );
 }
@@ -498,10 +592,15 @@ export default function EditChannelModal({ stream, onClose }: Props) {
   const [bitrate, setBitrate] = useState(stream.bitrate || 64000);
   const [userLimit, setUserLimit] = useState(stream.user_limit || 0);
   const [isPrivate, setIsPrivate] = useState(stream.is_private);
+  const [initialIsPrivate, setInitialIsPrivate] = useState(stream.is_private);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [roles, setRoles] = useState<HubRole[]>([]);
   const [rolesLoading, setRolesLoading] = useState(true);
+  const [permissionsLoading, setPermissionsLoading] = useState(true);
+  const [permissionsError, setPermissionsError] = useState<string | null>(null);
+  const [overrides, setOverrides] = useState<PermissionOverrideState>({});
+  const [initialOverrides, setInitialOverrides] = useState<PermissionOverrideState>({});
   const patchStream = useStreamStore((s) => s.patchStream);
   const activeHubId = useHubStore((s) => s.activeHubId);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -511,10 +610,20 @@ export default function EditChannelModal({ stream, onClose }: Props) {
     requestAnimationFrame(() => modalRef.current?.focus());
   }, []);
 
+  useEffect(() => {
+    setName(stream.name);
+    setBitrate(stream.bitrate || 64000);
+    setUserLimit(stream.user_limit || 0);
+    setIsPrivate(stream.is_private);
+    setInitialIsPrivate(stream.is_private);
+    setError(null);
+  }, [stream.id, stream.name, stream.bitrate, stream.user_limit, stream.is_private]);
+
   // Load roles for permissions tab
   useEffect(() => {
     if (!activeHubId) return;
     let cancelled = false;
+    setRolesLoading(true);
     (async () => {
       try {
         const r = await api.getRoles(activeHubId);
@@ -525,19 +634,61 @@ export default function EditChannelModal({ stream, onClose }: Props) {
     return () => { cancelled = true; };
   }, [activeHubId]);
 
+  useEffect(() => {
+  let cancelled = false;
+  setPermissionsLoading(true);
+  setPermissionsError(null);
+  (async () => {
+    try {
+    const response = await api.getStreamPermissionOverwrites(stream.id);
+    if (cancelled) return;
+    const nextOverrides = buildPermissionStateMap(response.permission_overwrites);
+    const nextIsPrivate = response.permission_overwrites.some((overwrite) => overwrite.target_type === 'everyone' && overwrite.target_id === 'everyone' && (overwrite.deny & PermViewStreams) !== 0);
+    setOverrides(nextOverrides);
+    setInitialOverrides(nextOverrides);
+    setIsPrivate(nextIsPrivate);
+    setInitialIsPrivate(nextIsPrivate);
+    } catch (e) {
+    if (!cancelled) {
+      setPermissionsError(e instanceof Error ? e.message : 'Failed to load channel permissions');
+      setOverrides({});
+      setInitialOverrides({});
+    }
+    } finally {
+    if (!cancelled) setPermissionsLoading(false);
+    }
+  })();
+  return () => { cancelled = true; };
+  }, [stream.id]);
+
+  const handlePermissionChange = useCallback((roleKey: string, permKey: PermissionKey, value: PermState) => {
+  setOverrides((prev) => ({
+    ...prev,
+    [roleKey]: { ...prev[roleKey], [permKey]: value },
+  }));
+  if (roleKey === 'everyone' && permKey === 'view_channel') {
+    setIsPrivate(value === 'deny');
+  }
+  }, []);
+
+  const handlePrivateToggle = useCallback((value: boolean) => {
+  setIsPrivate(value);
+  setOverrides((prev) => applyPrivateToOverrides(prev, value));
+  }, []);
+
   const hasChanges = useCallback(() => {
-    const trimmed = name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const trimmed = normalizeChannelName(name);
     const nameChanged = trimmed !== stream.name;
     const voiceChanged = isVoice && (
       bitrate !== (stream.bitrate || 64000) ||
       userLimit !== (stream.user_limit || 0)
     );
-    const privacyChanged = isPrivate !== stream.is_private;
-    return nameChanged || voiceChanged || privacyChanged;
-  }, [name, bitrate, userLimit, isPrivate, stream, isVoice]);
+    const permissionsChanged = permissionSignature(overrides, isPrivate) !== permissionSignature(initialOverrides, initialIsPrivate);
+    return nameChanged || voiceChanged || permissionsChanged;
+  }, [name, bitrate, userLimit, isPrivate, initialIsPrivate, overrides, initialOverrides, stream, isVoice]);
 
   const handleSave = async () => {
-    const trimmed = name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const trimmed = normalizeChannelName(name);
     if (!trimmed || saving) return;
 
     if (!hasChanges()) {
@@ -548,9 +699,19 @@ export default function EditChannelModal({ stream, onClose }: Props) {
     setError(null);
     setSaving(true);
     try {
+      const permissionsChanged = permissionSignature(overrides, isPrivate) !== permissionSignature(initialOverrides, initialIsPrivate);
+      if (permissionsChanged) {
+        await api.updateStreamPermissionOverwrites(stream.id, buildPermissionOverwrites(overrides, isPrivate));
+      }
       const voiceSettings = isVoice ? { bitrate, user_limit: userLimit } : undefined;
-      const privacyArg = isPrivate !== stream.is_private ? isPrivate : undefined;
-      await patchStream(stream.id, trimmed, voiceSettings, privacyArg);
+      const nameChanged = trimmed !== stream.name;
+      const voiceChanged = isVoice && (
+        bitrate !== (stream.bitrate || 64000) ||
+        userLimit !== (stream.user_limit || 0)
+      );
+      if (nameChanged || voiceChanged) {
+        await patchStream(stream.id, trimmed, voiceSettings);
+      }
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not update channel');
@@ -642,9 +803,13 @@ export default function EditChannelModal({ stream, onClose }: Props) {
               <PermissionsTab
                 stream={stream}
                 isPrivate={isPrivate}
-                setIsPrivate={setIsPrivate}
+                setIsPrivate={handlePrivateToggle}
                 roles={roles}
                 rolesLoading={rolesLoading}
+                permissionsLoading={permissionsLoading}
+                permissionsError={permissionsError}
+                overrides={overrides}
+                onPermissionChange={handlePermissionChange}
               />
             )}
             {activeTab === 'delete' && <DeleteTab stream={stream} onClose={onClose} />}
@@ -660,7 +825,8 @@ export default function EditChannelModal({ stream, onClose }: Props) {
                   setName(stream.name);
                   setBitrate(stream.bitrate || 64000);
                   setUserLimit(stream.user_limit || 0);
-                  setIsPrivate(stream.is_private);
+                  setIsPrivate(initialIsPrivate);
+                  setOverrides(initialOverrides);
                   setError(null);
                 }}
                 className="px-4 py-2 rounded-md text-[13px] font-medium text-[#dbdee1] hover:underline"

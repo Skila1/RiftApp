@@ -42,6 +42,37 @@ export interface Hub {
   updated_at: string;
 }
 
+export interface DiscordTemplatePreviewChannel {
+  name: string;
+  type: 'text' | 'voice';
+}
+
+export interface DiscordTemplatePreviewCategory {
+  name: string;
+  channels: DiscordTemplatePreviewChannel[];
+}
+
+export interface DiscordTemplatePreviewRole {
+  name: string;
+  color: string;
+}
+
+export interface DiscordTemplatePreview {
+  code: string;
+  name: string;
+  description?: string;
+  source_guild_name: string;
+  suggested_hub_name: string;
+  category_count: number;
+  text_channel_count: number;
+  voice_channel_count: number;
+  role_count: number;
+  categories: DiscordTemplatePreviewCategory[];
+  uncategorized_channels: DiscordTemplatePreviewChannel[];
+  roles: DiscordTemplatePreviewRole[];
+  unsupported_features?: string[];
+}
+
 export interface Category {
   id: string;
   hub_id: string;
@@ -62,6 +93,17 @@ export interface Stream {
   user_limit: number;
   region: string;
   created_at: string;
+}
+
+export type StreamPermissionTargetType = 'everyone' | 'role';
+
+export interface StreamPermissionOverwrite {
+  stream_id?: string;
+  target_type: StreamPermissionTargetType;
+  target_id: string;
+  allow: number;
+  deny: number;
+  created_at?: string;
 }
 
 export interface Message {

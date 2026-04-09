@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strings"
 	"time"
 
@@ -15,29 +16,34 @@ import (
 )
 
 type HubService struct {
-	hubRepo      *repository.HubRepo
-	streamRepo   *repository.StreamRepo
-	inviteRepo   *repository.InviteRepo
-	notifRepo    *repository.NotificationRepo
-	hubNotifRepo *repository.HubNotificationSettingsRepo
-	rankRepo     *repository.RankRepo
+	hubRepo        *repository.HubRepo
+	streamRepo     *repository.StreamRepo
+	streamPermRepo *repository.StreamPermissionRepo
+	inviteRepo     *repository.InviteRepo
+	notifRepo      *repository.NotificationRepo
+	hubNotifRepo   *repository.HubNotificationSettingsRepo
+	rankRepo       *repository.RankRepo
+	discordHTTP    *http.Client
 }
 
 func NewHubService(
 	hubRepo *repository.HubRepo,
 	streamRepo *repository.StreamRepo,
+	streamPermRepo *repository.StreamPermissionRepo,
 	inviteRepo *repository.InviteRepo,
 	notifRepo *repository.NotificationRepo,
 	hubNotifRepo *repository.HubNotificationSettingsRepo,
 	rankRepo *repository.RankRepo,
 ) *HubService {
 	return &HubService{
-		hubRepo:      hubRepo,
-		streamRepo:   streamRepo,
-		inviteRepo:   inviteRepo,
-		notifRepo:    notifRepo,
-		hubNotifRepo: hubNotifRepo,
-		rankRepo:     rankRepo,
+		hubRepo:        hubRepo,
+		streamRepo:     streamRepo,
+		streamPermRepo: streamPermRepo,
+		inviteRepo:     inviteRepo,
+		notifRepo:      notifRepo,
+		hubNotifRepo:   hubNotifRepo,
+		rankRepo:       rankRepo,
+		discordHTTP:    &http.Client{Timeout: 15 * time.Second},
 	}
 }
 
@@ -47,11 +53,12 @@ func (s *HubService) Create(ctx context.Context, userID, name string) (*models.H
 	}
 
 	hub := &models.Hub{
-		ID:        uuid.New().String(),
-		Name:      name,
-		OwnerID:   userID,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:                 uuid.New().String(),
+		Name:               name,
+		OwnerID:            userID,
+		DefaultPermissions: models.PermDefault,
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
 	}
 
 	if err := s.hubRepo.Create(ctx, hub, models.RoleOwner); err != nil {
@@ -276,39 +283,28 @@ func (s *HubService) canManage(ctx context.Context, hubID, userID string) bool {
 }
 
 func (s *HubService) HasPermission(ctx context.Context, hubID, userID string, perm int64) bool {
-	role := s.hubRepo.GetMemberRole(ctx, hubID, userID)
-	if role == "" {
+	perms, err := s.GetEffectivePermissions(ctx, hubID, userID)
+	if err != nil {
 		return false
-	}
-	perms := models.RolePermissions[role]
-	if s.rankRepo != nil {
-		perms |= s.rankRepo.GetMemberRankPermissions(ctx, hubID, userID)
 	}
 	return models.HasPermission(perms, perm)
 }
 
 func (s *HubService) GetEffectivePermissions(ctx context.Context, hubID, userID string) (int64, error) {
-	if !s.hubRepo.IsMember(ctx, hubID, userID) {
-		return 0, apperror.Forbidden("not a member")
+	state, err := s.getMemberPermissionState(ctx, hubID, userID)
+	if err != nil {
+		return 0, err
 	}
-	role := s.hubRepo.GetMemberRole(ctx, hubID, userID)
-	if role == "" {
-		return 0, apperror.Forbidden("not a member")
-	}
-	perms := models.RolePermissions[role]
-	if s.rankRepo != nil {
-		perms |= s.rankRepo.GetMemberRankPermissions(ctx, hubID, userID)
-	}
-	return perms, nil
+	return state.BasePermissions, nil
 }
 
 func (s *HubService) GetStreamHubID(ctx context.Context, streamID, userID string) (string, error) {
-	hubID, err := s.streamRepo.GetHubID(ctx, streamID)
+	perms, hubID, err := s.GetStreamEffectivePermissions(ctx, streamID, userID)
 	if err != nil {
 		return "", err
 	}
-	if !s.hubRepo.IsMember(ctx, hubID, userID) {
-		return "", apperror.Forbidden("not a member")
+	if !models.HasPermission(perms, models.PermViewStreams) {
+		return "", apperror.Forbidden("stream not found or access denied")
 	}
 	return hubID, nil
 }

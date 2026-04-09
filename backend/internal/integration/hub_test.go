@@ -30,8 +30,9 @@ func setupHubTest(t *testing.T) (*service.HubService, string) {
 	notifRepo := repository.NewNotificationRepo(testPool)
 	hubNotifRepo := repository.NewHubNotificationSettingsRepo(testPool)
 	rankRepo := repository.NewRankRepo(testPool)
+	streamPermRepo := repository.NewStreamPermissionRepo(testPool)
 
-	hubSvc := service.NewHubService(hubRepo, streamRepo, inviteRepo, notifRepo, hubNotifRepo, rankRepo)
+	hubSvc := service.NewHubService(hubRepo, streamRepo, streamPermRepo, inviteRepo, notifRepo, hubNotifRepo, rankRepo)
 	return hubSvc, resp.User.ID
 }
 
@@ -188,7 +189,8 @@ func TestStream_CreateAndList(t *testing.T) {
 	msgRepo := repository.NewMessageRepo(testPool)
 	notifRepo := repository.NewNotificationRepo(testPool)
 	streamNotifRepo := repository.NewStreamNotificationSettingsRepo(testPool)
-	streamSvc := service.NewStreamService(streamRepo, hubSvc, msgRepo, notifRepo, streamNotifRepo)
+	streamPermRepo := repository.NewStreamPermissionRepo(testPool)
+	streamSvc := service.NewStreamService(streamRepo, streamPermRepo, hubSvc, msgRepo, notifRepo, streamNotifRepo)
 
 	stream, err := streamSvc.Create(ctx, hub.ID, ownerID, "general-2", 0, false, nil)
 	if err != nil {
@@ -198,7 +200,7 @@ func TestStream_CreateAndList(t *testing.T) {
 		t.Fatalf("expected 'general-2', got %q", stream.Name)
 	}
 
-	streams, err := streamSvc.List(ctx, hub.ID)
+	streams, err := streamSvc.List(ctx, hub.ID, ownerID)
 	if err != nil {
 		t.Fatalf("List streams failed: %v", err)
 	}
@@ -218,7 +220,8 @@ func TestMessage_CreateAndList(t *testing.T) {
 	notifRepo := repository.NewNotificationRepo(testPool)
 	hubNotifRepo := repository.NewHubNotificationSettingsRepo(testPool)
 	streamNotifRepo := repository.NewStreamNotificationSettingsRepo(testPool)
-	streams, _ := service.NewStreamService(streamRepo, hubSvc, msgRepo, notifRepo, streamNotifRepo).List(ctx, hub.ID)
+	streamPermRepo := repository.NewStreamPermissionRepo(testPool)
+	streams, _ := service.NewStreamService(streamRepo, streamPermRepo, hubSvc, msgRepo, notifRepo, streamNotifRepo).List(ctx, hub.ID, ownerID)
 	if len(streams) == 0 {
 		t.Fatal("expected at least one stream")
 	}
@@ -240,7 +243,7 @@ func TestMessage_CreateAndList(t *testing.T) {
 		t.Fatalf("expected 'Hello world!', got %q", msg.Content)
 	}
 
-	messages, err := msgSvc.List(ctx, streamID, nil, 50)
+	messages, err := msgSvc.List(ctx, ownerID, streamID, nil, 50)
 	if err != nil {
 		t.Fatalf("List messages failed: %v", err)
 	}

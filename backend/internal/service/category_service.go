@@ -32,11 +32,28 @@ func (s *CategoryService) Create(ctx context.Context, hubID, userID, name string
 	return cat, nil
 }
 
-func (s *CategoryService) List(ctx context.Context, hubID string) ([]models.Category, error) {
+func (s *CategoryService) List(ctx context.Context, hubID, userID string) ([]models.Category, error) {
 	cats, err := s.catRepo.List(ctx, hubID)
 	if err != nil {
 		return nil, apperror.Internal("internal error", err)
 	}
+	visibleStreams, err := s.hubService.GetVisibleStreams(ctx, hubID, userID)
+	if err != nil {
+		return nil, err
+	}
+	visibleCategories := make(map[string]struct{})
+	for _, stream := range visibleStreams {
+		if stream.CategoryID != nil {
+			visibleCategories[*stream.CategoryID] = struct{}{}
+		}
+	}
+	filtered := make([]models.Category, 0, len(cats))
+	for _, cat := range cats {
+		if _, ok := visibleCategories[cat.ID]; ok {
+			filtered = append(filtered, cat)
+		}
+	}
+	cats = filtered
 	if cats == nil {
 		cats = []models.Category{}
 	}

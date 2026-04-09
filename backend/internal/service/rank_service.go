@@ -161,12 +161,11 @@ func (s *RankService) RemoveRank(ctx context.Context, hubID, userID, targetUserI
 }
 
 func (s *RankService) hasManageRanks(ctx context.Context, hubID, userID string) bool {
-	role := s.hubRepo.GetMemberRole(ctx, hubID, userID)
-	if role == "" {
+	memberCtx, err := s.hubRepo.GetMemberPermissionContext(ctx, hubID, userID)
+	if err != nil {
 		return false
 	}
-	// Combine base role permissions with rank permissions
-	perms := models.RolePermissions[role]
+	perms := memberCtx.DefaultPermissions | models.RolePermissions[memberCtx.Role]
 	rankPerms := s.rankRepo.GetMemberRankPermissions(ctx, hubID, userID)
 	return models.HasPermission(perms|rankPerms, models.PermManageRanks)
 }

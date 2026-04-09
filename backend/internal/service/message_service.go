@@ -57,24 +57,28 @@ type CreateMessageInput struct {
 }
 
 type SearchMessagesInput struct {
-	Query      string
-	StreamID   *string
-	AuthorID   *string
-	AuthorType string
-	Mention    string
-	Has        string
-	Before     *time.Time
-	After      *time.Time
-	StartAt    *time.Time
-	EndAt      *time.Time
-	PinnedOnly bool
-	LinkOnly   bool
-	Filename   string
-	Extension  string
-	Limit      int
+	Query            string
+	StreamID         *string
+	VisibleStreamIDs []string
+	AuthorID         *string
+	AuthorType       string
+	Mention          string
+	Has              string
+	Before           *time.Time
+	After            *time.Time
+	StartAt          *time.Time
+	EndAt            *time.Time
+	PinnedOnly       bool
+	LinkOnly         bool
+	Filename         string
+	Extension        string
+	Limit            int
 }
 
-func (s *MessageService) List(ctx context.Context, streamID string, before *string, limit int) ([]models.Message, error) {
+func (s *MessageService) List(ctx context.Context, userID, streamID string, before *string, limit int) ([]models.Message, error) {
+	if _, err := s.hubService.GetStreamHubID(ctx, streamID, userID); err != nil {
+		return nil, err
+	}
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
@@ -89,12 +93,12 @@ func (s *MessageService) List(ctx context.Context, streamID string, before *stri
 }
 
 func (s *MessageService) Create(ctx context.Context, userID, streamID string, input CreateMessageInput) (*models.Message, error) {
-	hubID, err := s.streamRepo.GetHubID(ctx, streamID)
+	perms, hubID, err := s.hubService.GetStreamEffectivePermissions(ctx, streamID, userID)
 	if err != nil || hubID == "" {
 		return nil, apperror.NotFound("stream not found")
 	}
 
-	if !s.hubService.HasPermission(ctx, hubID, userID, models.PermSendMessages) {
+	if !models.HasPermission(perms, models.PermSendMessages) {
 		return nil, apperror.Forbidden("you do not have permission to send messages")
 	}
 
@@ -152,6 +156,15 @@ func (s *MessageService) Update(ctx context.Context, msgID, userID, content stri
 	if content == "" {
 		return nil, apperror.BadRequest("content is required")
 	}
+	existing, err := s.msgRepo.GetByID(ctx, msgID)
+	if err != nil {
+		return nil, apperror.NotFound("message not found or unauthorized")
+	}
+	if existing.StreamID != nil {
+		if _, err := s.hubService.GetStreamHubID(ctx, *existing.StreamID, userID); err != nil {
+			return nil, err
+		}
+	}
 
 	msg, err := s.msgRepo.Update(ctx, msgID, userID, content)
 	if err != nil {
@@ -199,36 +212,50 @@ func (s *MessageService) ListPinned(ctx context.Context, streamID, userID string
 }
 
 func (s *MessageService) Search(ctx context.Context, hubID, userID string, input SearchMessagesInput) ([]models.Message, error) {
-	if err := s.hubService.AssertHubMember(ctx, hubID, userID); err != nil {
+	visibleStreams, err := s.hubService.GetVisibleStreams(ctx, hubID, userID)
+	if err != nil {
 		return nil, err
+	}
+	visibleIDs := make([]string, 0, len(visibleStreams))
+	visibleSet := make(map[string]struct{}, len(visibleStreams))
+	for _, stream := range visibleStreams {
+		visibleIDs = append(visibleIDs, stream.ID)
+		visibleSet[stream.ID] = struct{}{}
+	}
+	if len(visibleIDs) == 0 {
+		return []models.Message{}, nil
 	}
 
 	if input.StreamID != nil && *input.StreamID != "" {
-		streamHubID, err := s.streamRepo.GetHubID(ctx, *input.StreamID)
+		streamHubID, err := s.hubService.GetStreamHubID(ctx, *input.StreamID, userID)
 		if err != nil {
 			return nil, apperror.NotFound("stream not found")
 		}
 		if streamHubID != hubID {
 			return nil, apperror.BadRequest("stream does not belong to this hub")
 		}
+		if _, ok := visibleSet[*input.StreamID]; !ok {
+			return nil, apperror.NotFound("stream not found")
+		}
 	}
 
 	filters := repository.MessageSearchFilters{
-		Query:      strings.TrimSpace(input.Query),
-		StreamID:   input.StreamID,
-		AuthorID:   input.AuthorID,
-		AuthorType: strings.TrimSpace(input.AuthorType),
-		Mention:    strings.TrimSpace(input.Mention),
-		Has:        strings.TrimSpace(input.Has),
-		Before:     input.Before,
-		After:      input.After,
-		StartAt:    input.StartAt,
-		EndAt:      input.EndAt,
-		PinnedOnly: input.PinnedOnly,
-		LinkOnly:   input.LinkOnly,
-		Filename:   strings.TrimSpace(input.Filename),
-		Extension:  strings.TrimSpace(input.Extension),
-		Limit:      input.Limit,
+		Query:            strings.TrimSpace(input.Query),
+		StreamID:         input.StreamID,
+		VisibleStreamIDs: visibleIDs,
+		AuthorID:         input.AuthorID,
+		AuthorType:       strings.TrimSpace(input.AuthorType),
+		Mention:          strings.TrimSpace(input.Mention),
+		Has:              strings.TrimSpace(input.Has),
+		Before:           input.Before,
+		After:            input.After,
+		StartAt:          input.StartAt,
+		EndAt:            input.EndAt,
+		PinnedOnly:       input.PinnedOnly,
+		LinkOnly:         input.LinkOnly,
+		Filename:         strings.TrimSpace(input.Filename),
+		Extension:        strings.TrimSpace(input.Extension),
+		Limit:            input.Limit,
 	}
 
 	messages, err := s.msgRepo.SearchInHub(ctx, hubID, filters)
@@ -247,15 +274,16 @@ func (s *MessageService) Delete(ctx context.Context, msgID, userID string) error
 		return apperror.NotFound("message not found")
 	}
 
-	if msg.AuthorID != userID {
-		if msg.StreamID != nil {
-			hubID, _ := s.streamRepo.GetHubID(ctx, *msg.StreamID)
-			if !s.hubService.HasPermission(ctx, hubID, userID, models.PermManageMessages) {
-				return apperror.Forbidden("you do not have permission to delete this message")
-			}
-		} else {
+	if msg.StreamID != nil {
+		perms, _, err := s.hubService.GetStreamEffectivePermissions(ctx, *msg.StreamID, userID)
+		if err != nil {
+			return err
+		}
+		if msg.AuthorID != userID && !models.HasPermission(perms, models.PermManageMessages) {
 			return apperror.Forbidden("you do not have permission to delete this message")
 		}
+	} else if msg.AuthorID != userID {
+		return apperror.Forbidden("you do not have permission to delete this message")
 	}
 
 	if err := s.msgRepo.Delete(ctx, msgID); err != nil {
@@ -276,13 +304,20 @@ func (s *MessageService) ToggleReaction(ctx context.Context, msgID, userID, emoj
 	if emoji == "" {
 		return false, apperror.BadRequest("emoji is required")
 	}
+	msg, err := s.msgRepo.GetByID(ctx, msgID)
+	if err != nil {
+		return false, apperror.NotFound("message not found")
+	}
+	if msg.StreamID != nil {
+		if _, err := s.hubService.GetStreamHubID(ctx, *msg.StreamID, userID); err != nil {
+			return false, err
+		}
+	}
 
 	exists, err := s.msgRepo.ReactionExists(ctx, msgID, userID, emoji, emojiID)
 	if err != nil {
 		return false, apperror.Internal("internal error", err)
 	}
-
-	msg, _ := s.msgRepo.GetByID(ctx, msgID)
 
 	if exists {
 		if err := s.msgRepo.RemoveReaction(ctx, msgID, userID, emoji, emojiID); err != nil {
@@ -310,10 +345,18 @@ func (s *MessageService) ToggleReaction(ctx context.Context, msgID, userID, emoj
 }
 
 func (s *MessageService) RemoveReaction(ctx context.Context, msgID, userID, emoji string, emojiID *string) error {
+	msg, err := s.msgRepo.GetByID(ctx, msgID)
+	if err != nil {
+		return apperror.NotFound("message not found")
+	}
+	if msg.StreamID != nil {
+		if _, err := s.hubService.GetStreamHubID(ctx, *msg.StreamID, userID); err != nil {
+			return err
+		}
+	}
 	if err := s.msgRepo.RemoveReaction(ctx, msgID, userID, emoji, emojiID); err != nil {
 		return apperror.Internal("internal error", err)
 	}
-	msg, _ := s.msgRepo.GetByID(ctx, msgID)
 	s.broadcastReaction(msg, ws.OpReactionRemove, msgID, userID, emoji, emojiID, nil)
 	return nil
 }
@@ -433,14 +476,14 @@ func (s *MessageService) togglePin(ctx context.Context, msgID, userID string, pi
 		return nil, apperror.BadRequest("only stream messages can be pinned")
 	}
 
-	hubID, err := s.streamRepo.GetHubID(ctx, *msg.StreamID)
-	if err != nil {
+	if _, err := s.streamRepo.GetHubID(ctx, *msg.StreamID); err != nil {
 		return nil, apperror.NotFound("stream not found")
 	}
-	if err := s.hubService.AssertHubMember(ctx, hubID, userID); err != nil {
+	perms, _, err := s.hubService.GetStreamEffectivePermissions(ctx, *msg.StreamID, userID)
+	if err != nil {
 		return nil, err
 	}
-	if msg.AuthorID != userID && !s.hubService.HasPermission(ctx, hubID, userID, models.PermManageMessages) {
+	if msg.AuthorID != userID && !models.HasPermission(perms, models.PermManageMessages) {
 		return nil, apperror.Forbidden("you do not have permission to pin this message")
 	}
 

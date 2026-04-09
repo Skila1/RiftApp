@@ -31,21 +31,22 @@ type messageScanner interface {
 }
 
 type MessageSearchFilters struct {
-	Query      string
-	StreamID   *string
-	AuthorID   *string
-	AuthorType string
-	Mention    string
-	Has        string
-	Before     *time.Time
-	After      *time.Time
-	StartAt    *time.Time
-	EndAt      *time.Time
-	PinnedOnly bool
-	LinkOnly   bool
-	Filename   string
-	Extension  string
-	Limit      int
+	Query            string
+	StreamID         *string
+	VisibleStreamIDs []string
+	AuthorID         *string
+	AuthorType       string
+	Mention          string
+	Has              string
+	Before           *time.Time
+	After            *time.Time
+	StartAt          *time.Time
+	EndAt            *time.Time
+	PinnedOnly       bool
+	LinkOnly         bool
+	Filename         string
+	Extension        string
+	Limit            int
 }
 
 func NewMessageRepo(db *pgxpool.Pool) *MessageRepo {
@@ -481,6 +482,8 @@ func (r *MessageRepo) SearchInHub(ctx context.Context, hubID string, filters Mes
 
 	if filters.StreamID != nil && *filters.StreamID != "" {
 		clauses = append(clauses, "m.stream_id = "+addArg(*filters.StreamID))
+	} else if len(filters.VisibleStreamIDs) > 0 {
+		clauses = append(clauses, "m.stream_id = ANY("+addArg(filters.VisibleStreamIDs)+")")
 	}
 	if filters.Query != "" {
 		clauses = append(clauses, "m.content ILIKE "+addArg("%"+filters.Query+"%"))

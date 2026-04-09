@@ -43,12 +43,12 @@ func TestRoleHasPermission(t *testing.T) {
 		{RoleOwner, PermManageHub, true},
 		{RoleAdmin, PermManageHub, true},
 		{RoleAdmin, PermSendMessages, true},
-		{RoleAdmin, PermConnectVoice, false},
+		{RoleAdmin, PermConnectVoice, true},
 		{RoleAdmin, PermUseSoundboard, true},
-		{RoleMember, PermSendMessages, true},
+		{RoleMember, PermSendMessages, false},
 		{RoleMember, PermManageHub, false},
-		{RoleMember, PermConnectVoice, true},
-		{RoleMember, PermUseSoundboard, true},
+		{RoleMember, PermConnectVoice, false},
+		{RoleMember, PermUseSoundboard, false},
 		{"unknown", PermSendMessages, false},
 	}
 	for _, tt := range tests {
@@ -71,6 +71,15 @@ func TestPermDefault(t *testing.T) {
 	}
 	if PermDefault&PermSendMessages == 0 {
 		t.Error("default should include send messages")
+	}
+	if PermDefault&PermConnectVoice == 0 {
+		t.Error("default should include connect voice")
+	}
+	if PermDefault&PermSpeakVoice == 0 {
+		t.Error("default should include speak voice")
+	}
+	if PermDefault&PermUseSoundboard == 0 {
+		t.Error("default should include soundboard")
 	}
 	if PermDefault&PermManageHub != 0 {
 		t.Error("default should not include manage hub")

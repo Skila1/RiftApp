@@ -57,7 +57,7 @@ export default function CreateChannelModal({ hubId, categoryId, initialType, onC
     if (!trimmed || creating) return;
     setCreating(true);
     try {
-      await createStream(hubId, trimmed, type, categoryId);
+      await createStream(hubId, trimmed, type, categoryId, isPrivate);
       onClose();
     } finally {
       setCreating(false);

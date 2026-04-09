@@ -194,7 +194,11 @@ export function useWebSocket() {
           }
           case 'voice_state_update': {
             const { stream_id, user_id, action } = evt.d as { stream_id: string; user_id: string; action: 'join' | 'leave' };
-            useStreamStore.getState().applyVoiceState(stream_id, user_id, action);
+            const streamState = useStreamStore.getState();
+            if (!streamState.streams.some((stream) => stream.id === stream_id)) {
+              break;
+            }
+            streamState.applyVoiceState(stream_id, user_id, action);
             const voiceState = useVoiceStore.getState();
             if (action === 'join') {
               if (!Object.prototype.hasOwnProperty.call(voiceState.speakingSignals, user_id)) {
@@ -211,12 +215,20 @@ export function useWebSocket() {
           }
           case 'voice_screen_share_update': {
             const { stream_id, user_id, sharing } = evt.d as { stream_id: string; user_id: string; sharing: boolean };
-            useStreamStore.getState().applyVoiceScreenShare(stream_id, user_id, sharing);
+            const streamState = useStreamStore.getState();
+            if (!streamState.streams.some((stream) => stream.id === stream_id)) {
+              break;
+            }
+            streamState.applyVoiceScreenShare(stream_id, user_id, sharing);
             break;
           }
           case 'voice_deafen_update': {
             const { stream_id, user_id, deafened } = evt.d as { stream_id: string; user_id: string; deafened: boolean };
-            useStreamStore.getState().applyVoiceDeafen(stream_id, user_id, deafened);
+            const streamState = useStreamStore.getState();
+            if (!streamState.streams.some((stream) => stream.id === stream_id)) {
+              break;
+            }
+            streamState.applyVoiceDeafen(stream_id, user_id, deafened);
             break;
           }
           case 'voice_speaking_update': {

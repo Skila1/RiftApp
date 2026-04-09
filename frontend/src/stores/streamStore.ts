@@ -43,7 +43,7 @@ interface StreamState {
   /** Reload streams + categories without changing active stream (for WS-triggered updates). */
   reloadLayout: (hubId: string) => Promise<void>;
   setActiveStream: (streamId: string) => Promise<void>;
-  createStream: (hubId: string, name: string, type?: number, categoryId?: string) => Promise<Stream>;
+  createStream: (hubId: string, name: string, type?: number, categoryId?: string, isPrivate?: boolean) => Promise<Stream>;
   patchStream: (streamId: string, name: string, voiceSettings?: { bitrate?: number; user_limit?: number; region?: string }, isPrivate?: boolean) => Promise<Stream>;
   deleteStream: (streamId: string) => Promise<void>;
   /** Mark a text channel read using latest message on server (works when channel not open). */
@@ -196,8 +196,8 @@ export const useStreamStore = create<StreamState>((set, get) => ({
     await useNotificationStore.getState().markStreamNotificationsRead(streamId);
   },
 
-  createStream: async (hubId, name, type = 0, categoryId?) => {
-    const stream = await api.createStream(hubId, name, type, categoryId);
+  createStream: async (hubId, name, type = 0, categoryId?, isPrivate?) => {
+    const stream = await api.createStream(hubId, name, type, categoryId, isPrivate);
     set((s) => {
       const streams = [...s.streams, stream];
       const hubLayoutCache = { ...s.hubLayoutCache };
