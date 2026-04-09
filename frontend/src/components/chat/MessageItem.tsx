@@ -397,10 +397,10 @@ const MessageItem = memo(function MessageItem({
     <>
       <span
         aria-hidden
-        className="mt-[8px] mr-[-4px] h-[12px] w-7 shrink-0 rounded-tl-[7px] border-l-2 border-t-2 border-riftapp-border-light/70"
+        className="mt-[11px] mr-[-2px] h-[14px] w-7 shrink-0 rounded-tl-[8px] border-l-2 border-t-2 border-riftapp-text-dim/45"
       />
       <span
-        className={`mt-px flex h-4.5 w-4.5 shrink-0 items-center justify-center overflow-hidden rounded-full ring-1 ring-riftapp-border/30 ${
+        className={`mt-[6px] flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-riftapp-content shadow-[0_0_0_1px_rgba(255,255,255,0.06)] ${
           replyAuthor ? replyAuthorBg : 'bg-riftapp-content-elevated text-riftapp-text-dim/75'
         }`}
       >
@@ -412,33 +412,37 @@ const MessageItem = memo(function MessageItem({
           </span>
         )}
       </span>
-      <span className="max-w-[38%] shrink-0 truncate text-[12px] font-semibold leading-4 text-riftapp-text-dim/90 transition-colors group-hover/reply:text-riftapp-text">
-        {replyAuthorLabel}
-      </span>
       <span
-        className={`min-w-0 truncate text-[12px] leading-4 transition-colors ${
-          replyPreview.tone === 'default'
-            ? 'text-riftapp-text-dim/75 group-hover/reply:text-riftapp-text-dim'
-            : replyPreview.tone === 'attachment'
-              ? 'text-riftapp-text-dim/65 group-hover/reply:text-riftapp-text-dim/85'
-              : 'text-riftapp-text-dim/55 group-hover/reply:text-riftapp-text-dim/70'
-        }`}
+        className="mt-px flex min-w-0 items-center gap-1.5"
       >
-        {replyPreview.text}
+        <span className="max-w-[38%] shrink-0 truncate text-[12px] font-semibold leading-4 text-riftapp-text-dim/90 transition-colors group-hover/reply:text-riftapp-text">
+          {replyAuthorLabel}
+        </span>
+        <span
+          className={`min-w-0 truncate text-[12px] leading-4 transition-colors ${
+            replyPreview.tone === 'default'
+              ? 'text-riftapp-text-dim/75 group-hover/reply:text-riftapp-text-dim'
+              : replyPreview.tone === 'attachment'
+                ? 'text-riftapp-text-dim/65 group-hover/reply:text-riftapp-text-dim/85'
+                : 'text-riftapp-text-dim/55 group-hover/reply:text-riftapp-text-dim/70'
+          }`}
+        >
+          {replyPreview.text}
+        </span>
       </span>
     </>
   );
 
   const replyPreviewBlock = hasReplyPreview ? (
     interactionsDisabled || !replyTargetId ? (
-      <div className="mb-0.5 flex max-w-[580px] min-w-0 items-center gap-1.5 pr-2 text-left opacity-80">
+      <div className="mb-0.5 flex max-w-[580px] min-w-0 items-start gap-1.5 pr-2 text-left opacity-85">
         {replyPreviewBody}
       </div>
     ) : (
       <button
         type="button"
         onClick={handleReplyPreviewClick}
-        className="group/reply mb-0.5 flex max-w-[580px] min-w-0 items-center gap-1.5 pr-2 text-left"
+        className="group/reply mb-0.5 flex max-w-[580px] min-w-0 items-start gap-1.5 pr-2 text-left"
       >
         {replyPreviewBody}
       </button>
