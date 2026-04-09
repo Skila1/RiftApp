@@ -56,24 +56,6 @@ function LockIcon({ size = 13 }: { size?: number }) {
   );
 }
 
-function ChevronDownIcon({ className = '' }: { className?: string }) {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
-  );
-}
-
 function VoiceNoticeBanner({
   notice,
   onDismiss,
@@ -171,16 +153,12 @@ function VoiceSquareButton({
 function UserActionButton({
   title,
   onClick,
-  active,
   danger,
-  compact,
   children,
 }: {
   title: string;
   onClick: () => void;
-  active?: boolean;
   danger?: boolean;
-  compact?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -188,40 +166,13 @@ function UserActionButton({
       type="button"
       title={title}
       onClick={onClick}
-      className={`flex items-center justify-center rounded-md transition-all duration-150 ${compact ? 'h-7 w-6' : 'h-7 w-7'} ${
+      className={`flex h-7 w-7 items-center justify-center rounded-md transition-all duration-150 ${
         danger
           ? 'text-[#ed4245] hover:bg-[#ed4245]/10 hover:text-[#ff676b]'
-          : active
-            ? 'bg-white/[0.08] text-[#f2f3f5]'
-            : 'text-[#b5bac1] hover:bg-white/[0.06] hover:text-[#f2f3f5]'
+          : 'text-[#b5bac1] hover:bg-white/[0.06] hover:text-[#f2f3f5]'
       }`}
     >
       {children}
-    </button>
-  );
-}
-
-function QuickMenuButton({
-  children,
-  onClick,
-  danger,
-  trailing,
-}: {
-  children: ReactNode;
-  onClick: () => void;
-  danger?: boolean;
-  trailing?: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[13px] transition-colors ${
-        danger ? 'text-[#ffb3b5] hover:bg-[#ed4245]/12' : 'text-[#dbdee1] hover:bg-white/[0.06]'
-      }`}
-    >
-      <span>{children}</span>
-      {trailing}
     </button>
   );
 }
@@ -292,11 +243,11 @@ function ConnectionBarsIcon({
   const segmentColors = [0, 1, 2, 3].map((segmentIndex) => (bars > segmentIndex ? activeColor : inactiveColor));
 
   return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-      <path d="M2.1 11.75C2.1 10.82 2.86 10.06 3.79 10.06" stroke={segmentColors[0]} strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M2.1 8.98C4.56 8.98 6.56 10.98 6.56 13.44" stroke={segmentColors[1]} strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M2.1 6.17C6.12 6.17 9.37 9.43 9.37 13.44" stroke={segmentColors[2]} strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M2.1 3.35C7.68 3.35 12.19 7.87 12.19 13.44" stroke={segmentColors[3]} strokeWidth="1.7" strokeLinecap="round" />
+    <svg width="16" height="16" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <path d="M2.1 11.75C2.1 10.82 2.86 10.06 3.79 10.06" stroke={segmentColors[0]} strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M2.1 8.98C4.56 8.98 6.56 10.98 6.56 13.44" stroke={segmentColors[1]} strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M2.1 6.17C6.12 6.17 9.37 9.43 9.37 13.44" stroke={segmentColors[2]} strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M2.1 3.35C7.68 3.35 12.19 7.87 12.19 13.44" stroke={segmentColors[3]} strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -639,11 +590,9 @@ function VoiceUserRow({
   voiceIsSpeaking,
   voiceIsMuted,
   voiceIsDeafened,
-  quickMenuOpen,
   onAvatarClick,
   onToggleMute,
   onToggleDeafen,
-  onToggleMenu,
   onOpenSettings,
 }: {
   user: User;
@@ -651,11 +600,9 @@ function VoiceUserRow({
   voiceIsSpeaking: boolean;
   voiceIsMuted: boolean;
   voiceIsDeafened: boolean;
-  quickMenuOpen: boolean;
   onAvatarClick: (e: ReactMouseEvent) => void;
   onToggleMute: () => void;
   onToggleDeafen: () => void;
-  onToggleMenu: () => void;
   onOpenSettings: () => void;
 }) {
   return (
@@ -697,9 +644,6 @@ function VoiceUserRow({
         </UserActionButton>
         <UserActionButton title={voiceIsDeafened ? 'Undeafen' : 'Deafen'} onClick={onToggleDeafen} danger={voiceIsDeafened}>
           <HeadphonesIcon deafened={voiceIsDeafened} size={17} />
-        </UserActionButton>
-        <UserActionButton title="Voice options" onClick={onToggleMenu} active={quickMenuOpen} compact>
-          <ChevronDownIcon />
         </UserActionButton>
         <UserActionButton title="User Settings" onClick={onOpenSettings}>
           <SettingsIcon size={17} />
@@ -750,10 +694,8 @@ export default function VoiceBottomBar() {
   const openSettings = useAppSettingsStore((s) => s.openSettings);
 
   const [soundboardOpen, setSoundboardOpen] = useState(false);
-  const [quickMenuOpen, setQuickMenuOpen] = useState(false);
   const [connectionPopoverOpen, setConnectionPopoverOpen] = useState(false);
   const [pingHistory, setPingHistory] = useState<number[]>([]);
-  const quickMenuRef = useRef<HTMLDivElement>(null);
   const connectionTriggerRef = useRef<HTMLButtonElement>(null);
   const connectionPopoverRef = useRef<HTMLDivElement>(null);
 
@@ -762,31 +704,6 @@ export default function VoiceBottomBar() {
   const inVoice = voiceConnected || voiceConnecting;
   const controlsDisabled = !voiceConnected || voiceConnecting;
   const averagePingMs = useMemo(() => averagePing(pingHistory), [pingHistory]);
-
-  useEffect(() => {
-    if (!quickMenuOpen) {
-      return;
-    }
-
-    const handlePointerDown = (event: MouseEvent) => {
-      if (quickMenuRef.current && !quickMenuRef.current.contains(event.target as Node)) {
-        setQuickMenuOpen(false);
-      }
-    };
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setQuickMenuOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handlePointerDown);
-    window.addEventListener('keydown', handleEscape);
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      window.removeEventListener('keydown', handleEscape);
-    };
-  }, [quickMenuOpen]);
 
   useEffect(() => {
     if (!connectionPopoverOpen) {
@@ -837,7 +754,6 @@ export default function VoiceBottomBar() {
     closeVoiceView();
     void voiceLeave();
     setConnectionPopoverOpen(false);
-    setQuickMenuOpen(false);
     setSoundboardOpen(false);
   }, [closeVoiceView, voiceLeave]);
 
@@ -850,24 +766,11 @@ export default function VoiceBottomBar() {
 
   const handleOpenProfileSettings = useCallback(() => {
     setConnectionPopoverOpen(false);
-    setQuickMenuOpen(false);
     openSettings('profile');
   }, [openSettings]);
 
-  const handleOpenVoiceSettings = useCallback(() => {
-    setConnectionPopoverOpen(false);
-    setQuickMenuOpen(false);
-    openSettings('voice');
-  }, [openSettings]);
-
   const handleToggleConnectionPopover = useCallback(() => {
-    setQuickMenuOpen(false);
     setConnectionPopoverOpen((current) => !current);
-  }, []);
-
-  const handleToggleQuickMenu = useCallback(() => {
-    setConnectionPopoverOpen(false);
-    setQuickMenuOpen((current) => !current);
   }, []);
 
   const voiceStatus = useMemo(() => {
@@ -945,34 +848,17 @@ export default function VoiceBottomBar() {
         />
       ) : null}
 
-      <div className="relative" ref={quickMenuRef}>
-        <VoiceUserRow
-          user={user}
-          statusText={currentStatusText}
-          voiceIsSpeaking={voiceIsSpeaking}
-          voiceIsMuted={voiceIsMuted}
-          voiceIsDeafened={voiceIsDeafened}
-          quickMenuOpen={quickMenuOpen}
-          onAvatarClick={handleAvatarClick}
-          onToggleMute={voiceToggleMute}
-          onToggleDeafen={() => void voiceToggleDeafen()}
-          onToggleMenu={handleToggleQuickMenu}
-          onOpenSettings={handleOpenProfileSettings}
-        />
-
-        {quickMenuOpen ? (
-          <div className="absolute bottom-full right-2 mb-1.5 w-[188px] rounded-xl border border-white/[0.06] bg-[#111214]/96 p-1 shadow-[0_14px_36px_rgba(0,0,0,0.45)] backdrop-blur-sm">
-            <QuickMenuButton onClick={handleOpenVoiceSettings} trailing={<SettingsIcon size={15} />}>
-              Voice Settings
-            </QuickMenuButton>
-            {inVoice ? (
-              <QuickMenuButton onClick={handleLeave} danger trailing={<DisconnectIcon size={15} />}>
-                Disconnect
-              </QuickMenuButton>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+      <VoiceUserRow
+        user={user}
+        statusText={currentStatusText}
+        voiceIsSpeaking={voiceIsSpeaking}
+        voiceIsMuted={voiceIsMuted}
+        voiceIsDeafened={voiceIsDeafened}
+        onAvatarClick={handleAvatarClick}
+        onToggleMute={voiceToggleMute}
+        onToggleDeafen={() => void voiceToggleDeafen()}
+        onOpenSettings={handleOpenProfileSettings}
+      />
     </div>
   );
 }
