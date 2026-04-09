@@ -39,8 +39,9 @@ func NewService(db *pgxpool.Pool) *Service {
 func (s *Service) GetConfig(ctx context.Context) (*Config, error) {
 	s.mu.RLock()
 	if s.cached != nil {
-		defer s.mu.RUnlock()
-		return s.cached, nil
+		cp := *s.cached
+		s.mu.RUnlock()
+		return &cp, nil
 	}
 	s.mu.RUnlock()
 	return s.loadConfig(ctx)
@@ -134,7 +135,7 @@ func sendMail(cfg *Config, to, subject, htmlBody string) error {
 	}
 
 	if cfg.TLSEnabled && cfg.Port == 465 {
-		tlsCfg := &tls.Config{ServerName: cfg.Host}
+		tlsCfg := &tls.Config{ServerName: cfg.Host, MinVersion: tls.VersionTLS12}
 		conn, err := tls.Dial("tcp", addr, tlsCfg)
 		if err != nil {
 			return err
@@ -167,5 +168,11 @@ func sendMail(cfg *Config, to, subject, htmlBody string) error {
 		return w.Close()
 	}
 
-	return gosmtp.SendMail(addr, auth, from, []string{to}, msg)
+	recipients := make([]string, 0)
+	for _, rcpt := range strings.Split(to, ",") {
+		if trimmed := strings.TrimSpace(rcpt); trimmed != "" {
+			recipients = append(recipients, trimmed)
+		}
+	}
+	return gosmtp.SendMail(addr, auth, from, recipients, msg)
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -191,14 +192,38 @@ func (h *AdminHandler) EditUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+
+	setClauses := []string{}
+	args := []interface{}{userID}
+	idx := 2
 	if body.Username != nil {
-		h.db.Exec(r.Context(), `UPDATE users SET username = $2, updated_at = now() WHERE id = $1`, userID, *body.Username)
+		setClauses = append(setClauses, fmt.Sprintf("username = $%d", idx))
+		args = append(args, *body.Username)
+		idx++
 	}
 	if body.DisplayName != nil {
-		h.db.Exec(r.Context(), `UPDATE users SET display_name = $2, updated_at = now() WHERE id = $1`, userID, *body.DisplayName)
+		setClauses = append(setClauses, fmt.Sprintf("display_name = $%d", idx))
+		args = append(args, *body.DisplayName)
+		idx++
 	}
 	if body.Bio != nil {
-		h.db.Exec(r.Context(), `UPDATE users SET bio = $2, updated_at = now() WHERE id = $1`, userID, *body.Bio)
+		setClauses = append(setClauses, fmt.Sprintf("bio = $%d", idx))
+		args = append(args, *body.Bio)
+		idx++
+	}
+	if len(setClauses) == 0 {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		return
+	}
+	query := fmt.Sprintf("UPDATE users SET %s, updated_at = now() WHERE id = $1", strings.Join(setClauses, ", "))
+	cmd, err := h.db.Exec(r.Context(), query, args...)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update user")
+		return
+	}
+	if cmd.RowsAffected() == 0 {
+		writeError(w, http.StatusNotFound, "user not found")
+		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -382,13 +407,20 @@ func (h *AdminHandler) RevokeSession(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Type string `json:"type"`
 	}
-	readJSON(r, &body)
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
 
 	var err error
-	if body.Type == "user" {
+	switch body.Type {
+	case "user":
 		err = h.adminSvc.RevokeUserSession(r.Context(), id)
-	} else {
+	case "admin":
 		err = h.adminSvc.RevokeAdminSession(r.Context(), id)
+	default:
+		writeError(w, http.StatusBadRequest, "type must be 'user' or 'admin'")
+		return
 	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to revoke session")
@@ -449,7 +481,7 @@ func checkDB(ctx context.Context, db *pgxpool.Pool) string {
 func (h *AdminHandler) GetSMTPConfig(w http.ResponseWriter, r *http.Request) {
 	cfg, err := h.smtpSvc.GetConfig(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to load smtp config")
+		writeJSON(w, http.StatusOK, map[string]interface{}{"configured": false})
 		return
 	}
 	cfg.Password = ""
@@ -461,6 +493,13 @@ func (h *AdminHandler) UpdateSMTPConfig(w http.ResponseWriter, r *http.Request) 
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
+	}
+
+	if body.Password == "" {
+		existing, err := h.smtpSvc.GetConfig(r.Context())
+		if err == nil {
+			body.Password = existing.Password
+		}
 	}
 
 	claims := admin.GetAdminClaims(r.Context())

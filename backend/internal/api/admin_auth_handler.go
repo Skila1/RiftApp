@@ -2,7 +2,9 @@ package api
 
 import (
 	"errors"
+	"net"
 	"net/http"
+	"strings"
 
 	"github.com/riftapp-cloud/riftapp/internal/admin"
 )
@@ -29,7 +31,7 @@ func (h *AdminAuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ip := r.RemoteAddr
+	ip := extractClientIP(r)
 	ua := r.UserAgent()
 	result, err := h.svc.Login(r.Context(), body.Email, body.Password, ip, ua)
 	if err != nil {
@@ -53,7 +55,7 @@ func (h *AdminAuthHandler) Verify2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ip := r.RemoteAddr
+	ip := extractClientIP(r)
 	ua := r.UserAgent()
 	result, err := h.svc.Verify2FA(r.Context(), body.LoginToken, body.Code, ip, ua)
 	if err != nil {
@@ -98,7 +100,7 @@ func (h *AdminAuthHandler) ConfirmTOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ip := r.RemoteAddr
+	ip := extractClientIP(r)
 	ua := r.UserAgent()
 	result, err := h.svc.ConfirmTOTP(r.Context(), body.LoginToken, body.Code, ip, ua)
 	if err != nil {
@@ -120,12 +122,25 @@ func (h *AdminAuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	header := r.Header.Get("Authorization")
-	token := ""
-	if len(header) > 7 {
-		token = header[7:]
-	}
-	if token != "" {
-		_ = h.svc.Logout(r.Context(), token)
+	parts := strings.SplitN(header, " ", 2)
+	if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") && parts[1] != "" {
+		_ = h.svc.Logout(r.Context(), parts[1])
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func extractClientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if ip := strings.TrimSpace(strings.SplitN(xff, ",", 2)[0]); ip != "" {
+			return ip
+		}
+	}
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }

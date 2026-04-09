@@ -126,17 +126,22 @@ function UserSessions() {
             <th className="text-right px-5 py-3"></th>
           </tr></thead>
           <tbody>
-            {sessions.map((s) => (
+            {sessions.map((s) => {
+              const expired = new Date(s.expires_at) < new Date();
+              return (
               <tr key={s.id} className="border-b border-[#3f4147]/20 last:border-0">
                 <td className="px-5 py-3 text-white">{s.username}</td>
                 <td className="px-5 py-3 text-[#949ba4]">{s.email || '—'}</td>
                 <td className="px-5 py-3 text-[#949ba4]">{new Date(s.created_at).toLocaleString()}</td>
                 <td className="px-5 py-3 text-[#949ba4]">{new Date(s.expires_at).toLocaleString()}</td>
                 <td className="px-5 py-3 text-right">
-                  <button onClick={() => revoke(s.id)} className="px-3 py-1 text-xs font-medium rounded bg-[#ed4245]/20 text-[#ed4245] hover:bg-[#ed4245]/30 transition-colors">Revoke</button>
+                  {!expired && (
+                    <button onClick={() => revoke(s.id)} className="px-3 py-1 text-xs font-medium rounded bg-[#ed4245]/20 text-[#ed4245] hover:bg-[#ed4245]/30 transition-colors">Revoke</button>
+                  )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
             {sessions.length === 0 && <tr><td colSpan={5} className="text-center py-8 text-[#949ba4]">No active sessions</td></tr>}
           </tbody>
         </table>

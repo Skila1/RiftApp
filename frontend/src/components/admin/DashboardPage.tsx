@@ -4,12 +4,17 @@ import { adminApi } from '../../api/adminClient';
 export default function DashboardPage() {
   const [stats, setStats] = useState<Record<string, number> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    adminApi.getAnalytics().then(setStats).catch(() => {}).finally(() => setLoading(false));
+    adminApi.getAnalytics()
+      .then(setStats)
+      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load analytics'))
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <PageLoader />;
+  if (error) return <p className="text-[#ed4245] text-sm p-8">{error}</p>;
 
   const cards: { label: string; key: string; color: string }[] = [
     { label: 'Total Users', key: 'total_users', color: 'text-[#00a8fc]' },

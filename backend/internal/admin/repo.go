@@ -85,16 +85,28 @@ func (r *Repo) Create(ctx context.Context, a *Account) error {
 }
 
 func (r *Repo) UpdatePassword(ctx context.Context, id, hash string) error {
-	_, err := r.db.Exec(ctx,
+	cmd, err := r.db.Exec(ctx,
 		`UPDATE admin_accounts SET password_hash = $2, updated_at = now() WHERE id = $1`, id, hash)
-	return err
+	if err != nil {
+		return err
+	}
+	if cmd.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (r *Repo) UpdateTOTP(ctx context.Context, id string, secret *string, enabled bool, method string) error {
-	_, err := r.db.Exec(ctx,
+	cmd, err := r.db.Exec(ctx,
 		`UPDATE admin_accounts SET totp_secret = $2, totp_enabled = $3, totp_method = $4, updated_at = now() WHERE id = $1`,
 		id, secret, enabled, method)
-	return err
+	if err != nil {
+		return err
+	}
+	if cmd.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (r *Repo) UpdateRole(ctx context.Context, id, role string) error {
@@ -146,19 +158,17 @@ func (r *Repo) List(ctx context.Context) ([]Account, error) {
 
 // --- Sessions ---
 
-func (r *Repo) CreateSession(ctx context.Context, s *Session) error {
-	_, err := r.db.Exec(ctx,
-		`INSERT INTO admin_sessions (id, admin_account_id, token_hash, ip_address, user_agent, created_at, expires_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-		s.ID, s.AdminAccountID, s.ID, s.IPAddress, s.UserAgent, s.CreatedAt, s.ExpiresAt)
-	return err
-}
-
 func (r *Repo) CreateSessionWithHash(ctx context.Context, s *Session, tokenHash string) error {
 	_, err := r.db.Exec(ctx,
 		`INSERT INTO admin_sessions (id, admin_account_id, token_hash, ip_address, user_agent, created_at, expires_at)
 		 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
 		s.ID, s.AdminAccountID, tokenHash, s.IPAddress, s.UserAgent, s.CreatedAt, s.ExpiresAt)
+	return err
+}
+
+func (r *Repo) RevokeSessionsByAccount(ctx context.Context, accountID string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE admin_sessions SET revoked_at = now() WHERE admin_account_id = $1 AND revoked_at IS NULL`, accountID)
 	return err
 }
 

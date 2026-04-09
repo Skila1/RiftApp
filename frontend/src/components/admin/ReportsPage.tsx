@@ -40,7 +40,8 @@ export default function ReportsPage() {
   };
 
   const loadStats = async () => {
-    try { const s = await adminApi.getModerationStats(); setStats(s); } catch {}
+    try { const s = await adminApi.getModerationStats(); setStats(s); }
+    catch (err) { console.error('Failed to load moderation stats:', err); }
   };
 
   useEffect(() => { loadReports(); loadStats(); }, [statusFilter, categoryFilter]);
@@ -58,7 +59,11 @@ export default function ReportsPage() {
   const handleAction = async (reportId: string, actionType: string, targetUserId?: string) => {
     if (mutating) return;
     setMutating(reportId);
-    try { await adminApi.takeReportAction(reportId, { action_type: actionType, target_user_id: targetUserId }); loadReports(); }
+    try {
+      await adminApi.takeReportAction(reportId, { action_type: actionType, target_user_id: targetUserId });
+      setActionNote(''); setSelected(null);
+      loadReports(); loadStats();
+    }
     catch (err) { setError(err instanceof Error ? err.message : 'Failed'); }
     finally { setMutating(null); }
   };

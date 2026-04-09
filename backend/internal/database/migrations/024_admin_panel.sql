@@ -6,8 +6,8 @@ CREATE TABLE IF NOT EXISTS admin_accounts (
     password_hash TEXT NOT NULL,
     totp_secret   TEXT,
     totp_enabled  BOOLEAN NOT NULL DEFAULT false,
-    totp_method   TEXT NOT NULL DEFAULT 'app',
-    role          TEXT NOT NULL DEFAULT 'moderator',
+    totp_method   TEXT NOT NULL DEFAULT 'app' CHECK (totp_method IN ('app', 'email')),
+    role          TEXT NOT NULL DEFAULT 'moderator' CHECK (role IN ('super_admin', 'admin', 'moderator')),
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );

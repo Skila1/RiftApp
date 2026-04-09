@@ -28,7 +28,11 @@ export const useAdminStore = create<AdminState>((set) => ({
   loginSuccess: (token, role, user) => {
     sessionStorage.setItem('riftapp_admin_token', token);
     sessionStorage.setItem('riftapp_admin_role', role);
-    if (user) sessionStorage.setItem('riftapp_admin_user', JSON.stringify(user));
+    if (user) {
+      sessionStorage.setItem('riftapp_admin_user', JSON.stringify(user));
+    } else {
+      sessionStorage.removeItem('riftapp_admin_user');
+    }
     adminApi.setToken(token);
     set({ adminToken: token, role, adminUser: user, isAuthenticated: true });
   },

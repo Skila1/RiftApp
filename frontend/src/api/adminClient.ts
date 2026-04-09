@@ -20,10 +20,18 @@ class AdminApiClient {
     const timer = setTimeout(() => controller.abort(), 30000);
     const res = await fetch(`${BASE}${path}`, { ...options, headers, signal: controller.signal }).finally(() => clearTimeout(timer));
 
-    if (res.status === 204) return undefined as T;
-    const body = await res.json();
-    if (!res.ok) throw new Error(body.error || 'Request failed');
-    return body as T;
+    if (res.status === 204) return undefined as unknown as T;
+
+    const contentType = res.headers.get('content-type') || '';
+    let body: Record<string, unknown> | undefined;
+    if (contentType.includes('application/json')) {
+      try { body = await res.json(); } catch { /* non-parseable JSON */ }
+    }
+    if (!res.ok) {
+      const msg = body?.error ? String(body.error) : await res.text().catch(() => `Request failed (${res.status})`);
+      throw new Error(msg);
+    }
+    return (body ?? {}) as T;
   }
 
   // Auth

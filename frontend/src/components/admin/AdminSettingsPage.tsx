@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { adminApi, type AdminAccount } from '../../api/adminClient';
+import { useAdminStore } from '../../stores/adminStore';
 
 export default function AdminSettingsPage() {
+  const currentAdminUser = useAdminStore((s) => s.adminUser);
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -42,6 +44,10 @@ export default function AdminSettingsPage() {
   };
 
   const handleDelete = async (id: string) => {
+    if (currentAdminUser && id === currentAdminUser.id) {
+      setError('Cannot remove your own admin account');
+      return;
+    }
     if (!confirm('Remove this admin account?')) return;
     try { await adminApi.deleteAccount(id); load(); }
     catch (err) { setError(err instanceof Error ? err.message : 'Failed'); }
@@ -89,7 +95,7 @@ export default function AdminSettingsPage() {
             <label className="block text-xs font-semibold uppercase text-[#b5bac1] mb-1.5">Role</label>
             <select value={newRole} onChange={(e) => setNewRole(e.target.value)}
               className="bg-[#1e1f22] border border-[#3f4147]/50 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none">
-              {ROLES.map((r) => <option key={r} value={r}>{r.replace('_', ' ').toUpperCase()}</option>)}
+              {ROLES.map((r) => <option key={r} value={r}>{r.replace(/_/g, ' ').toUpperCase()}</option>)}
             </select>
           </div>
           <button type="submit" disabled={adding}
@@ -123,7 +129,7 @@ export default function AdminSettingsPage() {
                 <td className="px-5 py-3">
                   <select value={a.role} onChange={(e) => handleUpdateRole(a.id, e.target.value)}
                     className="bg-[#1e1f22] border border-[#3f4147]/50 rounded px-2 py-1 text-xs text-white">
-                    {ROLES.map((r) => <option key={r} value={r}>{r.replace('_', ' ').toUpperCase()}</option>)}
+                    {ROLES.map((r) => <option key={r} value={r}>{r.replace(/_/g, ' ').toUpperCase()}</option>)}
                   </select>
                 </td>
                 <td className="px-5 py-3">

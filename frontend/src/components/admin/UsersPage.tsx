@@ -5,6 +5,7 @@ export default function UsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
+  const [committedSearch, setCommittedSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<(AdminUser & { hub_count?: number; message_count?: number }) | null>(null);
@@ -15,7 +16,7 @@ export default function UsersPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await adminApi.listUsers({ search: search || undefined, limit, offset });
+      const res = await adminApi.listUsers({ search: committedSearch || undefined, limit, offset });
       setUsers(res.users);
       setTotal(res.total);
     } catch (err) {
@@ -25,12 +26,12 @@ export default function UsersPage() {
     }
   };
 
-  useEffect(() => { load(); }, [offset]);
+  useEffect(() => { load(); }, [offset, committedSearch]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setOffset(0);
-    load();
+    setCommittedSearch(search);
   };
 
   const handleSelect = async (u: AdminUser) => {

@@ -13,7 +13,8 @@ export default function SmtpConfigPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [testEmail, setTestEmail] = useState('');
-  const [testStatus, setTestStatus] = useState('');
+  const [testStatusType, setTestStatusType] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+  const [testStatusMsg, setTestStatusMsg] = useState('');
 
   useEffect(() => {
     adminApi.getSmtpConfig()
@@ -38,13 +39,21 @@ export default function SmtpConfigPage() {
   };
 
   const handleTest = async () => {
-    if (!testEmail) return;
-    setTestStatus('Sending...');
+    const trimmed = testEmail.trim();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setTestStatusType('error');
+      setTestStatusMsg('Please enter a valid email address');
+      return;
+    }
+    setTestStatusType('sending');
+    setTestStatusMsg('Sending...');
     try {
-      await adminApi.sendTestEmail(testEmail);
-      setTestStatus('Test email sent successfully');
+      await adminApi.sendTestEmail(trimmed);
+      setTestStatusType('success');
+      setTestStatusMsg('Test email sent successfully');
     } catch (err) {
-      setTestStatus(err instanceof Error ? err.message : 'Failed to send');
+      setTestStatusType('error');
+      setTestStatusMsg(err instanceof Error ? err.message : 'Failed to send');
     }
   };
 
@@ -108,7 +117,7 @@ export default function SmtpConfigPage() {
             Send Test
           </button>
         </div>
-        {testStatus && <p className={`text-sm mt-3 ${testStatus.includes('success') ? 'text-[#57f287]' : testStatus === 'Sending...' ? 'text-[#949ba4]' : 'text-[#ed4245]'}`}>{testStatus}</p>}
+        {testStatusMsg && <p className={`text-sm mt-3 ${testStatusType === 'success' ? 'text-[#57f287]' : testStatusType === 'sending' ? 'text-[#949ba4]' : 'text-[#ed4245]'}`}>{testStatusMsg}</p>}
       </div>
     </div>
   );

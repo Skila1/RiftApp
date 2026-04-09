@@ -274,11 +274,6 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 
 		if reportH != nil {
 			r.Post("/api/reports", reportH.CreateReport)
-			r.Get("/api/admin/reports", reportH.ListReports)
-			r.Get("/api/admin/reports/{reportID}", reportH.GetReport)
-			r.Patch("/api/admin/reports/{reportID}", reportH.UpdateReport)
-			r.Post("/api/admin/reports/{reportID}/action", reportH.TakeAction)
-			r.Get("/api/admin/moderation/stats", reportH.Stats)
 		}
 
 		if hubModH != nil {

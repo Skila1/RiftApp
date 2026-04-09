@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -131,14 +132,20 @@ func main() {
 	smtpSvc := smtp.NewService(db)
 
 	// Admin panel service
-	seedEmails := map[string]bool{
-		"skila@riftapp.io":  true,
-		"lovely@riftapp.io": true,
+	seedEmails := map[string]bool{}
+	if envSeeds := os.Getenv("RIFTAPP_SEED_ADMIN_EMAILS"); envSeeds != "" {
+		for _, e := range strings.Split(envSeeds, ",") {
+			if trimmed := strings.TrimSpace(e); trimmed != "" {
+				seedEmails[trimmed] = true
+			}
+		}
 	}
 	adminRepo := admin.NewRepo(db)
 	adminSvc := admin.NewService(adminRepo, cfg.JWTSecret, seedEmails)
 	adminSvc.SetEmailSender(smtpSvc)
-	adminSvc.EnsureSeedAdmins(context.Background())
+	if len(seedEmails) > 0 {
+		adminSvc.EnsureSeedAdmins(context.Background())
+	}
 
 	// Router
 	router := api.NewRouter(api.RouterDeps{

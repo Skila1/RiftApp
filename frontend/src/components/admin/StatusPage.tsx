@@ -8,8 +8,9 @@ export default function StatusPage() {
 
   const load = () => {
     setLoading(true);
+    setError('');
     adminApi.getStatus()
-      .then(setStatus)
+      .then((data) => { setStatus(data); setError(''); })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed'))
       .finally(() => setLoading(false));
   };

@@ -16,6 +16,7 @@ export default function AdminLogin() {
   const [totpSecret, setTotpSecret] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,9 +28,13 @@ export default function AdminLogin() {
         loginSuccess(res.admin_token, res.role || 'moderator', null);
         return;
       }
-      setLoginToken(res.login_token || '');
+      if (!res.login_token) {
+        setError('Server did not return a login token');
+        return;
+      }
+      setLoginToken(res.login_token);
       if (res.needs_setup) {
-        const setup = await adminApi.setupTotp(res.login_token!);
+        const setup = await adminApi.setupTotp(res.login_token);
         setQrUri(setup.qr_uri);
         setTotpSecret(setup.secret);
         setStep('setup-totp');
@@ -147,7 +152,14 @@ export default function AdminLogin() {
               </div>
               <div className="bg-[#1e1f22] rounded-lg p-3">
                 <p className="text-[#949ba4] text-xs mb-1">Or enter this secret manually:</p>
-                <p className="text-white font-mono text-sm break-all select-all">{totpSecret}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-white font-mono text-sm break-all select-all flex-1">{totpSecret}</p>
+                  <button type="button" onClick={() => { navigator.clipboard.writeText(totpSecret).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }}
+                    aria-label="Copy secret to clipboard"
+                    className="shrink-0 px-2.5 py-1.5 text-xs font-medium rounded bg-[#3f4147]/60 text-[#b5bac1] hover:text-white hover:bg-[#3f4147] transition-colors">
+                    {copied ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
               </div>
               <button onClick={() => { setStep('confirm-totp'); setCode(''); }}
                 className="w-full bg-[#00a8fc] hover:bg-[#0090d6] text-white font-medium py-3 rounded-lg transition-colors">

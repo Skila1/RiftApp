@@ -5,16 +5,20 @@ export default function HubsPage() {
   const [hubs, setHubs] = useState<AdminHub[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
+  const [committedSearch, setCommittedSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [offset, setOffset] = useState(0);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const limit = 50;
 
-  const load = async () => {
+  const load = async (explicitOffset?: number, explicitSearch?: string) => {
     setLoading(true);
     setError('');
     try {
-      const res = await adminApi.listHubs({ search: search || undefined, limit, offset });
+      const s = explicitSearch ?? committedSearch;
+      const o = explicitOffset ?? offset;
+      const res = await adminApi.listHubs({ search: s || undefined, limit, offset: o });
       setHubs(res.hubs);
       setTotal(res.total);
     } catch (err) {
@@ -24,16 +28,25 @@ export default function HubsPage() {
     }
   };
 
-  useEffect(() => { load(); }, [offset]);
+  useEffect(() => { load(); }, [offset, committedSearch]);
 
-  const handleSearch = (e: React.FormEvent) => { e.preventDefault(); setOffset(0); load(); };
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    setOffset(0);
+    setCommittedSearch(search);
+  };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this hub? This action cannot be undone.')) return;
+    setDeletingId(id);
     try {
       await adminApi.deleteHub(id);
       load();
-    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to delete'); }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete');
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -73,7 +86,9 @@ export default function HubsPage() {
                   <td className="px-5 py-3 text-[#b5bac1]">{h.member_count}</td>
                   <td className="px-5 py-3 text-[#949ba4]">{new Date(h.created_at).toLocaleDateString()}</td>
                   <td className="px-5 py-3 text-right">
-                    <button onClick={() => handleDelete(h.id)} className="px-3 py-1 text-xs font-medium rounded bg-[#ed4245]/20 text-[#ed4245] hover:bg-[#ed4245]/30 transition-colors">Delete</button>
+                    <button onClick={() => handleDelete(h.id)} disabled={deletingId === h.id} className="px-3 py-1 text-xs font-medium rounded bg-[#ed4245]/20 text-[#ed4245] hover:bg-[#ed4245]/30 transition-colors disabled:opacity-50">
+                      {deletingId === h.id ? 'Deleting...' : 'Delete'}
+                    </button>
                   </td>
                 </tr>
               ))}

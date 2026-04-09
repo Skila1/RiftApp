@@ -2,10 +2,12 @@ package admin
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"log"
+	"math/big"
 	"time"
 
 	"github.com/google/uuid"
@@ -320,12 +322,17 @@ func (s *Service) EnsureSeedAdmins(ctx context.Context) {
 			continue
 		}
 
-		placeholder, _ := bcrypt.GenerateFromPassword([]byte("changeme"), bcrypt.DefaultCost)
+		randomPass, err := generateRandomPassword(32)
+		if err != nil {
+			log.Printf("admin: failed to generate random password for seed admin %s: %v", email, err)
+			continue
+		}
+		hash, _ := bcrypt.GenerateFromPassword([]byte(randomPass), bcrypt.DefaultCost)
 		now := time.Now()
 		acct := &Account{
 			ID:           uuid.New().String(),
 			UserID:       userID,
-			PasswordHash: string(placeholder),
+			PasswordHash: string(hash),
 			TOTPEnabled:  false,
 			TOTPMethod:   "app",
 			Role:         RoleSuperAdmin,
@@ -335,7 +342,7 @@ func (s *Service) EnsureSeedAdmins(ctx context.Context) {
 		if err := s.repo.Create(ctx, acct); err != nil {
 			log.Printf("admin: failed to seed admin %s: %v", email, err)
 		} else {
-			log.Printf("admin: seeded super_admin account for %s (password: changeme — change immediately)", email)
+			log.Printf("admin: seeded super_admin account for %s — set password via admin UI or CLI before use", email)
 		}
 	}
 }
@@ -352,14 +359,35 @@ func (s *Service) ChangePassword(ctx context.Context, accountID, oldPass, newPas
 	if err != nil {
 		return err
 	}
-	return s.repo.UpdatePassword(ctx, accountID, string(hash))
+	if err := s.repo.UpdatePassword(ctx, accountID, string(hash)); err != nil {
+		return err
+	}
+	_ = s.repo.RevokeSessionsByAccount(ctx, accountID)
+	return nil
 }
 
 func (s *Service) ResetTOTP(ctx context.Context, accountID string) error {
-	return s.repo.UpdateTOTP(ctx, accountID, nil, false, "app")
+	if err := s.repo.UpdateTOTP(ctx, accountID, nil, false, "app"); err != nil {
+		return err
+	}
+	_ = s.repo.RevokeSessionsByAccount(ctx, accountID)
+	return nil
 }
 
 func hashToken(token string) string {
 	h := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(h[:])
+}
+
+func generateRandomPassword(length int) (string, error) {
+	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()"
+	result := make([]byte, length)
+	for i := range result {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(chars))))
+		if err != nil {
+			return "", err
+		}
+		result[i] = chars[n.Int64()]
+	}
+	return string(result), nil
 }
