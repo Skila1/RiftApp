@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/riftapp-cloud/riftapp/internal/admin"
 	"github.com/riftapp-cloud/riftapp/internal/api"
 	"github.com/riftapp-cloud/riftapp/internal/auth"
 	"github.com/riftapp-cloud/riftapp/internal/config"
@@ -17,6 +19,7 @@ import (
 	"github.com/riftapp-cloud/riftapp/internal/pubsub"
 	"github.com/riftapp-cloud/riftapp/internal/repository"
 	"github.com/riftapp-cloud/riftapp/internal/service"
+	"github.com/riftapp-cloud/riftapp/internal/smtp"
 	"github.com/riftapp-cloud/riftapp/internal/user"
 	"github.com/riftapp-cloud/riftapp/internal/ws"
 )
@@ -125,6 +128,25 @@ func main() {
 		}
 	}
 
+	// SMTP service
+	smtpSvc := smtp.NewService(db)
+
+	// Admin panel service
+	seedEmails := map[string]bool{}
+	if envSeeds := os.Getenv("RIFTAPP_SEED_ADMIN_EMAILS"); envSeeds != "" {
+		for _, e := range strings.Split(envSeeds, ",") {
+			if trimmed := strings.TrimSpace(e); trimmed != "" {
+				seedEmails[trimmed] = true
+			}
+		}
+	}
+	adminRepo := admin.NewRepo(db)
+	adminSvc := admin.NewService(adminRepo, cfg.JWTSecret, seedEmails)
+	adminSvc.SetEmailSender(smtpSvc)
+	if len(seedEmails) > 0 && os.Getenv("RIFTAPP_BOOTSTRAP_ADMIN_SEED") == "true" {
+		adminSvc.EnsureSeedAdmins(context.Background())
+	}
+
 	// Router
 	router := api.NewRouter(api.RouterDeps{
 		AuthService:             authService,
@@ -154,6 +176,9 @@ func main() {
 		ReportService:           reportSvc,
 		HubModerationRepo:       hubModRepo,
 		DB:                      db,
+		AdminService:            adminSvc,
+		SMTPService:             smtpSvc,
+		DBPool:                  db,
 	})
 
 	srv := &http.Server{

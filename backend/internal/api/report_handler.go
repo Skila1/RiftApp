@@ -6,26 +6,33 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/riftapp-cloud/riftapp/internal/admin"
 	"github.com/riftapp-cloud/riftapp/internal/middleware"
 	"github.com/riftapp-cloud/riftapp/internal/service"
 )
 
 type ReportHandler struct {
-	svc     *service.ReportService
-	devSvc  *service.DeveloperService
+	svc    *service.ReportService
+	devSvc *service.DeveloperService
 }
 
 func NewReportHandler(svc *service.ReportService, devSvc *service.DeveloperService) *ReportHandler {
 	return &ReportHandler{svc: svc, devSvc: devSvc}
 }
 
-func (h *ReportHandler) isSuperAdmin(r *http.Request) bool {
-	userID := middleware.GetUserID(r.Context())
-	u, err := h.devSvc.GetUserByID(r.Context(), userID)
-	if err != nil || u == nil || u.Email == nil {
-		return false
+func (h *ReportHandler) isAdminContext(r *http.Request) bool {
+	return admin.GetAdminClaims(r.Context()) != nil
+}
+
+func (h *ReportHandler) getActorID(r *http.Request) string {
+	if claims := admin.GetAdminClaims(r.Context()); claims != nil {
+		return claims.UserID
 	}
-	return service.IsSuperAdmin(*u.Email)
+	return middleware.GetUserID(r.Context())
+}
+
+func (h *ReportHandler) canAccessAdminReports(r *http.Request) bool {
+	return h.isAdminContext(r)
 }
 
 func (h *ReportHandler) CreateReport(w http.ResponseWriter, r *http.Request) {
@@ -44,7 +51,7 @@ func (h *ReportHandler) CreateReport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ReportHandler) ListReports(w http.ResponseWriter, r *http.Request) {
-	if !h.isSuperAdmin(r) {
+	if !h.canAccessAdminReports(r) {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
@@ -65,7 +72,7 @@ func (h *ReportHandler) ListReports(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ReportHandler) GetReport(w http.ResponseWriter, r *http.Request) {
-	if !h.isSuperAdmin(r) {
+	if !h.canAccessAdminReports(r) {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
@@ -79,12 +86,12 @@ func (h *ReportHandler) GetReport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ReportHandler) UpdateReport(w http.ResponseWriter, r *http.Request) {
-	if !h.isSuperAdmin(r) {
+	if !h.canAccessAdminReports(r) {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
 	id := chi.URLParam(r, "reportID")
-	userID := middleware.GetUserID(r.Context())
+	userID := h.getActorID(r)
 	var body struct {
 		Status string  `json:"status"`
 		Note   *string `json:"note"`
@@ -101,12 +108,12 @@ func (h *ReportHandler) UpdateReport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ReportHandler) TakeAction(w http.ResponseWriter, r *http.Request) {
-	if !h.isSuperAdmin(r) {
+	if !h.canAccessAdminReports(r) {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}
 	reportID := chi.URLParam(r, "reportID")
-	userID := middleware.GetUserID(r.Context())
+	userID := h.getActorID(r)
 	var input service.TakeActionInput
 	if err := readJSON(r, &input); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -120,7 +127,7 @@ func (h *ReportHandler) TakeAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ReportHandler) Stats(w http.ResponseWriter, r *http.Request) {
-	if !h.isSuperAdmin(r) {
+	if !h.canAccessAdminReports(r) {
 		writeError(w, http.StatusForbidden, "forbidden")
 		return
 	}

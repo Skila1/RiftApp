@@ -891,6 +891,16 @@ func (h *Hub) IsOnline(userID string) bool {
 	return ok && len(sessions) > 0
 }
 
+func (h *Hub) ClientCount() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	count := 0
+	for _, sessions := range h.clients {
+		count += len(sessions)
+	}
+	return count
+}
+
 // GetUserVoiceStreamID returns the stream the user is currently in voice for, or "".
 func (h *Hub) GetUserVoiceStreamID(userID string) string {
 	h.mu.RLock()

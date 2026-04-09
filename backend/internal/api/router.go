@@ -7,14 +7,17 @@ import (
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/time/rate"
 
+	"github.com/riftapp-cloud/riftapp/internal/admin"
 	"github.com/riftapp-cloud/riftapp/internal/auth"
 	"github.com/riftapp-cloud/riftapp/internal/config"
 	"github.com/riftapp-cloud/riftapp/internal/middleware"
 	"github.com/riftapp-cloud/riftapp/internal/moderation"
 	"github.com/riftapp-cloud/riftapp/internal/repository"
 	"github.com/riftapp-cloud/riftapp/internal/service"
+	"github.com/riftapp-cloud/riftapp/internal/smtp"
 	"github.com/riftapp-cloud/riftapp/internal/user"
 	"github.com/riftapp-cloud/riftapp/internal/ws"
 )
@@ -47,6 +50,9 @@ type RouterDeps struct {
 	ReportService           *service.ReportService
 	HubModerationRepo       *repository.HubModerationRepo
 	DB                      interface{}
+	AdminService            *admin.Service
+	SMTPService             *smtp.Service
+	DBPool                  *pgxpool.Pool
 }
 
 func NewRouter(deps RouterDeps) *chi.Mux {
@@ -268,11 +274,6 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 
 		if reportH != nil {
 			r.Post("/api/reports", reportH.CreateReport)
-			r.Get("/api/admin/reports", reportH.ListReports)
-			r.Get("/api/admin/reports/{reportID}", reportH.GetReport)
-			r.Patch("/api/admin/reports/{reportID}", reportH.UpdateReport)
-			r.Post("/api/admin/reports/{reportID}/action", reportH.TakeAction)
-			r.Get("/api/admin/moderation/stats", reportH.Stats)
 		}
 
 		if hubModH != nil {
@@ -351,6 +352,73 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 		}
 		mountDiscordRoutes("/api/v10")
 		mountDiscordRoutes("/api/v9")
+	}
+
+	// --- Super Admin Panel ---
+	if deps.AdminService != nil {
+		adminAuthH := NewAdminAuthHandler(deps.AdminService)
+		adminH := NewAdminHandler(deps.AdminService, deps.SMTPService, deps.DBPool, deps.WSHub, deps.ModerationService)
+
+		adminAuthRL := middleware.NewRateLimiter(rate.Every(3*time.Second), 5)
+		r.Route("/api/admin/auth", func(r chi.Router) {
+			r.Use(middleware.RateLimit(adminAuthRL))
+			r.Post("/login", adminAuthH.Login)
+			r.Post("/verify-2fa", adminAuthH.Verify2FA)
+			r.Post("/setup-totp", adminAuthH.SetupTOTP)
+			r.Post("/confirm-totp", adminAuthH.ConfirmTOTP)
+			r.Post("/set-password", adminAuthH.SetPassword)
+		})
+
+		// Authenticated admin logout + me
+		r.Group(func(r chi.Router) {
+			r.Use(admin.RequireAdmin(deps.AdminService, admin.RoleModerator))
+			r.Post("/api/admin/auth/logout", adminAuthH.Logout)
+			r.Get("/api/admin/auth/me", adminAuthH.GetMe)
+		})
+
+		// Moderator+ routes
+		r.Group(func(r chi.Router) {
+			r.Use(admin.RequireAdmin(deps.AdminService, admin.RoleModerator))
+			r.Get("/api/admin/users", adminH.ListUsers)
+			r.Get("/api/admin/users/{userID}", adminH.GetUser)
+			r.Get("/api/admin/analytics", adminH.Analytics)
+
+			if reportH != nil {
+				r.Get("/api/admin/reports", reportH.ListReports)
+				r.Get("/api/admin/reports/{reportID}", reportH.GetReport)
+				r.Patch("/api/admin/reports/{reportID}", reportH.UpdateReport)
+				r.Post("/api/admin/reports/{reportID}/action", reportH.TakeAction)
+				r.Get("/api/admin/moderation/stats", reportH.Stats)
+			}
+		})
+
+		// Admin+ routes
+		r.Group(func(r chi.Router) {
+			r.Use(admin.RequireAdmin(deps.AdminService, admin.RoleAdmin))
+			r.Patch("/api/admin/users/{userID}", adminH.EditUser)
+			r.Post("/api/admin/users/{userID}/ban", adminH.BanUser)
+			r.Delete("/api/admin/users/{userID}/ban", adminH.UnbanUser)
+			r.Get("/api/admin/hubs", adminH.ListHubs)
+			r.Get("/api/admin/hubs/{hubID}", adminH.GetHub)
+			r.Get("/api/admin/sessions/users", adminH.ListUserSessions)
+			r.Delete("/api/admin/sessions/{sessionID}", adminH.RevokeSession)
+			r.Get("/api/admin/status", adminH.Status)
+		})
+
+		// Super admin routes
+		r.Group(func(r chi.Router) {
+			r.Use(admin.RequireAdmin(deps.AdminService, admin.RoleSuperAdmin))
+			r.Delete("/api/admin/hubs/{hubID}", adminH.DeleteHub)
+			r.Get("/api/admin/sessions/admin", adminH.ListAdminSessions)
+			r.Get("/api/admin/smtp", adminH.GetSMTPConfig)
+			r.Put("/api/admin/smtp", adminH.UpdateSMTPConfig)
+			r.Post("/api/admin/smtp/test", adminH.SendTestEmail)
+			r.Get("/api/admin/accounts", adminH.ListAccounts)
+			r.Post("/api/admin/accounts", adminH.CreateAccount)
+			r.Patch("/api/admin/accounts/{accountID}", adminH.UpdateAccount)
+			r.Delete("/api/admin/accounts/{accountID}", adminH.DeleteAccount)
+			r.Post("/api/admin/accounts/{accountID}/reset-totp", adminH.ResetAccountTOTP)
+		})
 	}
 
 	return r
