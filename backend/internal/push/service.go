@@ -2,10 +2,10 @@ package push
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/messaging"
@@ -126,23 +126,9 @@ func isTokenInvalid(err error) bool {
 		"registration-token-not-registered",
 		"invalid-registration-token",
 	} {
-		if containsStr(errStr, code) {
+		if strings.Contains(errStr, code) {
 			return true
 		}
 	}
 	return false
-}
-
-func containsStr(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
-
-func MarshalData(v any) map[string]string {
-	b, _ := json.Marshal(v)
-	return map[string]string{"payload": string(b)}
 }
