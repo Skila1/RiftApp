@@ -74,12 +74,59 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Prune old R2 artifacts
+        shell: bash
+        run: |
+          keep_count=2
+          mapfile -t keep_versions < <(
+            git tag --sort=-version:refname --list "v*" \
+              | sed 's/^v//' \
+              | head -n "$keep_count"
+          )
+
+          echo "Keeping previous versions in bucket: ${keep_versions[*]:-none}"
+          echo "Keeping current build version in bucket: ${{ steps.version.outputs.value }}"
+
+          while IFS= read -r version; do
+            [ -n "$version" ] || continue
+
+            skip=false
+            for keep in "${keep_versions[@]}"; do
+              if [ "$version" = "$keep" ]; then
+                skip=true
+                break
+              fi
+            done
+
+            if [ "$skip" = true ]; then
+              continue
+            fi
+
+            echo "Deleting old artifacts for $version"
+            wrangler r2 object delete "rift-updates/Rift Setup $version.exe" --remote --force || true
+            wrangler r2 object delete "rift-updates/Rift Setup $version.exe.blockmap" --remote --force || true
+          done < <(
+            git tag --sort=-version:refname --list "v*" | sed 's/^v//'
+          )
+
+          wrangler r2 object delete "rift-updates/builder-debug.yml" --remote --force || true
+          wrangler r2 object delete "rift-updates/builder-effective-config.yaml" --remote --force || true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: b9d40635d63fcc6276423f6fa72f1b70
+
       # 🔥 Upload to R2 (NEW)
       - name: Upload artifacts to R2
         shell: bash
         run: |
           shopt -s nullglob
-          for file in dist-electron/*; do
+          artifacts=(
+            dist-electron/latest.yml
+            dist-electron/*.exe
+            dist-electron/*.blockmap
+          )
+
+          for file in "${artifacts[@]}"; do
             [ -f "$file" ] || continue
             name=$(basename "$file")
             object_path="rift-updates/$name"
