@@ -101,6 +101,37 @@ func (s *HubService) HasStreamPermission(ctx context.Context, streamID, userID s
 	return models.HasPermission(perms, perm)
 }
 
+func (s *HubService) CanViewStream(ctx context.Context, streamID, userID string) bool {
+	return s.HasStreamPermission(ctx, streamID, userID, models.PermViewStreams)
+}
+
+func (s *HubService) CanSendMessages(ctx context.Context, streamID, userID string) bool {
+	stream, err := s.streamRepo.GetByID(ctx, streamID)
+	if err != nil || stream.Type != 0 {
+		return false
+	}
+	return s.HasStreamPermission(ctx, streamID, userID, models.PermSendMessages)
+}
+
+func (s *HubService) CanConnectVoice(ctx context.Context, streamID, userID string) bool {
+	stream, err := s.streamRepo.GetByID(ctx, streamID)
+	if err != nil || stream.Type != 1 {
+		return false
+	}
+	return s.HasStreamPermission(ctx, streamID, userID, models.PermConnectVoice)
+}
+
+func (s *HubService) GetStreamForMember(ctx context.Context, streamID, userID string) (*models.Stream, error) {
+	stream, err := s.streamRepo.GetByID(ctx, streamID)
+	if err != nil {
+		return nil, apperror.NotFound("stream not found")
+	}
+	if !s.hubRepo.IsMember(ctx, stream.HubID, userID) {
+		return nil, apperror.Forbidden("stream not found or access denied")
+	}
+	return stream, nil
+}
+
 func (s *HubService) GetVisibleStreams(ctx context.Context, hubID, userID string) ([]models.Stream, error) {
 	streams, err := s.streamRepo.ListByHub(ctx, hubID)
 	if err != nil {

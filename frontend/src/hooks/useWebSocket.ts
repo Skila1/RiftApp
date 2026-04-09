@@ -53,6 +53,18 @@ export function useWebSocket() {
     }
   }, []);
 
+  const canApplyVoiceStreamEvent = useCallback((streamId: string) => {
+    const streamState = useStreamStore.getState();
+    if (streamState.streams.some((stream) => stream.id === streamId)) {
+      return true;
+    }
+    const voiceState = useVoiceStore.getState();
+    if (voiceState.streamId === streamId) {
+      return true;
+    }
+    return useVoiceChannelUiStore.getState().activeChannelId === streamId;
+  }, []);
+
   // Keep global ref in sync
   useEffect(() => {
     globalSend = send;
@@ -194,10 +206,10 @@ export function useWebSocket() {
           }
           case 'voice_state_update': {
             const { stream_id, user_id, action } = evt.d as { stream_id: string; user_id: string; action: 'join' | 'leave' };
-            const streamState = useStreamStore.getState();
-            if (!streamState.streams.some((stream) => stream.id === stream_id)) {
+            if (!canApplyVoiceStreamEvent(stream_id)) {
               break;
             }
+            const streamState = useStreamStore.getState();
             streamState.applyVoiceState(stream_id, user_id, action);
             const voiceState = useVoiceStore.getState();
             if (action === 'join') {
@@ -215,20 +227,18 @@ export function useWebSocket() {
           }
           case 'voice_screen_share_update': {
             const { stream_id, user_id, sharing } = evt.d as { stream_id: string; user_id: string; sharing: boolean };
-            const streamState = useStreamStore.getState();
-            if (!streamState.streams.some((stream) => stream.id === stream_id)) {
+            if (!canApplyVoiceStreamEvent(stream_id)) {
               break;
             }
-            streamState.applyVoiceScreenShare(stream_id, user_id, sharing);
+            useStreamStore.getState().applyVoiceScreenShare(stream_id, user_id, sharing);
             break;
           }
           case 'voice_deafen_update': {
             const { stream_id, user_id, deafened } = evt.d as { stream_id: string; user_id: string; deafened: boolean };
-            const streamState = useStreamStore.getState();
-            if (!streamState.streams.some((stream) => stream.id === stream_id)) {
+            if (!canApplyVoiceStreamEvent(stream_id)) {
               break;
             }
-            streamState.applyVoiceDeafen(stream_id, user_id, deafened);
+            useStreamStore.getState().applyVoiceDeafen(stream_id, user_id, deafened);
             break;
           }
           case 'voice_speaking_update': {
@@ -355,7 +365,7 @@ export function useWebSocket() {
       typingTimersRef.current.clear();
       wsRef.current?.close();
     };
-  }, [token, send]);
+  }, [canApplyVoiceStreamEvent, token, send]);
 
   // Subscribe/unsubscribe to active stream
   useEffect(() => {

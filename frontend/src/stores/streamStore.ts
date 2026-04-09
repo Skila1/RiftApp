@@ -186,6 +186,29 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       };
       return { streams, categories, streamHubMap, hubLayoutCache };
     });
+
+    const currentActiveStreamId = get().activeStreamId;
+    if (currentActiveStreamId && streams.some((stream) => stream.id === currentActiveStreamId)) {
+      return;
+    }
+
+    if (!currentActiveStreamId) {
+      return;
+    }
+
+    const nextActiveStreamId = streams.find((stream) => stream.type === 0)?.id ?? null;
+    useMessageStore.getState().clearMessages();
+    set({ activeStreamId: nextActiveStreamId });
+    if (!nextActiveStreamId) {
+      return;
+    }
+
+    await useMessageStore.getState().loadMessages(nextActiveStreamId);
+    if (useVoiceChannelUiStore.getState().isOpen) {
+      return;
+    }
+    await get().ackStream(nextActiveStreamId);
+    await useNotificationStore.getState().markStreamNotificationsRead(nextActiveStreamId);
   },
 
   setActiveStream: async (streamId) => {

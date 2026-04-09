@@ -447,6 +447,9 @@ func (s *MessageService) createMentionNotifications(ctx context.Context, msg *mo
 		if !ok || mentionedID == authorID {
 			continue
 		}
+		if !s.hubService.CanViewStream(ctx, streamID, mentionedID) {
+			continue
+		}
 		st, err := s.hubNotifRepo.Get(ctx, mentionedID, hubID)
 		if err != nil {
 			continue

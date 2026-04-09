@@ -62,7 +62,6 @@ func main() {
 
 	// WebSocket hub
 	wsHub := ws.NewHub(db)
-	go wsHub.Run()
 
 	// Services
 	catRepo := repository.NewCategoryRepo(db)
@@ -79,6 +78,8 @@ func main() {
 	dmSvc := service.NewDMService(dmRepo, msgRepo, notifSvc, wsHub)
 	friendSvc := service.NewFriendService(friendRepo, blockRepo, wsHub)
 	rankSvc := service.NewRankService(rankRepo, hubRepo)
+	wsHub.SetPermissionChecker(hubSvc)
+	go wsHub.Run()
 
 	// Upload handler (S3-compatible storage, e.g. Cloudflare R2)
 	uploadH, err := api.NewUploadHandler(cfg, db)

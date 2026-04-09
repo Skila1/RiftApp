@@ -64,16 +64,17 @@ func (h *VoiceHandler) Token(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.hubSvc.GetStreamHubID(r.Context(), streamID, userID); err != nil {
+	stream, err := h.hubSvc.GetStreamForMember(r.Context(), streamID, userID)
+	if err != nil {
 		writeError(w, http.StatusForbidden, "stream not found or access denied")
 		return
 	}
-	stream, err := h.streamSvc.Get(r.Context(), streamID, userID)
-	if err != nil || stream.Type != 1 {
+	if stream.Type != 1 {
 		writeError(w, http.StatusBadRequest, "stream is not a voice channel")
 		return
 	}
-	if !h.hubSvc.HasStreamPermission(r.Context(), streamID, userID, models.PermConnectVoice) {
+	forcedAdmission := h.hub.GetUserVoiceStreamID(userID) == streamID
+	if !h.hubSvc.HasStreamPermission(r.Context(), streamID, userID, models.PermConnectVoice) && !forcedAdmission {
 		writeError(w, http.StatusForbidden, "you do not have permission to connect to voice")
 		return
 	}
