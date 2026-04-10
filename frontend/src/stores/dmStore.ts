@@ -320,15 +320,29 @@ export const useDMStore = create<DMState>((set, get) => ({
   },
 
   removeConversation: (conversationId) => {
-    useVoiceChannelUiStore.getState().closeVoiceView();
-    useVoiceStore.getState().clearConversationCallState(conversationId);
+    const currentState = get();
+    const isActiveConversation = currentState.activeConversationId === conversationId;
+    const voiceState = useVoiceStore.getState();
+    const isActiveConversationCall = voiceState.targetKind === 'conversation' && voiceState.conversationId === conversationId;
+
+    if (isActiveConversation) {
+      useVoiceChannelUiStore.getState().closeVoiceView();
+    }
+    if (isActiveConversationCall) {
+      void Promise.resolve(voiceState.leave()).finally(() => {
+        useVoiceStore.getState().clearConversationCallState(conversationId);
+      });
+    } else {
+      voiceState.clearConversationCallState(conversationId);
+    }
+
     set((s) => {
       const conversations = s.conversations.filter((conversation) => conversation.id !== conversationId);
       return {
         conversations,
         dmTotalUnread: sumDmUnreads(conversations),
-        activeConversationId: s.activeConversationId === conversationId ? null : s.activeConversationId,
-        dmMessages: s.activeConversationId === conversationId ? [] : s.dmMessages,
+        activeConversationId: isActiveConversation ? null : s.activeConversationId,
+        dmMessages: isActiveConversation ? [] : s.dmMessages,
       };
     });
   },
@@ -394,7 +408,7 @@ export const useDMStore = create<DMState>((set, get) => ({
     set((s) => ({
       conversations: s.conversations.map((conversation) => ({
         ...conversation,
-        recipient: conversation.recipient.id === nextUser.id
+        recipient: conversation.recipient?.id === nextUser.id
           ? { ...conversation.recipient, ...nextUser }
           : conversation.recipient,
         members: conversation.members?.map((member) => (member.id === nextUser.id ? { ...member, ...nextUser } : member)),

@@ -65,24 +65,32 @@ function OverlayActionButton({
   label,
   onClick,
   active = false,
+  disabled = false,
+  ariaDisabled = false,
 }: {
   children: React.ReactNode;
   label: string;
   onClick: () => void;
   active?: boolean;
+  disabled?: boolean;
+  ariaDisabled?: boolean;
 }) {
   return (
     <button
       type="button"
       data-floating-media-control="true"
       aria-label={label}
+      aria-disabled={ariaDisabled}
       title={label}
+      disabled={disabled}
       onClick={(event) => {
         event.stopPropagation();
         onClick();
       }}
       className={`flex h-8 w-8 items-center justify-center rounded-full border text-white transition-colors ${
-        active
+        disabled
+          ? 'cursor-not-allowed border-white/10 bg-black/35 text-white/40'
+          : active
           ? 'border-[#5865f2]/60 bg-[#5865f2]/80'
           : 'border-white/10 bg-black/55 hover:bg-black/75'
       }`}
@@ -357,6 +365,8 @@ export default function FloatingActiveSpeakerMedia() {
           <div className="absolute right-3 top-3 flex items-center gap-1.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
             <OverlayActionButton
               label={voiceTargetId ? 'Open voice view' : 'Voice view unavailable'}
+              disabled={!voiceTargetId}
+              ariaDisabled={!voiceTargetId}
               onClick={() => {
                 if (voiceTargetId) {
                   openVoiceView(voiceTargetId, voiceTargetKind ?? 'stream');

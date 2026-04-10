@@ -190,6 +190,9 @@ func (s *DMService) createOrOpenConversation(ctx context.Context, userID string,
 	if err := tx.Commit(ctx); err != nil {
 		return repository.ConvResponse{}, false, apperror.Internal("internal error", err)
 	}
+	if s.hub != nil {
+		s.hub.SetConversationMembers(convID, memberIDs)
+	}
 
 	members, err := s.dmRepo.GetUsersInfo(ctx, memberIDs)
 	if err != nil {
@@ -319,11 +322,18 @@ func (s *DMService) AddMembers(ctx context.Context, userID, convID string, membe
 	if err := s.dmRepo.AddConversationMembers(ctx, tx, convID, newMemberIDs, now); err != nil {
 		return repository.ConvResponse{}, apperror.Internal("failed to add conversation members", err)
 	}
-	if err := s.dmRepo.UpdateConversationTimestamp(ctx, convID, now); err != nil {
+	if err := s.dmRepo.UpdateConversationTimestampTx(ctx, tx, convID, now); err != nil {
 		return repository.ConvResponse{}, apperror.Internal("failed to update conversation", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return repository.ConvResponse{}, apperror.Internal("internal error", err)
+	}
+	if s.hub != nil {
+		memberSnapshot := make([]string, 0, len(existingSet))
+		for memberID := range existingSet {
+			memberSnapshot = append(memberSnapshot, memberID)
+		}
+		s.hub.SetConversationMembers(convID, memberSnapshot)
 	}
 
 	response, err := s.buildConversationResponse(ctx, convID, userID)
@@ -374,7 +384,7 @@ func (s *DMService) RemoveMember(ctx context.Context, userID, convID, targetUser
 		return apperror.Internal("internal error", err)
 	}
 
-	remainingMembers, err := s.dmRepo.GetAllMembers(ctx, convID)
+	remainingMembers, err := s.dmRepo.GetAllMembersTx(ctx, tx, convID)
 	if err != nil {
 		return apperror.Internal("internal error", err)
 	}
@@ -384,13 +394,20 @@ func (s *DMService) RemoveMember(ctx context.Context, userID, convID, targetUser
 			return apperror.Internal("failed to delete conversation", err)
 		}
 	} else {
-		if err := s.dmRepo.UpdateConversationTimestamp(ctx, convID, time.Now()); err != nil {
+		if err := s.dmRepo.UpdateConversationTimestampTx(ctx, tx, convID, time.Now()); err != nil {
 			return apperror.Internal("failed to update conversation", err)
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return apperror.Internal("internal error", err)
+	}
+	if s.hub != nil {
+		if remainingCount < 2 {
+			s.hub.ClearConversationMembers(convID)
+		} else {
+			s.hub.SetConversationMembers(convID, remainingMembers)
+		}
 	}
 
 	s.hub.SendToUser(targetUserID, ws.NewEvent(ws.OpDMConversationDelete, ws.DMConversationDeleteData{ConversationID: convID}))

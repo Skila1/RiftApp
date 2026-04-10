@@ -1661,8 +1661,10 @@ async function joinVoiceTarget(target: VoiceJoinTarget) {
   if (roomRef) {
     const old = roomRef;
     stopConnectionStatsMonitor();
-    roomRef = null;
     await destroyRoom(old);
+    if (roomRef === old) {
+      roomRef = null;
+    }
   }
 
   useVoiceStore.setState({

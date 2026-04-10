@@ -233,8 +233,10 @@ export interface Conversation {
   updated_at: string;
   name?: string | null;
   icon_url?: string | null;
+  icon_updated_at?: string | null;
+  icon_version?: string | null;
   is_group?: boolean;
-  recipient: User;
+  recipient?: User | null;
   members?: User[];
   last_message?: Message;
   unread_count?: number;

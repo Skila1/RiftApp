@@ -270,6 +270,12 @@ func (r *DMRepo) UpdateConversationTimestamp(ctx context.Context, convID string,
 	return err
 }
 
+func (r *DMRepo) UpdateConversationTimestampTx(ctx context.Context, tx pgx.Tx, convID string, t time.Time) error {
+	_, err := tx.Exec(ctx,
+		`UPDATE conversations SET updated_at = $1 WHERE id = $2`, t, convID)
+	return err
+}
+
 func (r *DMRepo) UpdateConversationMetadata(ctx context.Context, convID string, nameSet bool, name *string, iconURLSet bool, iconURL *string, updatedAt time.Time) error {
 	commandTag, err := r.db.Exec(ctx,
 		`UPDATE conversations
@@ -351,6 +357,24 @@ func (r *DMRepo) GetOtherMembers(ctx context.Context, convID, excludeUserID stri
 
 func (r *DMRepo) GetAllMembers(ctx context.Context, convID string) ([]string, error) {
 	rows, err := r.db.Query(ctx,
+		`SELECT user_id FROM conversation_members WHERE conversation_id = $1`, convID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var uid string
+		if rows.Scan(&uid) == nil {
+			ids = append(ids, uid)
+		}
+	}
+	return ids, rows.Err()
+}
+
+func (r *DMRepo) GetAllMembersTx(ctx context.Context, tx pgx.Tx, convID string) ([]string, error) {
+	rows, err := tx.Query(ctx,
 		`SELECT user_id FROM conversation_members WHERE conversation_id = $1`, convID)
 	if err != nil {
 		return nil, err

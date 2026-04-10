@@ -30,6 +30,7 @@ type Hub struct {
 	streamSubs                map[string]map[string]*streamSubscription // streamID -> sessionKey -> subscription
 	voiceState                map[string]map[string]bool                // streamID -> set of userIDs in voice
 	voiceDeafened             map[string]map[string]bool                // streamID -> set of deafened userIDs
+	conversationMembers       map[string][]string                       // conversationID -> cached member userIDs
 	conversationVoiceState    map[string]map[string]bool                // conversationID -> set of userIDs in voice
 	conversationVoiceDeafened map[string]map[string]bool                // conversationID -> set of deafened userIDs
 	conversationCallRings     map[string]DMCallRingData                 // conversationID -> active DM call ring state
@@ -55,6 +56,7 @@ func NewHub(db *pgxpool.Pool) *Hub {
 		streamSubs:                make(map[string]map[string]*streamSubscription),
 		voiceState:                make(map[string]map[string]bool),
 		voiceDeafened:             make(map[string]map[string]bool),
+		conversationMembers:       make(map[string][]string),
 		conversationVoiceState:    make(map[string]map[string]bool),
 		conversationVoiceDeafened: make(map[string]map[string]bool),
 		conversationCallRings:     make(map[string]DMCallRingData),
@@ -930,6 +932,14 @@ func (h *Hub) broadcastToStreamObservers(streamID string, evt []byte) {
 }
 
 func (h *Hub) getConversationMemberIDs(conversationID string) []string {
+	h.mu.RLock()
+	if memberIDs, ok := h.conversationMembers[conversationID]; ok {
+		cached := append([]string(nil), memberIDs...)
+		h.mu.RUnlock()
+		return cached
+	}
+	h.mu.RUnlock()
+
 	if h.db == nil {
 		return nil
 	}
@@ -949,6 +959,18 @@ func (h *Hub) getConversationMemberIDs(conversationID string) []string {
 		}
 		userIDs = append(userIDs, userID)
 	}
+	if err := rows.Err(); err != nil {
+		return nil
+	}
+	sort.Strings(userIDs)
+
+	h.mu.Lock()
+	if memberIDs, ok := h.conversationMembers[conversationID]; ok {
+		userIDs = append([]string(nil), memberIDs...)
+	} else if len(userIDs) > 0 {
+		h.conversationMembers[conversationID] = append([]string(nil), userIDs...)
+	}
+	h.mu.Unlock()
 	return userIDs
 }
 
@@ -958,6 +980,36 @@ func (h *Hub) broadcastToConversationMembers(conversationID string, evt []byte) 
 		return
 	}
 	h.sendToUsers(memberIDs, evt)
+}
+
+func (h *Hub) SetConversationMembers(conversationID string, memberIDs []string) {
+	normalized := make([]string, 0, len(memberIDs))
+	seen := make(map[string]struct{}, len(memberIDs))
+	for _, memberID := range memberIDs {
+		if memberID == "" {
+			continue
+		}
+		if _, exists := seen[memberID]; exists {
+			continue
+		}
+		seen[memberID] = struct{}{}
+		normalized = append(normalized, memberID)
+	}
+	sort.Strings(normalized)
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(normalized) == 0 {
+		delete(h.conversationMembers, conversationID)
+		return
+	}
+	h.conversationMembers[conversationID] = normalized
+}
+
+func (h *Hub) ClearConversationMembers(conversationID string) {
+	h.mu.Lock()
+	delete(h.conversationMembers, conversationID)
+	h.mu.Unlock()
 }
 
 func (h *Hub) handleVoiceSpeaking(userID, streamID, conversationID string, speaking bool) {

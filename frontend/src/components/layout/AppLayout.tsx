@@ -30,6 +30,7 @@ export default function AppLayout() {
   const [showMemberList, setShowMemberList] = useState(true);
   const [searchSidebarOpen, setSearchSidebarOpen] = useState(false);
   const loadHubs = useHubStore((s) => s.loadHubs);
+  const loadConversations = useDMStore((s) => s.loadConversations);
   const loadNotifications = useNotificationStore((s) => s.loadNotifications);
   const loadConversationCallStates = useVoiceStore((s) => s.loadConversationCallStates);
   const activeConversationId = useDMStore((s) => s.activeConversationId);
@@ -37,9 +38,10 @@ export default function AppLayout() {
 
   useEffect(() => {
     loadHubs();
+    void loadConversations();
     loadNotifications();
     void loadConversationCallStates();
-  }, [loadConversationCallStates, loadHubs, loadNotifications]);
+  }, [loadConversationCallStates, loadConversations, loadHubs, loadNotifications]);
 
   // Keep DM list, friend requests, and notifications fresh when returning to the tab.
   useEffect(() => {
