@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "956131408030",
+    "project_id": "riftapp-c3c55",
+    "storage_bucket": "riftapp-c3c55.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:956131408030:android:d5fa8bcb9fc6160d2c238f",
+        "android_client_info": {
+          "package_name": "io.riftapp.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDKSjWYnqoTelXhn0pDJmfeAjjYj65d-aA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
