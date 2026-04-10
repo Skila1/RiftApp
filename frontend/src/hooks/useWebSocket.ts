@@ -9,7 +9,7 @@ import { useFriendStore } from '../stores/friendStore';
 import { useHubStore } from '../stores/hubStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useVoiceChannelUiStore } from '../stores/voiceChannelUiStore';
-import type { Message, Notification, Conversation, Hub, User, WSEvent } from '../types';
+import type { Message, Notification, Conversation, Hub, User, WSEvent, DMCallRing } from '../types';
 import { publicAssetUrl } from '../utils/publicAssetUrl';
 import { api } from '../api/client';
 
@@ -62,7 +62,20 @@ export function useWebSocket() {
     if (voiceState.streamId === streamId) {
       return true;
     }
-    return useVoiceChannelUiStore.getState().activeChannelId === streamId;
+    const voiceUiState = useVoiceChannelUiStore.getState();
+    return voiceUiState.activeChannelKind === 'stream' && voiceUiState.activeChannelId === streamId;
+  }, []);
+
+  const canApplyVoiceConversationEvent = useCallback((conversationId: string) => {
+    if (useDMStore.getState().conversations.some((conversation) => conversation.id === conversationId)) {
+      return true;
+    }
+    const voiceState = useVoiceStore.getState();
+    if (voiceState.conversationId === conversationId) {
+      return true;
+    }
+    const voiceUiState = useVoiceChannelUiStore.getState();
+    return voiceUiState.activeChannelKind === 'conversation' && voiceUiState.activeChannelId === conversationId;
   }, []);
 
   // Keep global ref in sync
@@ -188,6 +201,24 @@ export function useWebSocket() {
             useDMStore.getState().addConversation(evt.d as Conversation);
             break;
           }
+          case 'dm_conversation_update': {
+            useDMStore.getState().updateConversation(evt.d as Conversation);
+            break;
+          }
+          case 'dm_conversation_delete': {
+            const { conversation_id } = evt.d as { conversation_id: string };
+            useDMStore.getState().removeConversation(conversation_id);
+            break;
+          }
+          case 'dm_call_ring': {
+            useVoiceStore.getState().setConversationCallRing(evt.d as DMCallRing);
+            break;
+          }
+          case 'dm_call_ring_end': {
+            const { conversation_id } = evt.d as { conversation_id: string };
+            useVoiceStore.getState().clearConversationCallRing(conversation_id);
+            break;
+          }
           case 'reaction_add': {
             const { message_id, user_id, emoji, emoji_id, file_url } = evt.d as { message_id: string; user_id: string; emoji: string; emoji_id?: string; file_url?: string };
             const msgState = useMessageStore.getState();
@@ -211,12 +242,20 @@ export function useWebSocket() {
             break;
           }
           case 'voice_state_update': {
-            const { stream_id, user_id, action } = evt.d as { stream_id: string; user_id: string; action: 'join' | 'leave' };
-            if (!canApplyVoiceStreamEvent(stream_id)) {
+            const { stream_id, conversation_id, user_id, action } = evt.d as { stream_id?: string; conversation_id?: string; user_id: string; action: 'join' | 'leave' };
+            if (stream_id) {
+              if (!canApplyVoiceStreamEvent(stream_id)) {
+                break;
+              }
+              useStreamStore.getState().applyVoiceState(stream_id, user_id, action);
+            } else if (conversation_id) {
+              if (!canApplyVoiceConversationEvent(conversation_id)) {
+                break;
+              }
+              useVoiceStore.getState().applyConversationVoiceState(conversation_id, user_id, action);
+            } else {
               break;
             }
-            const streamState = useStreamStore.getState();
-            streamState.applyVoiceState(stream_id, user_id, action);
             const voiceState = useVoiceStore.getState();
             if (action === 'join') {
               // Fetch profile for unknown users so their display name is shown immediately
@@ -229,23 +268,43 @@ export function useWebSocket() {
             break;
           }
           case 'voice_screen_share_update': {
-            const { stream_id, user_id, sharing } = evt.d as { stream_id: string; user_id: string; sharing: boolean };
-            if (!canApplyVoiceStreamEvent(stream_id)) {
-              break;
+            const { stream_id, conversation_id, user_id, sharing } = evt.d as { stream_id?: string; conversation_id?: string; user_id: string; sharing: boolean };
+            if (stream_id) {
+              if (!canApplyVoiceStreamEvent(stream_id)) {
+                break;
+              }
+              useStreamStore.getState().applyVoiceScreenShare(stream_id, user_id, sharing);
+            } else if (conversation_id) {
+              if (!canApplyVoiceConversationEvent(conversation_id)) {
+                break;
+              }
+              useVoiceStore.getState().applyConversationVoiceScreenShare(conversation_id, user_id, sharing);
             }
-            useStreamStore.getState().applyVoiceScreenShare(stream_id, user_id, sharing);
             break;
           }
           case 'voice_deafen_update': {
-            const { stream_id, user_id, deafened } = evt.d as { stream_id: string; user_id: string; deafened: boolean };
-            if (!canApplyVoiceStreamEvent(stream_id)) {
-              break;
+            const { stream_id, conversation_id, user_id, deafened } = evt.d as { stream_id?: string; conversation_id?: string; user_id: string; deafened: boolean };
+            if (stream_id) {
+              if (!canApplyVoiceStreamEvent(stream_id)) {
+                break;
+              }
+              useStreamStore.getState().applyVoiceDeafen(stream_id, user_id, deafened);
+            } else if (conversation_id) {
+              if (!canApplyVoiceConversationEvent(conversation_id)) {
+                break;
+              }
+              useVoiceStore.getState().applyConversationVoiceDeafen(conversation_id, user_id, deafened);
             }
-            useStreamStore.getState().applyVoiceDeafen(stream_id, user_id, deafened);
             break;
           }
           case 'voice_speaking_update': {
-            const { user_id, speaking } = evt.d as { stream_id: string; user_id: string; speaking: boolean };
+            const { stream_id, conversation_id, user_id, speaking } = evt.d as { stream_id?: string; conversation_id?: string; user_id: string; speaking: boolean };
+            if (stream_id && !canApplyVoiceStreamEvent(stream_id)) {
+              break;
+            }
+            if (conversation_id && !canApplyVoiceConversationEvent(conversation_id)) {
+              break;
+            }
             useVoiceStore.getState().applySpeakingSignal(user_id, speaking);
             break;
           }

@@ -28,7 +28,7 @@ type ConvResponse struct {
 
 func (r *DMRepo) ListConversations(ctx context.Context, userID string) ([]ConvResponse, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT c.id, c.created_at, c.updated_at,
+		`SELECT c.id, c.created_at, c.updated_at, c.name, c.icon_url, c.is_group,
 		        u.id, u.username, u.display_name, u.avatar_url, u.status, u.last_seen
 		 FROM conversations c
 		 JOIN conversation_members self_cm ON c.id = self_cm.conversation_id AND self_cm.user_id = $1
@@ -47,10 +47,13 @@ func (r *DMRepo) ListConversations(ctx context.Context, userID string) ([]ConvRe
 			conversationID string
 			createdAt      time.Time
 			updatedAt      time.Time
+			name           *string
+			iconURL        *string
+			isGroup        bool
 			member         models.User
 		)
 		if err := rows.Scan(
-			&conversationID, &createdAt, &updatedAt,
+			&conversationID, &createdAt, &updatedAt, &name, &iconURL, &isGroup,
 			&member.ID, &member.Username, &member.DisplayName,
 			&member.AvatarURL, &member.Status, &member.LastSeen,
 		); err != nil {
@@ -64,6 +67,9 @@ func (r *DMRepo) ListConversations(ctx context.Context, userID string) ([]ConvRe
 					ID:        conversationID,
 					CreatedAt: createdAt,
 					UpdatedAt: updatedAt,
+					Name:      name,
+					IconURL:   iconURL,
+					IsGroup:   isGroup,
 					Members:   []models.User{},
 				},
 			}
@@ -153,10 +159,10 @@ func (r *DMRepo) FindConversationByMembers(ctx context.Context, tx pgx.Tx, membe
 	return existingID, err
 }
 
-func (r *DMRepo) CreateConversation(ctx context.Context, tx pgx.Tx, convID string, memberIDs []string, now time.Time) error {
+func (r *DMRepo) CreateConversation(ctx context.Context, tx pgx.Tx, convID string, memberIDs []string, now time.Time, isGroup bool) error {
 	_, err := tx.Exec(ctx,
-		`INSERT INTO conversations (id, created_at, updated_at) VALUES ($1, $2, $3)`,
-		convID, now, now)
+		`INSERT INTO conversations (id, created_at, updated_at, is_group) VALUES ($1, $2, $3, $4)`,
+		convID, now, now, isGroup)
 	if err != nil {
 		return err
 	}
@@ -176,8 +182,8 @@ func (r *DMRepo) CreateConversation(ctx context.Context, tx pgx.Tx, convID strin
 func (r *DMRepo) GetConversation(ctx context.Context, convID string) (*models.Conversation, error) {
 	var conv models.Conversation
 	err := r.db.QueryRow(ctx,
-		`SELECT id, created_at, updated_at FROM conversations WHERE id = $1`, convID,
-	).Scan(&conv.ID, &conv.CreatedAt, &conv.UpdatedAt)
+		`SELECT id, created_at, updated_at, name, icon_url, is_group FROM conversations WHERE id = $1`, convID,
+	).Scan(&conv.ID, &conv.CreatedAt, &conv.UpdatedAt, &conv.Name, &conv.IconURL, &conv.IsGroup)
 	if err != nil {
 		return nil, err
 	}
@@ -264,6 +270,73 @@ func (r *DMRepo) UpdateConversationTimestamp(ctx context.Context, convID string,
 	return err
 }
 
+func (r *DMRepo) UpdateConversationTimestampTx(ctx context.Context, tx pgx.Tx, convID string, t time.Time) error {
+	_, err := tx.Exec(ctx,
+		`UPDATE conversations SET updated_at = $1 WHERE id = $2`, t, convID)
+	return err
+}
+
+func (r *DMRepo) UpdateConversationMetadata(ctx context.Context, convID string, nameSet bool, name *string, iconURLSet bool, iconURL *string, updatedAt time.Time) error {
+	commandTag, err := r.db.Exec(ctx,
+		`UPDATE conversations
+		 SET name = CASE WHEN $2 THEN $3 ELSE name END,
+		     icon_url = CASE WHEN $4 THEN $5 ELSE icon_url END,
+		     updated_at = $6
+		 WHERE id = $1`,
+		convID, nameSet, name, iconURLSet, iconURL, updatedAt,
+	)
+	if err != nil {
+		return err
+	}
+	if commandTag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
+func (r *DMRepo) AddConversationMembers(ctx context.Context, tx pgx.Tx, convID string, memberIDs []string, joinedAt time.Time) error {
+	for _, memberID := range memberIDs {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO conversation_members (conversation_id, user_id, joined_at) VALUES ($1, $2, $3)
+			 ON CONFLICT (conversation_id, user_id) DO NOTHING`,
+			convID, memberID, joinedAt,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *DMRepo) RemoveConversationMember(ctx context.Context, tx pgx.Tx, convID, userID string) error {
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM conversation_members WHERE conversation_id = $1 AND user_id = $2`,
+		convID, userID,
+	); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM dm_read_states WHERE conversation_id = $1 AND user_id = $2`,
+		convID, userID,
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *DMRepo) DeleteConversation(ctx context.Context, tx pgx.Tx, convID string) error {
+	_, err := tx.Exec(ctx, `DELETE FROM conversations WHERE id = $1`, convID)
+	return err
+}
+
+func (r *DMRepo) CountConversationMembers(ctx context.Context, tx pgx.Tx, convID string) (int, error) {
+	var count int
+	err := tx.QueryRow(ctx,
+		`SELECT COUNT(*) FROM conversation_members WHERE conversation_id = $1`,
+		convID,
+	).Scan(&count)
+	return count, err
+}
+
 func (r *DMRepo) GetOtherMembers(ctx context.Context, convID, excludeUserID string) ([]string, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT user_id FROM conversation_members WHERE conversation_id = $1 AND user_id != $2`, convID, excludeUserID)
@@ -284,6 +357,24 @@ func (r *DMRepo) GetOtherMembers(ctx context.Context, convID, excludeUserID stri
 
 func (r *DMRepo) GetAllMembers(ctx context.Context, convID string) ([]string, error) {
 	rows, err := r.db.Query(ctx,
+		`SELECT user_id FROM conversation_members WHERE conversation_id = $1`, convID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var uid string
+		if rows.Scan(&uid) == nil {
+			ids = append(ids, uid)
+		}
+	}
+	return ids, rows.Err()
+}
+
+func (r *DMRepo) GetAllMembersTx(ctx context.Context, tx pgx.Tx, convID string) ([]string, error) {
+	rows, err := tx.Query(ctx,
 		`SELECT user_id FROM conversation_members WHERE conversation_id = $1`, convID)
 	if err != nil {
 		return nil, err

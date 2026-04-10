@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Track } from 'livekit-client';
+import { useAuthStore } from '../../stores/auth';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useHubStore } from '../../stores/hubStore';
 import { useAppSettingsStore } from '../../stores/appSettingsStore';
+import { useDMStore } from '../../stores/dmStore';
 import { useStreamStore } from '../../stores/streamStore';
 import { useVoiceStore, type VoiceParticipant, type ScreenShareFps, type ScreenShareNotice, type ScreenShareResolution } from '../../stores/voiceStore';
 import { useVoiceChannelUiStore } from '../../stores/voiceChannelUiStore';
 import type { User } from '../../types';
+import { getConversationTitle } from '../../utils/conversations';
 import VoiceParticipantContextMenu from './VoiceParticipantContextMenu';
 import VoiceStreamContextMenu from './VoiceStreamContextMenu';
 import {
@@ -114,6 +117,7 @@ function VoiceNoticeBanner({
 }
 
 export default function VoiceView() {
+  const currentUserId = useAuthStore((s) => s.user?.id);
   const connected = useVoiceStore((s) => s.connected);
   const connecting = useVoiceStore((s) => s.connecting);
   const voiceNotice = useVoiceStore((s) => s.screenShareNotice);
@@ -137,14 +141,27 @@ export default function VoiceView() {
   const leave = useVoiceStore((s) => s.leave);
 
   const streams = useStreamStore((s) => s.streams);
+  const conversations = useDMStore((s) => s.conversations);
   const closeVoiceView = useVoiceChannelUiStore((s) => s.closeVoiceView);
   const activeVoiceChannelId = useVoiceChannelUiStore((s) => s.activeChannelId);
+  const activeVoiceChannelKind = useVoiceChannelUiStore((s) => s.activeChannelKind);
   const hubMembers = usePresenceStore((s) => s.hubMembers);
   const activeHubId = useHubStore((s) => s.activeHubId);
-  const hubPermissions = useHubStore((s) => (activeHubId ? s.hubPermissions[activeHubId] : undefined));
+  const hubPermissionsByHub = useHubStore((s) => s.hubPermissions);
 
-  const stream = streams.find((s) => s.id === activeVoiceChannelId);
-  const canModerateUsers = canModerateVoice(hubPermissions);
+  const stream = activeVoiceChannelKind === 'stream'
+    ? streams.find((entry) => entry.id === activeVoiceChannelId)
+    : undefined;
+  const activeConversation = activeVoiceChannelKind === 'conversation' && activeVoiceChannelId
+    ? conversations.find((conversation) => conversation.id === activeVoiceChannelId)
+    : undefined;
+  const hubPermissions = activeVoiceChannelKind === 'stream' && activeHubId
+    ? hubPermissionsByHub[activeHubId]
+    : undefined;
+  const canModerateUsers = activeVoiceChannelKind === 'stream' && canModerateVoice(hubPermissions);
+  const voiceTitle = activeConversation
+    ? getConversationTitle(activeConversation, currentUserId)
+    : stream?.name || 'Voice Call';
 
   const [focusedSlotId, setFocusedSlotId] = useState<string | null>(null);
   const [showNonVideoParticipants, setShowNonVideoParticipants] = useState(true);
@@ -279,7 +296,7 @@ export default function VoiceView() {
       <div className="h-12 flex items-center px-4 border-b border-white/[0.06] flex-shrink-0 bg-[#0a0a0c]">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <VoiceChannelIcon size={18} className="text-[#b5bac1] flex-shrink-0" />
-          <h3 className="font-semibold text-[15px] text-[#f2f3f5] truncate">{stream?.name || 'Voice Channel'}</h3>
+          <h3 className="font-semibold text-[15px] text-[#f2f3f5] truncate">{voiceTitle}</h3>
           {connected && (
             <span className="text-xs text-[#949ba4] ml-2">
               {participants.length} participant{participants.length !== 1 ? 's' : ''}
@@ -395,7 +412,7 @@ export default function VoiceView() {
           member={hubMembers[tileMenu.participant.identity]}
           x={tileMenu.x}
           y={tileMenu.y}
-          hubId={stream?.hub_id ?? activeHubId ?? null}
+          hubId={activeVoiceChannelKind === 'stream' ? (stream?.hub_id ?? activeHubId ?? null) : null}
           canModerate={canModerateUsers}
           showNonVideoParticipants={showNonVideoParticipants}
           onToggleShowNonVideo={() => setShowNonVideoParticipants((v) => !v)}
@@ -535,9 +552,11 @@ export default function VoiceView() {
               <ActivitiesIcon size={22} />
             </ControlBtn>
 
-            <ControlBtn onClick={() => {}} tooltip="Soundboard" className="opacity-60 cursor-default">
-              <SoundboardIcon size={22} />
-            </ControlBtn>
+            {activeVoiceChannelKind === 'stream' ? (
+              <ControlBtn onClick={() => {}} tooltip="Soundboard" className="opacity-60 cursor-default">
+                <SoundboardIcon size={22} />
+              </ControlBtn>
+            ) : null}
 
             <div className="relative" ref={moreWrapRef}>
               <ControlBtn onClick={() => setMoreOpen((o) => !o)} tooltip="More">

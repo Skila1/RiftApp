@@ -231,10 +231,30 @@ export interface Conversation {
   id: string;
   created_at: string;
   updated_at: string;
-  recipient: User;
+  name?: string | null;
+  icon_url?: string | null;
+  icon_updated_at?: string | null;
+  icon_version?: string | null;
+  is_group?: boolean;
+  recipient?: User | null;
   members?: User[];
   last_message?: Message;
   unread_count?: number;
+}
+
+export type DMCallMode = 'audio' | 'video';
+
+export interface DMCallRing {
+  conversation_id: string;
+  initiator_id: string;
+  mode: DMCallMode;
+  started_at: string;
+}
+
+export interface DMConversationCallState {
+  conversation_id: string;
+  member_ids: string[];
+  ring?: DMCallRing | null;
 }
 
 export interface AuthResponse {

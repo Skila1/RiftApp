@@ -13,6 +13,7 @@ import ModalOverlay from '../shared/ModalOverlay';
 
 interface Props {
   conversation: Conversation;
+  mode?: 'create' | 'add';
   onClose: () => void;
 }
 
@@ -34,12 +35,13 @@ function FriendAvatar({ user }: { user: User }) {
   );
 }
 
-export default function AddFriendsToDMModal({ conversation, onClose }: Props) {
+export default function AddFriendsToDMModal({ conversation, mode = 'create', onClose }: Props) {
   const currentUserId = useAuthStore((s) => s.user?.id);
   const friends = useFriendStore((s) => s.friends);
   const loading = useFriendStore((s) => s.loading);
   const loadFriends = useFriendStore((s) => s.loadFriends);
   const openGroupDM = useDMStore((s) => s.openGroupDM);
+  const addConversationMembers = useDMStore((s) => s.addConversationMembers);
 
   const [query, setQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -91,26 +93,37 @@ export default function AddFriendsToDMModal({ conversation, onClose }: Props) {
     setSubmitting(true);
     setError(null);
     try {
-      await openGroupDM([
-        ...existingMembers.map((member) => member.id),
-        ...selectedIds,
-      ]);
+      if (mode === 'add') {
+        await addConversationMembers(conversation.id, selectedIds);
+      } else {
+        await openGroupDM([
+          ...existingMembers.map((member) => member.id),
+          ...selectedIds,
+        ]);
+      }
       onClose();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Could not start group DM');
+      setError(submitError instanceof Error ? submitError.message : mode === 'add' ? 'Could not add group members' : 'Could not start group DM');
     } finally {
       setSubmitting(false);
     }
   };
 
+  const title = mode === 'add' ? 'Add Members' : 'Add Friends to DM';
+  const description = mode === 'add'
+    ? `Add more people to ${getConversationTitle(conversation, currentUserId)}.`
+    : `Start a group conversation from ${getConversationTitle(conversation, currentUserId)}.`;
+  const submitLabel = mode === 'add' ? 'Add to Group' : 'Create Group DM';
+  const footerHint = selectedIds.length === 0
+    ? `Select at least one friend to ${mode === 'add' ? 'add to this group DM' : 'create a group DM'}.`
+    : `${selectedIds.length} friend${selectedIds.length === 1 ? '' : 's'} selected`;
+
   return (
     <ModalOverlay isOpen onClose={submitting ? () => {} : onClose} zIndex={330} className="p-4 sm:p-6">
       <div className="w-[min(92vw,520px)] overflow-hidden rounded-2xl border border-white/10 bg-[#111214] shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
         <div className="border-b border-white/6 px-5 py-4">
-          <h2 className="text-lg font-semibold text-[#f2f3f5]">Add Friends to DM</h2>
-          <p className="mt-1 text-sm text-[#949ba4]">
-            Start a group conversation from {getConversationTitle(conversation, currentUserId)}.
-          </p>
+          <h2 className="text-lg font-semibold text-[#f2f3f5]">{title}</h2>
+          <p className="mt-1 text-sm text-[#949ba4]">{description}</p>
         </div>
 
         <div className="space-y-4 px-5 py-4">
@@ -174,7 +187,7 @@ export default function AddFriendsToDMModal({ conversation, onClose }: Props) {
 
         <div className="flex items-center justify-between border-t border-white/6 px-5 py-4">
           <div className="text-sm text-[#949ba4]">
-            {selectedIds.length === 0 ? 'Select at least one friend to create a group DM.' : `${selectedIds.length} friend${selectedIds.length === 1 ? '' : 's'} selected`}
+            {footerHint}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -191,7 +204,7 @@ export default function AddFriendsToDMModal({ conversation, onClose }: Props) {
               disabled={selectedIds.length === 0 || submitting}
               className="rounded-lg bg-[#5865f2] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#6b77ff] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {submitting ? 'Starting…' : 'Create Group DM'}
+              {submitting ? (mode === 'add' ? 'Adding…' : 'Starting…') : submitLabel}
             </button>
           </div>
         </div>

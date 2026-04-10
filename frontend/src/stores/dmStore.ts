@@ -7,9 +7,26 @@ import { useHubStore } from './hubStore';
 import { useMessageStore } from './messageStore';
 import { useStreamStore } from './streamStore';
 import { useVoiceChannelUiStore } from './voiceChannelUiStore';
+import { useVoiceStore } from './voiceStore';
 
 const sumDmUnreads = (conversations: Conversation[]) =>
   conversations.reduce((acc, c) => acc + (c.unread_count ?? 0), 0);
+
+function upsertConversationList(conversations: Conversation[], nextConversation: Conversation): Conversation[] {
+  const existing = conversations.find((conversation) => conversation.id === nextConversation.id);
+  if (!existing) {
+    return [{ ...nextConversation, unread_count: nextConversation.unread_count ?? 0 }, ...conversations];
+  }
+
+  return conversations.map((conversation) => {
+    if (conversation.id !== nextConversation.id) return conversation;
+    return {
+      ...conversation,
+      ...nextConversation,
+      unread_count: conversation.unread_count ?? nextConversation.unread_count ?? 0,
+    };
+  });
+}
 
 interface DMState {
   conversations: Conversation[];
@@ -22,6 +39,10 @@ interface DMState {
   loadConversations: () => Promise<void>;
   openDM: (recipientId: string) => Promise<void>;
   openGroupDM: (memberIds: string[]) => Promise<Conversation>;
+  patchConversation: (conversationId: string, patch: { name?: string | null; icon_url?: string | null }) => Promise<Conversation>;
+  addConversationMembers: (conversationId: string, memberIds: string[]) => Promise<Conversation>;
+  removeConversationMember: (conversationId: string, userId: string) => Promise<void>;
+  leaveConversation: (conversationId: string) => Promise<void>;
   setActiveConversation: (convId: string) => Promise<void>;
   clearActive: () => void;
   loadDMMessages: (convId: string, opts?: { silent?: boolean }) => Promise<void>;
@@ -35,6 +56,8 @@ interface DMState {
   pinMessage: (messageId: string) => Promise<Message>;
   unpinMessage: (messageId: string) => Promise<Message>;
   addConversation: (conv: Conversation) => void;
+  updateConversation: (conv: Conversation) => void;
+  removeConversation: (conversationId: string) => void;
   ackDM: (convId: string) => Promise<void>;
   readStates: () => Promise<void>;
   patchUser: (user: User) => void;
@@ -70,11 +93,10 @@ export const useDMStore = create<DMState>((set, get) => ({
   openDM: async (recipientId) => {
     const conv = normalizeConversation(await api.createOrOpenDM(recipientId));
     set((s) => {
-      const exists = s.conversations.some((c) => c.id === conv.id);
+      const conversations = upsertConversationList(s.conversations, conv);
       return {
-        conversations: exists
-          ? s.conversations.map((conversation) => (conversation.id === conv.id ? { ...conversation, ...conv } : conversation))
-          : [conv, ...s.conversations],
+        conversations,
+        dmTotalUnread: sumDmUnreads(conversations),
       };
     });
     await get().setActiveConversation(conv.id);
@@ -83,21 +105,37 @@ export const useDMStore = create<DMState>((set, get) => ({
   openGroupDM: async (memberIds) => {
     const conv = normalizeConversation(await api.createOrOpenGroupDM(memberIds));
     set((s) => {
-      const exists = s.conversations.some((c) => c.id === conv.id);
-      const conversations = exists
-        ? s.conversations.map((conversation) => {
-            if (conversation.id !== conv.id) return conversation;
-            return {
-              ...conversation,
-              ...conv,
-              unread_count: conversation.unread_count ?? conv.unread_count ?? 0,
-            };
-          })
-        : [{ ...conv, unread_count: 0 }, ...s.conversations];
+      const conversations = upsertConversationList(s.conversations, conv);
       return { conversations, dmTotalUnread: sumDmUnreads(conversations) };
     });
     await get().setActiveConversation(conv.id);
     return conv;
+  },
+
+  patchConversation: async (conversationId, patch) => {
+    const nextConversation = normalizeConversation(await api.patchDMConversation(conversationId, patch));
+    get().updateConversation(nextConversation);
+    return nextConversation;
+  },
+
+  addConversationMembers: async (conversationId, memberIds) => {
+    const nextConversation = normalizeConversation(await api.addDMConversationMembers(conversationId, memberIds));
+    get().updateConversation(nextConversation);
+    return nextConversation;
+  },
+
+  removeConversationMember: async (conversationId, userId) => {
+    await api.removeDMConversationMember(conversationId, userId);
+    if (userId === useAuthStore.getState().user?.id) {
+      get().removeConversation(conversationId);
+      return;
+    }
+    await get().loadConversations();
+  },
+
+  leaveConversation: async (conversationId) => {
+    await api.leaveDMConversation(conversationId);
+    get().removeConversation(conversationId);
   },
 
   setActiveConversation: async (convId) => {
@@ -268,18 +306,44 @@ export const useDMStore = create<DMState>((set, get) => ({
   addConversation: (conv) => {
     const nextConversation = normalizeConversation(conv);
     set((s) => {
-      const existing = s.conversations.find((conversation) => conversation.id === nextConversation.id);
-      const conversations = existing
-        ? s.conversations.map((conversation) => {
-            if (conversation.id !== nextConversation.id) return conversation;
-            return {
-              ...conversation,
-              ...nextConversation,
-              unread_count: conversation.unread_count ?? nextConversation.unread_count ?? 0,
-            };
-          })
-        : [{ ...nextConversation, unread_count: 0 }, ...s.conversations];
+      const conversations = upsertConversationList(s.conversations, nextConversation);
       return { conversations, dmTotalUnread: sumDmUnreads(conversations) };
+    });
+  },
+
+  updateConversation: (conv) => {
+    const nextConversation = normalizeConversation(conv);
+    set((s) => {
+      const conversations = upsertConversationList(s.conversations, nextConversation);
+      return { conversations, dmTotalUnread: sumDmUnreads(conversations) };
+    });
+  },
+
+  removeConversation: (conversationId) => {
+    const currentState = get();
+    const isActiveConversation = currentState.activeConversationId === conversationId;
+    const voiceState = useVoiceStore.getState();
+    const isActiveConversationCall = voiceState.targetKind === 'conversation' && voiceState.conversationId === conversationId;
+
+    if (isActiveConversation) {
+      useVoiceChannelUiStore.getState().closeVoiceView();
+    }
+    if (isActiveConversationCall) {
+      void Promise.resolve(voiceState.leave()).finally(() => {
+        useVoiceStore.getState().clearConversationCallState(conversationId);
+      });
+    } else {
+      voiceState.clearConversationCallState(conversationId);
+    }
+
+    set((s) => {
+      const conversations = s.conversations.filter((conversation) => conversation.id !== conversationId);
+      return {
+        conversations,
+        dmTotalUnread: sumDmUnreads(conversations),
+        activeConversationId: isActiveConversation ? null : s.activeConversationId,
+        dmMessages: isActiveConversation ? [] : s.dmMessages,
+      };
     });
   },
 
@@ -344,7 +408,7 @@ export const useDMStore = create<DMState>((set, get) => ({
     set((s) => ({
       conversations: s.conversations.map((conversation) => ({
         ...conversation,
-        recipient: conversation.recipient.id === nextUser.id
+        recipient: conversation.recipient?.id === nextUser.id
           ? { ...conversation.recipient, ...nextUser }
           : conversation.recipient,
         members: conversation.members?.map((member) => (member.id === nextUser.id ? { ...member, ...nextUser } : member)),

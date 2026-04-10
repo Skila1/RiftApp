@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"sort"
 	"sync"
 	"time"
 
@@ -22,19 +23,25 @@ type streamSubscription struct {
 	authorized bool
 }
 
+const conversationCallRingTTL = 45 * time.Second
+
 type Hub struct {
-	clients                map[string]map[string]*Client             // userID -> sessionID -> client
-	streamSubs             map[string]map[string]*streamSubscription // streamID -> sessionKey -> subscription
-	voiceState             map[string]map[string]bool                // streamID -> set of userIDs in voice
-	voiceDeafened          map[string]map[string]bool                // streamID -> set of deafened userIDs
-	voiceJoinGrants        map[string]map[string]time.Time           // userID -> streamID -> expiry
-	register               chan *Client
-	unregister             chan *Client
-	broadcast              chan *BroadcastMessage
-	mu                     sync.RWMutex
-	db                     *pgxpool.Pool
-	permChecker            StreamPermissionChecker
-	missingPermCheckerOnce sync.Once
+	clients                   map[string]map[string]*Client             // userID -> sessionID -> client
+	streamSubs                map[string]map[string]*streamSubscription // streamID -> sessionKey -> subscription
+	voiceState                map[string]map[string]bool                // streamID -> set of userIDs in voice
+	voiceDeafened             map[string]map[string]bool                // streamID -> set of deafened userIDs
+	conversationMembers       map[string][]string                       // conversationID -> cached member userIDs
+	conversationVoiceState    map[string]map[string]bool                // conversationID -> set of userIDs in voice
+	conversationVoiceDeafened map[string]map[string]bool                // conversationID -> set of deafened userIDs
+	conversationCallRings     map[string]DMCallRingData                 // conversationID -> active DM call ring state
+	voiceJoinGrants           map[string]map[string]time.Time           // userID -> streamID -> expiry
+	register                  chan *Client
+	unregister                chan *Client
+	broadcast                 chan *BroadcastMessage
+	mu                        sync.RWMutex
+	db                        *pgxpool.Pool
+	permChecker               StreamPermissionChecker
+	missingPermCheckerOnce    sync.Once
 }
 
 type BroadcastMessage struct {
@@ -45,15 +52,19 @@ type BroadcastMessage struct {
 
 func NewHub(db *pgxpool.Pool) *Hub {
 	return &Hub{
-		clients:         make(map[string]map[string]*Client),
-		streamSubs:      make(map[string]map[string]*streamSubscription),
-		voiceState:      make(map[string]map[string]bool),
-		voiceDeafened:   make(map[string]map[string]bool),
-		voiceJoinGrants: make(map[string]map[string]time.Time),
-		register:        make(chan *Client),
-		unregister:      make(chan *Client),
-		broadcast:       make(chan *BroadcastMessage, 256),
-		db:              db,
+		clients:                   make(map[string]map[string]*Client),
+		streamSubs:                make(map[string]map[string]*streamSubscription),
+		voiceState:                make(map[string]map[string]bool),
+		voiceDeafened:             make(map[string]map[string]bool),
+		conversationMembers:       make(map[string][]string),
+		conversationVoiceState:    make(map[string]map[string]bool),
+		conversationVoiceDeafened: make(map[string]map[string]bool),
+		conversationCallRings:     make(map[string]DMCallRingData),
+		voiceJoinGrants:           make(map[string]map[string]time.Time),
+		register:                  make(chan *Client),
+		unregister:                make(chan *Client),
+		broadcast:                 make(chan *BroadcastMessage, 256),
+		db:                        db,
 	}
 }
 
@@ -409,11 +420,84 @@ func (h *Hub) isUserInVoiceStream(streamID, userID string) bool {
 	return h.voiceState[streamID] != nil && h.voiceState[streamID][userID]
 }
 
+func (h *Hub) isUserInVoiceConversation(conversationID, userID string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.conversationVoiceState[conversationID] != nil && h.conversationVoiceState[conversationID][userID]
+}
+
 func (h *Hub) canJoinVoiceStream(streamID, userID string) bool {
 	if h.canConnectVoice(streamID, userID) {
 		return true
 	}
 	return h.GetUserVoiceStreamID(userID) == streamID
+}
+
+func (h *Hub) canJoinVoiceConversation(conversationID, userID string) bool {
+	if h.db == nil {
+		return false
+	}
+	ctx := context.Background()
+	var allowed bool
+	err := h.db.QueryRow(ctx,
+		`SELECT EXISTS(
+			SELECT 1 FROM conversation_members WHERE conversation_id = $1 AND user_id = $2
+		)`,
+		conversationID, userID,
+	).Scan(&allowed)
+	return err == nil && allowed
+}
+
+func (h *Hub) removeUserFromOtherVoiceLocked(userID, keepStreamID, keepConversationID string) ([]string, []string) {
+	removedStreams := make([]string, 0)
+	for streamID, users := range h.voiceState {
+		if keepStreamID != "" && streamID == keepStreamID {
+			continue
+		}
+		if !users[userID] {
+			continue
+		}
+		delete(users, userID)
+		removedStreams = append(removedStreams, streamID)
+		if len(users) == 0 {
+			delete(h.voiceState, streamID)
+		}
+	}
+	for streamID, deafened := range h.voiceDeafened {
+		if !deafened[userID] {
+			continue
+		}
+		delete(deafened, userID)
+		if len(deafened) == 0 {
+			delete(h.voiceDeafened, streamID)
+		}
+	}
+
+	removedConversations := make([]string, 0)
+	for conversationID, users := range h.conversationVoiceState {
+		if keepConversationID != "" && conversationID == keepConversationID {
+			continue
+		}
+		if !users[userID] {
+			continue
+		}
+		delete(users, userID)
+		removedConversations = append(removedConversations, conversationID)
+		if len(users) == 0 {
+			delete(h.conversationVoiceState, conversationID)
+		}
+	}
+	for conversationID, deafened := range h.conversationVoiceDeafened {
+		if !deafened[userID] {
+			continue
+		}
+		delete(deafened, userID)
+		if len(deafened) == 0 {
+			delete(h.conversationVoiceDeafened, conversationID)
+		}
+	}
+
+	return removedStreams, removedConversations
 }
 
 func (h *Hub) BroadcastToStream(streamID string, data []byte, excludeUserID string) {
@@ -610,10 +694,10 @@ func (h *Hub) handleClientEvent(c *Client, evt *Event) {
 			log.Printf("ws: invalid voice-state payload user=%s: %v", c.userID, err)
 			return
 		}
-		if data.StreamID == "" {
+		if (data.StreamID == "" && data.ConversationID == "") || (data.StreamID != "" && data.ConversationID != "") {
 			return
 		}
-		go h.handleVoiceState(c.userID, data.StreamID, data.Action)
+		go h.handleVoiceState(c.userID, data.StreamID, data.ConversationID, data.Action)
 
 	case OpVoiceSpeakingUpdate:
 		var data VoiceSpeakingClientData
@@ -621,10 +705,10 @@ func (h *Hub) handleClientEvent(c *Client, evt *Event) {
 			log.Printf("ws: invalid voice-speaking payload user=%s: %v", c.userID, err)
 			return
 		}
-		if data.StreamID == "" {
+		if (data.StreamID == "" && data.ConversationID == "") || (data.StreamID != "" && data.ConversationID != "") {
 			return
 		}
-		go h.handleVoiceSpeaking(c.userID, data.StreamID, data.Speaking)
+		go h.handleVoiceSpeaking(c.userID, data.StreamID, data.ConversationID, data.Speaking)
 
 	case OpVoiceScreenShareUpdate:
 		var data VoiceScreenShareClientData
@@ -632,10 +716,10 @@ func (h *Hub) handleClientEvent(c *Client, evt *Event) {
 			log.Printf("ws: invalid voice-screenshare payload user=%s: %v", c.userID, err)
 			return
 		}
-		if data.StreamID == "" {
+		if (data.StreamID == "" && data.ConversationID == "") || (data.StreamID != "" && data.ConversationID != "") {
 			return
 		}
-		go h.handleVoiceScreenShare(c.userID, data.StreamID, data.Sharing)
+		go h.handleVoiceScreenShare(c.userID, data.StreamID, data.ConversationID, data.Sharing)
 
 	case OpVoiceDeafenUpdate:
 		var data VoiceDeafenClientData
@@ -643,14 +727,24 @@ func (h *Hub) handleClientEvent(c *Client, evt *Event) {
 			log.Printf("ws: invalid voice-deafen payload user=%s: %v", c.userID, err)
 			return
 		}
-		if data.StreamID == "" {
+		if (data.StreamID == "" && data.ConversationID == "") || (data.StreamID != "" && data.ConversationID != "") {
 			return
 		}
-		go h.handleVoiceDeafen(c.userID, data.StreamID, data.Deafened)
+		go h.handleVoiceDeafen(c.userID, data.StreamID, data.ConversationID, data.Deafened)
 	}
 }
 
-func (h *Hub) handleVoiceState(userID, streamID, action string) {
+func (h *Hub) handleVoiceState(userID, streamID, conversationID, action string) {
+	if streamID != "" {
+		h.handleStreamVoiceState(userID, streamID, action)
+		return
+	}
+	if conversationID != "" {
+		h.handleConversationVoiceState(userID, conversationID, action)
+	}
+}
+
+func (h *Hub) handleStreamVoiceState(userID, streamID, action string) {
 	switch action {
 	case "join":
 		if h.isUserInVoiceStream(streamID, userID) || !h.canJoinVoiceStream(streamID, userID) {
@@ -667,26 +761,19 @@ func (h *Hub) handleVoiceState(userID, streamID, action string) {
 	h.mu.Lock()
 	switch action {
 	case "join":
-		// Remove user from any other voice channel first
-		for sid, users := range h.voiceState {
-			if users[userID] {
-				delete(users, userID)
-				if len(users) == 0 {
-					delete(h.voiceState, sid)
-				}
-				if sid != streamID {
-					h.mu.Unlock()
-					h.broadcastVoiceState(sid, userID, "leave")
-					h.mu.Lock()
-				}
-			}
-		}
+		removedStreams, removedConversations := h.removeUserFromOtherVoiceLocked(userID, streamID, "")
 		if h.voiceState[streamID] == nil {
 			h.voiceState[streamID] = make(map[string]bool)
 		}
 		h.voiceState[streamID][userID] = true
 		h.mu.Unlock()
 		h.clearVoiceJoinGrant(userID, streamID)
+		for _, removedStreamID := range removedStreams {
+			h.broadcastVoiceState(removedStreamID, userID, "leave")
+		}
+		for _, removedConversationID := range removedConversations {
+			h.broadcastConversationVoiceState(removedConversationID, userID, "leave")
+		}
 		h.broadcastVoiceState(streamID, userID, "join")
 	case "leave":
 		if users, ok := h.voiceState[streamID]; ok {
@@ -709,11 +796,97 @@ func (h *Hub) handleVoiceState(userID, streamID, action string) {
 	}
 }
 
+func (h *Hub) handleConversationVoiceState(userID, conversationID, action string) {
+	switch action {
+	case "join":
+		if h.isUserInVoiceConversation(conversationID, userID) || !h.canJoinVoiceConversation(conversationID, userID) {
+			return
+		}
+	case "leave":
+		if !h.isUserInVoiceConversation(conversationID, userID) {
+			return
+		}
+	default:
+		return
+	}
+
+	h.mu.Lock()
+	switch action {
+	case "join":
+		removedStreams, removedConversations := h.removeUserFromOtherVoiceLocked(userID, "", conversationID)
+		clearAnsweredRing := false
+		if ring, ok := h.conversationCallRings[conversationID]; ok && ring.InitiatorID != userID {
+			delete(h.conversationCallRings, conversationID)
+			clearAnsweredRing = true
+		}
+		if h.conversationVoiceState[conversationID] == nil {
+			h.conversationVoiceState[conversationID] = make(map[string]bool)
+		}
+		h.conversationVoiceState[conversationID][userID] = true
+		h.mu.Unlock()
+		for _, removedStreamID := range removedStreams {
+			h.broadcastVoiceState(removedStreamID, userID, "leave")
+		}
+		for _, removedConversationID := range removedConversations {
+			h.broadcastConversationVoiceState(removedConversationID, userID, "leave")
+			h.cancelConversationCallRingIfInitiator(removedConversationID, userID, "cancelled")
+		}
+		if clearAnsweredRing {
+			h.broadcastConversationCallRingEnd(conversationID, "answered")
+		}
+		h.broadcastConversationVoiceState(conversationID, userID, "join")
+	case "leave":
+		if users, ok := h.conversationVoiceState[conversationID]; ok {
+			delete(users, userID)
+			if len(users) == 0 {
+				delete(h.conversationVoiceState, conversationID)
+			}
+		}
+		if deafened, ok := h.conversationVoiceDeafened[conversationID]; ok {
+			delete(deafened, userID)
+			if len(deafened) == 0 {
+				delete(h.conversationVoiceDeafened, conversationID)
+			}
+		}
+		clearCancelledRing := false
+		if ring, ok := h.conversationCallRings[conversationID]; ok && ring.InitiatorID == userID {
+			delete(h.conversationCallRings, conversationID)
+			clearCancelledRing = true
+		}
+		h.mu.Unlock()
+		if clearCancelledRing {
+			h.broadcastConversationCallRingEnd(conversationID, "cancelled")
+		}
+		h.broadcastConversationVoiceState(conversationID, userID, "leave")
+	default:
+		h.mu.Unlock()
+	}
+}
+
 func (h *Hub) broadcastVoiceState(streamID, userID, action string) {
 	h.broadcastToStreamObservers(streamID, NewEvent(OpVoiceStateUpdate, VoiceStateData{
 		StreamID: streamID,
 		UserID:   userID,
 		Action:   action,
+	}))
+}
+
+func (h *Hub) broadcastConversationVoiceState(conversationID, userID, action string) {
+	h.broadcastToConversationMembers(conversationID, NewEvent(OpVoiceStateUpdate, VoiceStateData{
+		ConversationID: conversationID,
+		UserID:         userID,
+		Action:         action,
+	}))
+}
+
+func (h *Hub) broadcastConversationCallRing(ring DMCallRingData) {
+	h.broadcastToConversationMembers(ring.ConversationID, NewEvent(OpDMCallRing, ring))
+}
+
+func (h *Hub) broadcastConversationCallRingEnd(conversationID, reason string) {
+	h.broadcastToConversationMembers(conversationID, NewEvent(OpDMCallRingEnd, DMCallRingEndData{
+		ConversationID: conversationID,
+		Reason:         reason,
 	}))
 }
 
@@ -758,7 +931,98 @@ func (h *Hub) broadcastToStreamObservers(streamID string, evt []byte) {
 	h.sendToUsers(recipients, evt)
 }
 
-func (h *Hub) handleVoiceSpeaking(userID, streamID string, speaking bool) {
+func (h *Hub) getConversationMemberIDs(conversationID string) []string {
+	h.mu.RLock()
+	if memberIDs, ok := h.conversationMembers[conversationID]; ok {
+		cached := append([]string(nil), memberIDs...)
+		h.mu.RUnlock()
+		return cached
+	}
+	h.mu.RUnlock()
+
+	if h.db == nil {
+		return nil
+	}
+	ctx := context.Background()
+	rows, err := h.db.Query(ctx,
+		`SELECT user_id FROM conversation_members WHERE conversation_id = $1`, conversationID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	userIDs := make([]string, 0)
+	for rows.Next() {
+		var userID string
+		if err := rows.Scan(&userID); err != nil {
+			continue
+		}
+		userIDs = append(userIDs, userID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil
+	}
+	sort.Strings(userIDs)
+
+	h.mu.Lock()
+	if memberIDs, ok := h.conversationMembers[conversationID]; ok {
+		userIDs = append([]string(nil), memberIDs...)
+	} else if len(userIDs) > 0 {
+		h.conversationMembers[conversationID] = append([]string(nil), userIDs...)
+	}
+	h.mu.Unlock()
+	return userIDs
+}
+
+func (h *Hub) broadcastToConversationMembers(conversationID string, evt []byte) {
+	memberIDs := h.getConversationMemberIDs(conversationID)
+	if len(memberIDs) == 0 {
+		return
+	}
+	h.sendToUsers(memberIDs, evt)
+}
+
+func (h *Hub) SetConversationMembers(conversationID string, memberIDs []string) {
+	normalized := make([]string, 0, len(memberIDs))
+	seen := make(map[string]struct{}, len(memberIDs))
+	for _, memberID := range memberIDs {
+		if memberID == "" {
+			continue
+		}
+		if _, exists := seen[memberID]; exists {
+			continue
+		}
+		seen[memberID] = struct{}{}
+		normalized = append(normalized, memberID)
+	}
+	sort.Strings(normalized)
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(normalized) == 0 {
+		delete(h.conversationMembers, conversationID)
+		return
+	}
+	h.conversationMembers[conversationID] = normalized
+}
+
+func (h *Hub) ClearConversationMembers(conversationID string) {
+	h.mu.Lock()
+	delete(h.conversationMembers, conversationID)
+	h.mu.Unlock()
+}
+
+func (h *Hub) handleVoiceSpeaking(userID, streamID, conversationID string, speaking bool) {
+	if streamID != "" {
+		h.handleStreamVoiceSpeaking(userID, streamID, speaking)
+		return
+	}
+	if conversationID != "" {
+		h.handleConversationVoiceSpeaking(userID, conversationID, speaking)
+	}
+}
+
+func (h *Hub) handleStreamVoiceSpeaking(userID, streamID string, speaking bool) {
 	h.mu.RLock()
 	inVoice := h.voiceState[streamID] != nil && h.voiceState[streamID][userID]
 	h.mu.RUnlock()
@@ -773,7 +1037,32 @@ func (h *Hub) handleVoiceSpeaking(userID, streamID string, speaking bool) {
 	}))
 }
 
-func (h *Hub) handleVoiceScreenShare(userID, streamID string, sharing bool) {
+func (h *Hub) handleConversationVoiceSpeaking(userID, conversationID string, speaking bool) {
+	h.mu.RLock()
+	inVoice := h.conversationVoiceState[conversationID] != nil && h.conversationVoiceState[conversationID][userID]
+	h.mu.RUnlock()
+	if !inVoice {
+		return
+	}
+
+	h.broadcastToConversationMembers(conversationID, NewEvent(OpVoiceSpeakingUpdate, VoiceSpeakingData{
+		ConversationID: conversationID,
+		UserID:         userID,
+		Speaking:       speaking,
+	}))
+}
+
+func (h *Hub) handleVoiceScreenShare(userID, streamID, conversationID string, sharing bool) {
+	if streamID != "" {
+		h.handleStreamVoiceScreenShare(userID, streamID, sharing)
+		return
+	}
+	if conversationID != "" {
+		h.handleConversationVoiceScreenShare(userID, conversationID, sharing)
+	}
+}
+
+func (h *Hub) handleStreamVoiceScreenShare(userID, streamID string, sharing bool) {
 	h.mu.RLock()
 	inVoice := h.voiceState[streamID] != nil && h.voiceState[streamID][userID]
 	h.mu.RUnlock()
@@ -788,7 +1077,32 @@ func (h *Hub) handleVoiceScreenShare(userID, streamID string, sharing bool) {
 	}))
 }
 
-func (h *Hub) handleVoiceDeafen(userID, streamID string, deafened bool) {
+func (h *Hub) handleConversationVoiceScreenShare(userID, conversationID string, sharing bool) {
+	h.mu.RLock()
+	inVoice := h.conversationVoiceState[conversationID] != nil && h.conversationVoiceState[conversationID][userID]
+	h.mu.RUnlock()
+	if !inVoice {
+		return
+	}
+
+	h.broadcastToConversationMembers(conversationID, NewEvent(OpVoiceScreenShareUpdate, VoiceScreenShareData{
+		ConversationID: conversationID,
+		UserID:         userID,
+		Sharing:        sharing,
+	}))
+}
+
+func (h *Hub) handleVoiceDeafen(userID, streamID, conversationID string, deafened bool) {
+	if streamID != "" {
+		h.handleStreamVoiceDeafen(userID, streamID, deafened)
+		return
+	}
+	if conversationID != "" {
+		h.handleConversationVoiceDeafen(userID, conversationID, deafened)
+	}
+}
+
+func (h *Hub) handleStreamVoiceDeafen(userID, streamID string, deafened bool) {
 	h.mu.Lock()
 	inVoice := h.voiceState[streamID] != nil && h.voiceState[streamID][userID]
 	if inVoice {
@@ -818,33 +1132,178 @@ func (h *Hub) handleVoiceDeafen(userID, streamID string, deafened bool) {
 	}))
 }
 
+func (h *Hub) handleConversationVoiceDeafen(userID, conversationID string, deafened bool) {
+	h.mu.Lock()
+	inVoice := h.conversationVoiceState[conversationID] != nil && h.conversationVoiceState[conversationID][userID]
+	if inVoice {
+		if deafened {
+			if h.conversationVoiceDeafened[conversationID] == nil {
+				h.conversationVoiceDeafened[conversationID] = make(map[string]bool)
+			}
+			h.conversationVoiceDeafened[conversationID][userID] = true
+		} else {
+			if h.conversationVoiceDeafened[conversationID] != nil {
+				delete(h.conversationVoiceDeafened[conversationID], userID)
+				if len(h.conversationVoiceDeafened[conversationID]) == 0 {
+					delete(h.conversationVoiceDeafened, conversationID)
+				}
+			}
+		}
+	}
+	h.mu.Unlock()
+	if !inVoice {
+		return
+	}
+
+	h.broadcastToConversationMembers(conversationID, NewEvent(OpVoiceDeafenUpdate, VoiceDeafenData{
+		ConversationID: conversationID,
+		UserID:         userID,
+		Deafened:       deafened,
+	}))
+}
+
 // removeUserFromAllVoice removes a user from all voice channels on disconnect
 func (h *Hub) removeUserFromAllVoice(userID string) {
 	h.mu.Lock()
-	var affectedStreams []string
-	for streamID, users := range h.voiceState {
-		if users[userID] {
-			delete(users, userID)
-			affectedStreams = append(affectedStreams, streamID)
-			if len(users) == 0 {
-				delete(h.voiceState, streamID)
-			}
-		}
-	}
-	for streamID, deafened := range h.voiceDeafened {
-		if deafened[userID] {
-			delete(deafened, userID)
-			if len(deafened) == 0 {
-				delete(h.voiceDeafened, streamID)
-			}
-		}
-	}
+	affectedStreams, affectedConversations := h.removeUserFromOtherVoiceLocked(userID, "", "")
 	delete(h.voiceJoinGrants, userID)
 	h.mu.Unlock()
 
 	for _, streamID := range affectedStreams {
 		h.broadcastVoiceState(streamID, userID, "leave")
 	}
+	for _, conversationID := range affectedConversations {
+		h.broadcastConversationVoiceState(conversationID, userID, "leave")
+		h.cancelConversationCallRingIfInitiator(conversationID, userID, "cancelled")
+	}
+}
+
+func (h *Hub) buildConversationCallStateLocked(conversationID string) (DMConversationCallStateData, bool) {
+	state := DMConversationCallStateData{ConversationID: conversationID}
+	if users, ok := h.conversationVoiceState[conversationID]; ok && len(users) > 0 {
+		state.MemberIDs = make([]string, 0, len(users))
+		for userID := range users {
+			state.MemberIDs = append(state.MemberIDs, userID)
+		}
+		sort.Strings(state.MemberIDs)
+	}
+	if ring, ok := h.conversationCallRings[conversationID]; ok {
+		ringCopy := ring
+		state.Ring = &ringCopy
+	}
+	if len(state.MemberIDs) == 0 && state.Ring == nil {
+		return DMConversationCallStateData{}, false
+	}
+	return state, true
+}
+
+func (h *Hub) GetConversationCallState(conversationID string) DMConversationCallStateData {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if state, ok := h.buildConversationCallStateLocked(conversationID); ok {
+		return state
+	}
+	return DMConversationCallStateData{ConversationID: conversationID}
+}
+
+func (h *Hub) GetConversationCallStatesForUser(ctx context.Context, userID string) ([]DMConversationCallStateData, error) {
+	if h.db == nil {
+		return []DMConversationCallStateData{}, nil
+	}
+
+	rows, err := h.db.Query(ctx,
+		`SELECT conversation_id FROM conversation_members WHERE user_id = $1`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	conversationIDs := make([]string, 0)
+	for rows.Next() {
+		var conversationID string
+		if err := rows.Scan(&conversationID); err != nil {
+			continue
+		}
+		conversationIDs = append(conversationIDs, conversationID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	states := make([]DMConversationCallStateData, 0)
+	for _, conversationID := range conversationIDs {
+		state, ok := h.buildConversationCallStateLocked(conversationID)
+		if !ok {
+			continue
+		}
+		states = append(states, state)
+	}
+	return states, nil
+}
+
+func (h *Hub) StartConversationCallRing(conversationID, initiatorID, mode string) DMConversationCallStateData {
+	now := time.Now().UTC()
+	ring := DMCallRingData{
+		ConversationID: conversationID,
+		InitiatorID:    initiatorID,
+		Mode:           mode,
+		StartedAt:      now,
+	}
+
+	h.mu.Lock()
+	if users, ok := h.conversationVoiceState[conversationID]; ok && len(users) > 0 {
+		onlyInitiator := len(users) == 1 && users[initiatorID]
+		if !onlyInitiator {
+			state, _ := h.buildConversationCallStateLocked(conversationID)
+			h.mu.Unlock()
+			return state
+		}
+	}
+	h.conversationCallRings[conversationID] = ring
+	state, _ := h.buildConversationCallStateLocked(conversationID)
+	h.mu.Unlock()
+
+	h.broadcastConversationCallRing(ring)
+	go h.expireConversationCallRing(conversationID, now)
+	return state
+}
+
+func (h *Hub) CancelConversationCallRing(conversationID, initiatorID, reason string) bool {
+	return h.cancelConversationCallRingIfInitiator(conversationID, initiatorID, reason)
+}
+
+func (h *Hub) cancelConversationCallRingIfInitiator(conversationID, initiatorID, reason string) bool {
+	h.mu.Lock()
+	ring, ok := h.conversationCallRings[conversationID]
+	if !ok || ring.InitiatorID != initiatorID {
+		h.mu.Unlock()
+		return false
+	}
+	delete(h.conversationCallRings, conversationID)
+	h.mu.Unlock()
+
+	h.broadcastConversationCallRingEnd(conversationID, reason)
+	return true
+}
+
+func (h *Hub) expireConversationCallRing(conversationID string, startedAt time.Time) {
+	timer := time.NewTimer(conversationCallRingTTL)
+	defer timer.Stop()
+	<-timer.C
+
+	h.mu.Lock()
+	ring, ok := h.conversationCallRings[conversationID]
+	if !ok || !ring.StartedAt.Equal(startedAt) {
+		h.mu.Unlock()
+		return
+	}
+	delete(h.conversationCallRings, conversationID)
+	h.mu.Unlock()
+
+	h.broadcastConversationCallRingEnd(conversationID, "timeout")
 }
 
 // GetVoiceStates returns all voice channel members for streams in a given hub
@@ -924,18 +1383,16 @@ func (h *Hub) MoveUserToVoiceStream(userID, targetStreamID string) (string, bool
 			break
 		}
 	}
-	if currentStreamID == targetStreamID {
+	if currentStreamID == targetStreamID && targetStreamID != "" {
+		_, removedConversations := h.removeUserFromOtherVoiceLocked(userID, targetStreamID, "")
 		h.mu.Unlock()
-		return currentStreamID, false
-	}
-	if currentStreamID != "" {
-		if users, ok := h.voiceState[currentStreamID]; ok {
-			delete(users, userID)
-			if len(users) == 0 {
-				delete(h.voiceState, currentStreamID)
-			}
+		for _, conversationID := range removedConversations {
+			h.broadcastConversationVoiceState(conversationID, userID, "leave")
+			h.cancelConversationCallRingIfInitiator(conversationID, userID, "cancelled")
 		}
+		return currentStreamID, len(removedConversations) > 0
 	}
+	removedStreams, removedConversations := h.removeUserFromOtherVoiceLocked(userID, targetStreamID, "")
 	if targetStreamID != "" {
 		if h.voiceState[targetStreamID] == nil {
 			h.voiceState[targetStreamID] = make(map[string]bool)
@@ -944,14 +1401,18 @@ func (h *Hub) MoveUserToVoiceStream(userID, targetStreamID string) (string, bool
 	}
 	h.mu.Unlock()
 
-	if currentStreamID != "" {
-		h.broadcastVoiceState(currentStreamID, userID, "leave")
+	for _, streamID := range removedStreams {
+		h.broadcastVoiceState(streamID, userID, "leave")
+	}
+	for _, conversationID := range removedConversations {
+		h.broadcastConversationVoiceState(conversationID, userID, "leave")
+		h.cancelConversationCallRingIfInitiator(conversationID, userID, "cancelled")
 	}
 	if targetStreamID != "" {
 		h.broadcastVoiceState(targetStreamID, userID, "join")
 	}
 
-	return currentStreamID, currentStreamID != "" || targetStreamID != ""
+	return currentStreamID, len(removedStreams) > 0 || len(removedConversations) > 0 || targetStreamID != ""
 }
 
 func (h *Hub) DisconnectUserFromVoice(userID string) (string, bool) {

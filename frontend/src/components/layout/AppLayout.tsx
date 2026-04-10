@@ -13,6 +13,7 @@ import SelfProfilePopover from '../shared/SelfProfilePopover';
 import UserContextMenu from '../shared/UserContextMenu';
 import DesktopScreenSharePickerModal from '../voice/DesktopScreenSharePickerModal';
 import ScreenShareModal from '../voice/ScreenShareModal';
+import IncomingDMCallPrompt from '../voice/IncomingDMCallPrompt';
 import VoiceBottomBar from '../voice/VoiceBottomBar';
 import FloatingActiveSpeakerMedia from '../voice/FloatingActiveSpeakerMedia';
 import { useWebSocket } from '../../hooks/useWebSocket';
@@ -29,14 +30,18 @@ export default function AppLayout() {
   const [showMemberList, setShowMemberList] = useState(true);
   const [searchSidebarOpen, setSearchSidebarOpen] = useState(false);
   const loadHubs = useHubStore((s) => s.loadHubs);
+  const loadConversations = useDMStore((s) => s.loadConversations);
   const loadNotifications = useNotificationStore((s) => s.loadNotifications);
+  const loadConversationCallStates = useVoiceStore((s) => s.loadConversationCallStates);
   const activeConversationId = useDMStore((s) => s.activeConversationId);
   const params = useParams<{ hubId?: string; streamId?: string; conversationId?: string }>();
 
   useEffect(() => {
     loadHubs();
+    void loadConversations();
     loadNotifications();
-  }, [loadHubs, loadNotifications]);
+    void loadConversationCallStates();
+  }, [loadConversationCallStates, loadConversations, loadHubs, loadNotifications]);
 
   // Keep DM list, friend requests, and notifications fresh when returning to the tab.
   useEffect(() => {
@@ -48,6 +53,7 @@ export default function AppLayout() {
         useDMStore.getState().loadConversations();
         useFriendStore.getState().loadPendingCount();
         useNotificationStore.getState().loadNotifications();
+        void useVoiceStore.getState().loadConversationCallStates();
       }, 250);
     };
     window.addEventListener('focus', refresh);
@@ -77,24 +83,26 @@ export default function AppLayout() {
 
   const activeHubId = useHubStore((s) => s.activeHubId);
   const streams = useStreamStore((s) => s.streams);
-  const voiceStreamId = useVoiceStore((s) => s.streamId);
+  const voiceTargetId = useVoiceStore((s) => s.targetId);
   const voiceConnecting = useVoiceStore((s) => s.connecting);
   const voiceUiOpen = useVoiceChannelUiStore((s) => s.isOpen);
   const activeVoiceChannelId = useVoiceChannelUiStore((s) => s.activeChannelId);
+  const activeVoiceChannelKind = useVoiceChannelUiStore((s) => s.activeChannelKind);
   const resetVoiceView = useVoiceChannelUiStore((s) => s.resetVoiceView);
 
   useEffect(() => {
-    if (!voiceConnecting && !voiceStreamId) {
+    if (!voiceConnecting && !voiceTargetId) {
       resetVoiceView();
     }
-  }, [resetVoiceView, voiceConnecting, voiceStreamId]);
+  }, [resetVoiceView, voiceConnecting, voiceTargetId]);
 
   useEffect(() => {
+    if (activeVoiceChannelKind !== 'stream') return;
     if (!activeVoiceChannelId) return;
     if (!streams.some((stream) => stream.id === activeVoiceChannelId)) {
       resetVoiceView();
     }
-  }, [activeVoiceChannelId, resetVoiceView, streams]);
+  }, [activeVoiceChannelId, activeVoiceChannelKind, resetVoiceView, streams]);
 
   useEffect(() => {
     if (!activeHubId || activeConversationId || voiceUiOpen) {
@@ -130,6 +138,7 @@ export default function AppLayout() {
       <UserContextMenu />
       <DesktopScreenSharePickerModal />
       <ScreenShareModal />
+      <IncomingDMCallPrompt />
       <FloatingActiveSpeakerMedia />
     </div>
   );

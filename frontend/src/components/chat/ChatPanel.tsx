@@ -17,6 +17,8 @@ import { useDMStore } from '../../stores/dmStore';
 import { useAuthStore } from '../../stores/auth';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { usePresenceStore } from '../../stores/presenceStore';
+import { useVoiceStore } from '../../stores/voiceStore';
+import { useVoiceChannelUiStore } from '../../stores/voiceChannelUiStore';
 import { useWsSend } from '../../hooks/useWebSocket';
 import MessageInput from './MessageInput';
 import MessageItem from './MessageItem';
@@ -24,6 +26,7 @@ import PinSystemMessage from './PinSystemMessage';
 import TypingIndicator from './TypingIndicator';
 import UpdateActionButton from '../shared/UpdateActionButton';
 import AddFriendsToDMModal from '../modals/AddFriendsToDMModal';
+import GroupDMSettingsModal from '../modals/GroupDMSettingsModal';
 import type {
   Conversation,
   Message,
@@ -48,6 +51,7 @@ import {
 } from '../../utils/chatSearchBridge';
 import {
   getConversationAvatarUsers,
+  getConversationIconUrl,
   getConversationOtherMembers,
   getConversationTitle,
   isGroupConversation,
@@ -264,6 +268,23 @@ function IconUsers(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+function IconPhone(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.08 4.18 2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.12.9.35 1.78.68 2.61a2 2 0 0 1-.45 2.11L8 9.73a16 16 0 0 0 6.27 6.27l1.29-1.29a2 2 0 0 1 2.11-.45c.83.33 1.71.56 2.61.68A2 2 0 0 1 22 16.92Z" />
+    </svg>
+  );
+}
+
+function IconVideo(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="3" y="6" width="13" height="12" rx="2" ry="2" />
+      <path d="m16 10 5-3v10l-5-3" />
+    </svg>
+  );
+}
+
 function IconInbox(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -390,6 +411,18 @@ function ConversationAvatar({
   sizeClass?: string;
   textClass?: string;
 }) {
+  const conversationIconUrl = getConversationIconUrl(conversation);
+
+  if (conversationIconUrl) {
+    return (
+      <img
+        src={publicAssetUrl(conversationIconUrl)}
+        alt=""
+        className={`${sizeClass} rounded-full object-cover shrink-0`}
+      />
+    );
+  }
+
   if (!isGroupConversation(conversation, viewerUserId)) {
     const member = getConversationOtherMembers(conversation, viewerUserId)[0] ?? conversation?.recipient;
     return <UserAvatar user={member} sizeClass={sizeClass} textClass={textClass} />;
@@ -447,6 +480,26 @@ function HeaderIconButton({
         </span>
       )}
     </button>
+  );
+}
+
+function HeaderStatusPill({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: 'success' | 'warning';
+}) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-[3px] text-[10px] font-semibold uppercase tracking-[0.16em] ${
+        tone === 'warning'
+          ? 'bg-[#f0b232]/14 text-[#ffd27a]'
+          : 'bg-[#23a55a]/14 text-[#77e0a2]'
+      }`}
+    >
+      {label}
+    </span>
   );
 }
 
@@ -770,6 +823,18 @@ export default function ChatPanel({
   const conversations = useDMStore((s) => s.conversations);
   const sendDMMessage = useDMStore((s) => s.sendDMMessage);
   const ackDM = useDMStore((s) => s.ackDM);
+  const voiceConnected = useVoiceStore((s) => s.connected);
+  const voiceConnecting = useVoiceStore((s) => s.connecting);
+  const voiceTargetKind = useVoiceStore((s) => s.targetKind);
+  const voiceConversationId = useVoiceStore((s) => s.conversationId);
+  const voiceIsCameraOn = useVoiceStore((s) => s.isCameraOn);
+  const conversationVoiceMembers = useVoiceStore((s) => s.conversationVoiceMembers);
+  const conversationCallRings = useVoiceStore((s) => s.conversationCallRings);
+  const joinConversationVoice = useVoiceStore((s) => s.joinConversation);
+  const startConversationCallRing = useVoiceStore((s) => s.startConversationCallRing);
+  const cancelConversationCallRing = useVoiceStore((s) => s.cancelConversationCallRing);
+  const toggleVoiceCamera = useVoiceStore((s) => s.toggleCamera);
+  const openVoiceView = useVoiceChannelUiStore((s) => s.openVoiceView);
 
   const isDMMode = !!activeConversationId;
 
@@ -787,6 +852,54 @@ export default function ChatPanel({
     () => getConversationTitle(activeConversation, user?.id),
     [activeConversation, user?.id],
   );
+  const activeConversationVoiceMembers = activeConversationId
+    ? conversationVoiceMembers[activeConversationId] ?? []
+    : [];
+  const activeConversationCallRing = activeConversationId
+    ? conversationCallRings[activeConversationId] ?? null
+    : null;
+  const isCurrentConversationCall = Boolean(
+    activeConversationId
+    && voiceTargetKind === 'conversation'
+    && voiceConversationId === activeConversationId
+    && (voiceConnected || voiceConnecting),
+  );
+  const activeConversationCallStatus = useMemo(() => {
+    if (activeConversationCallRing) {
+      return {
+        tone: 'warning' as const,
+        label:
+          activeConversationCallRing.initiator_id === user?.id
+            ? activeConversationCallRing.mode === 'video'
+              ? 'Ringing Video Call'
+              : 'Ringing Voice Call'
+            : activeConversationCallRing.mode === 'video'
+              ? 'Incoming Video Call'
+              : 'Incoming Voice Call',
+      };
+    }
+
+    if (activeConversationVoiceMembers.length > 0) {
+      return {
+        tone: 'success' as const,
+        label: activeConversationVoiceMembers.length === 1 ? 'In Call' : `${activeConversationVoiceMembers.length} In Call`,
+      };
+    }
+
+    return null;
+  }, [activeConversationCallRing, activeConversationVoiceMembers.length, user?.id]);
+  const dmVoiceButtonLabel = activeConversationCallRing && activeConversationCallRing.initiator_id !== user?.id
+    ? 'Join voice call'
+    : activeConversationVoiceMembers.length > 0 && !isCurrentConversationCall
+      ? 'Join voice call'
+      : 'Start voice call';
+  const dmVideoButtonLabel = isCurrentConversationCall && voiceIsCameraOn
+    ? 'Toggle video off'
+    : activeConversationCallRing && activeConversationCallRing.initiator_id !== user?.id
+      ? 'Join with video'
+      : activeConversationVoiceMembers.length > 0 && !isCurrentConversationCall
+        ? 'Join with video'
+        : 'Start video call';
 
   const streamMap = useMemo(
     () => new Map(streams.map((stream) => [stream.id, stream])),
@@ -1492,6 +1605,47 @@ export default function ChatPanel({
   const searchInputClass = 'w-full rounded-md border border-[#2b2d31] bg-[#1a1b1e] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors placeholder:text-[#72767d] focus:border-[#4f545c]';
   const searchSelectClass = 'w-full rounded-md border border-[#2b2d31] bg-[#1a1b1e] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-[#4f545c]';
   const [showAddFriendsModal, setShowAddFriendsModal] = useState(false);
+  const [showGroupSettingsModal, setShowGroupSettingsModal] = useState(false);
+  const activeConversationIsGroup = isGroupConversation(activeConversation, user?.id);
+
+  const handleDMCall = useCallback(async (mode: 'audio' | 'video') => {
+    if (!activeConversation) return;
+    const currentUserId = user?.id ?? null;
+
+    if (isCurrentConversationCall) {
+      openVoiceView(activeConversation.id, 'conversation');
+      if (mode === 'video' && voiceConnected) {
+        await toggleVoiceCamera();
+      }
+      return;
+    }
+
+    const voiceState = useVoiceStore.getState();
+    const existingRing = voiceState.conversationCallRings[activeConversation.id];
+    const activeMembers = voiceState.conversationVoiceMembers[activeConversation.id] ?? [];
+    const hasOtherParticipants = activeMembers.some((memberId) => memberId !== currentUserId);
+    const shouldStartRing = Boolean(currentUserId && !hasOtherParticipants && !existingRing);
+    let startedRing = false;
+
+    if (shouldStartRing) {
+      await startConversationCallRing(activeConversation.id, mode);
+      startedRing = true;
+    }
+
+    openVoiceView(activeConversation.id, 'conversation');
+    await joinConversationVoice(activeConversation.id);
+    const joinedState = useVoiceStore.getState();
+    const joinedConversationCall = joinedState.targetKind === 'conversation'
+      && joinedState.conversationId === activeConversation.id
+      && joinedState.connected;
+    if (startedRing && !joinedConversationCall) {
+      await cancelConversationCallRing(activeConversation.id);
+      return;
+    }
+    if (mode === 'video' && !useVoiceStore.getState().isCameraOn) {
+      await useVoiceStore.getState().toggleCamera();
+    }
+  }, [activeConversation, cancelConversationCallRing, isCurrentConversationCall, joinConversationVoice, openVoiceView, startConversationCallRing, toggleVoiceCamera, user?.id, voiceConnected]);
 
   return (
     <div className={`flex-1 min-h-0 flex flex-col bg-riftapp-content min-w-0 relative ${searchSidebarOpen ? 'pr-[320px]' : ''}`}>
@@ -1509,6 +1663,11 @@ export default function ChatPanel({
                   <h3 className="truncate text-[15px] font-semibold text-[#f2f3f5]">
 					  {activeConversationLabel}
                   </h3>
+                  {activeConversationCallStatus ? (
+                    <div className="mt-1 flex items-center gap-2">
+                      <HeaderStatusPill label={activeConversationCallStatus.label} tone={activeConversationCallStatus.tone} />
+                    </div>
+                  ) : null}
                 </div>
               </>
             ) : (
@@ -1572,12 +1731,37 @@ export default function ChatPanel({
           {!showWelcome ? (
             <div className="flex items-center gap-2">
         {isDMMode && activeConversation ? (
-          <HeaderIconButton
-            label="Add friends to DM"
-            onClick={() => setShowAddFriendsModal(true)}
-          >
-            <IconUsers className="h-4 w-4" />
-          </HeaderIconButton>
+          <>
+            <HeaderIconButton
+              label={dmVoiceButtonLabel}
+              active={isCurrentConversationCall}
+              onClick={() => void handleDMCall('audio')}
+            >
+              <IconPhone className="h-4 w-4" />
+            </HeaderIconButton>
+            <HeaderIconButton
+              label={dmVideoButtonLabel}
+              active={isCurrentConversationCall && voiceIsCameraOn}
+              onClick={() => void handleDMCall('video')}
+            >
+              <IconVideo className="h-4 w-4" />
+            </HeaderIconButton>
+            {activeConversationIsGroup ? (
+              <HeaderIconButton
+                label="Group settings"
+                onClick={() => setShowGroupSettingsModal(true)}
+              >
+                <IconSlidersHorizontal className="h-4 w-4" />
+              </HeaderIconButton>
+            ) : (
+              <HeaderIconButton
+                label="Add friends to DM"
+                onClick={() => setShowAddFriendsModal(true)}
+              >
+                <IconUsers className="h-4 w-4" />
+              </HeaderIconButton>
+            )}
+          </>
         ) : null}
 			  {isDMMode ? (
 				  <HeaderIconButton
@@ -2403,6 +2587,13 @@ export default function ChatPanel({
 			  onClose={() => setShowAddFriendsModal(false)}
 		  />
 	  ) : null}
+
+      {showGroupSettingsModal && activeConversation ? (
+        <GroupDMSettingsModal
+          conversation={activeConversation}
+          onClose={() => setShowGroupSettingsModal(false)}
+        />
+      ) : null}
     </div>
   );
 }

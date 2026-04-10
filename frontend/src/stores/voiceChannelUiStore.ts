@@ -36,12 +36,15 @@ const voiceChannelUiStorage: StateStorage = {
   },
 };
 
+export type VoiceChannelKind = 'stream' | 'conversation';
+
 interface VoiceChannelUiState {
   isOpen: boolean;
   activeChannelId: string | null;
+  activeChannelKind: VoiceChannelKind | null;
   hideNamesByStream: Record<string, boolean>;
-  setActiveChannel: (streamId: string | null) => void;
-  openVoiceView: (streamId: string) => void;
+  setActiveChannel: (channelId: string | null, kind?: VoiceChannelKind) => void;
+  openVoiceView: (channelId: string, kind?: VoiceChannelKind) => void;
   closeVoiceView: () => void;
   resetVoiceView: () => void;
   toggleHideNames: (streamId: string) => void;
@@ -54,22 +57,23 @@ export const useVoiceChannelUiStore = create<VoiceChannelUiState>()(
     (set, get) => ({
       isOpen: false,
       activeChannelId: null,
+      activeChannelKind: null,
       hideNamesByStream: {},
-      setActiveChannel: (streamId) => {
-        if (!streamId) {
-          set({ activeChannelId: null, isOpen: false });
+      setActiveChannel: (channelId, kind = 'stream') => {
+        if (!channelId) {
+          set({ activeChannelId: null, activeChannelKind: null, isOpen: false });
           return;
         }
-        set({ activeChannelId: streamId });
+        set({ activeChannelId: channelId, activeChannelKind: kind });
       },
-      openVoiceView: (streamId) => {
-        set({ activeChannelId: streamId, isOpen: true });
+      openVoiceView: (channelId, kind = 'stream') => {
+        set({ activeChannelId: channelId, activeChannelKind: kind, isOpen: true });
       },
       closeVoiceView: () => {
         set({ isOpen: false });
       },
       resetVoiceView: () => {
-        set({ isOpen: false, activeChannelId: null });
+        set({ isOpen: false, activeChannelId: null, activeChannelKind: null });
       },
       toggleHideNames: (streamId) => {
         const cur = get().hideNamesByStream[streamId] ?? false;

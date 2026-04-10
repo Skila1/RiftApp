@@ -3,11 +3,13 @@ import { useDMStore } from '../../stores/dmStore';
 import { useAuthStore } from '../../stores/auth';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useFriendStore } from '../../stores/friendStore';
+import { useVoiceStore } from '../../stores/voiceStore';
 import { api } from '../../api/client';
 import type { Conversation, User } from '../../types';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { normalizeUser } from '../../utils/entityAssets';
 import {
+  getConversationIconUrl,
   getConversationOtherMembers,
   getConversationTitle,
   isGroupConversation,
@@ -52,7 +54,18 @@ function ConversationAvatar({
   viewerUserId?: string | null;
   fallbackStatus?: number;
 }) {
+  const conversationIconUrl = getConversationIconUrl(conversation);
   const otherMembers = getConversationOtherMembers(conversation, viewerUserId);
+
+  if (conversationIconUrl) {
+    return (
+      <img
+        src={publicAssetUrl(conversationIconUrl)}
+        alt=""
+        className="h-8 w-8 flex-shrink-0 rounded-full object-cover"
+      />
+    );
+  }
 
   if (otherMembers.length <= 1) {
     const member = otherMembers[0] ?? conversation.recipient;
@@ -90,6 +103,8 @@ export default function DMSidebar() {
   const ackDM = useDMStore((s) => s.ackDM);
   const currentUserId = useAuthStore((s) => s.user?.id);
   const presence = usePresenceStore((s) => s.presence);
+  const conversationVoiceMembers = useVoiceStore((s) => s.conversationVoiceMembers);
+  const conversationCallRings = useVoiceStore((s) => s.conversationCallRings);
   const pendingCount = useFriendStore((s) => s.pendingCount);
   const loadPendingCount = useFriendStore((s) => s.loadPendingCount);
 
@@ -278,6 +293,22 @@ export default function DMSidebar() {
               const recipientStatus = primaryMember ? (presence[primaryMember.id] ?? primaryMember.status) : undefined;
               const conversationTitle = getConversationTitle(conv, currentUserId);
               const isGroupDm = isGroupConversation(conv, currentUserId);
+              const activeVoiceMembers = conversationVoiceMembers[conv.id] ?? [];
+              const activeRing = conversationCallRings[conv.id];
+              const callStatusLabel = activeRing
+                ? activeRing.initiator_id === currentUserId
+                  ? activeRing.mode === 'video'
+                    ? 'Ringing video call'
+                    : 'Ringing voice call'
+                  : activeRing.mode === 'video'
+                    ? 'Incoming video call'
+                    : 'Incoming voice call'
+                : activeVoiceMembers.length > 0
+                  ? activeVoiceMembers.length === 1
+                    ? 'In call'
+                    : `${activeVoiceMembers.length} in call`
+                  : null;
+              const callStatusClass = activeRing ? 'text-[#f0b232]' : 'text-[#23a55a]';
 
               return (
                 <button
@@ -305,15 +336,22 @@ export default function DMSidebar() {
                         </span>
                       ) : null}
                     </div>
-                    {conv.last_message && (
+                    {callStatusLabel ? (
+                      <div className={`truncate text-[11px] font-medium ${callStatusClass}`}>
+                        {callStatusLabel}
+                      </div>
+                    ) : conv.last_message ? (
                       <div className="text-xs text-riftapp-text-dim truncate">
                         {conv.last_message.content}
                       </div>
-                    )}
+                    ) : null}
                   </div>
 
                   {/* Time + unread badge */}
                   <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                    {callStatusLabel ? (
+                      <span className={`h-2.5 w-2.5 rounded-full ${activeRing ? 'animate-pulse bg-[#f0b232]' : 'bg-[#23a55a]'}`} />
+                    ) : null}
                     {conv.last_message && (
                       <span className="text-[10px] text-riftapp-text-dim">
                         {timeAgo(conv.last_message.created_at)}

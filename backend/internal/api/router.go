@@ -79,7 +79,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 	catH := NewCategoryHandler(deps.CategoryService, deps.WSHub)
 	msgH := NewMessageHandler(deps.MsgService, deps.DMService)
 	wsH := NewWSHandler(deps.WSHub, deps.AuthService, deps.Config.AllowedOrigins)
-	voiceH := NewVoiceHandler(deps.Config, deps.HubService, deps.StreamService, deps.WSHub, deps.HubCustomizationRepo)
+	voiceH := NewVoiceHandler(deps.Config, deps.HubService, deps.StreamService, deps.DMService, deps.WSHub, deps.HubCustomizationRepo)
 	notifH := NewNotifHandler(deps.NotifService)
 	dmH := NewDMHandler(deps.DMService)
 	friendH := NewFriendHandler(deps.FriendService, deps.UserService)
@@ -140,6 +140,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 
 	// Generous burst so rapid hub switching (many parallel hub-scoped requests) does not 429.
 	authRL := middleware.NewRateLimiter(rate.Every(time.Second), 120)
+	dmRingRL := middleware.NewRateLimiter(rate.Every(4*time.Second), 2)
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Auth(deps.AuthService))
 		if deps.UserRepo != nil {
@@ -247,7 +248,14 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 		r.Get("/api/dms", dmH.List)
 		r.Post("/api/dms", dmH.CreateOrOpen)
 		r.Post("/api/dms/groups", dmH.CreateOrOpenGroup)
+		r.Get("/api/dms/call-states", dmH.ListCallStates)
 		r.Get("/api/dms/read-states", dmH.DMReadStates)
+		r.Patch("/api/dms/{conversationID}", dmH.PatchConversation)
+		r.Post("/api/dms/{conversationID}/members", dmH.AddMembers)
+		r.Delete("/api/dms/{conversationID}/members/{userID}", dmH.RemoveMember)
+		r.Post("/api/dms/{conversationID}/leave", dmH.LeaveConversation)
+		r.With(middleware.RateLimit(dmRingRL)).Post("/api/dms/{conversationID}/call/ring", dmH.StartCallRing)
+		r.With(middleware.RateLimit(dmRingRL)).Post("/api/dms/{conversationID}/call/ring/cancel", dmH.CancelCallRing)
 		r.Get("/api/dms/{conversationID}/messages", dmH.Messages)
 		r.Post("/api/dms/{conversationID}/messages", dmH.SendMessage)
 		r.Put("/api/dms/{conversationID}/ack", dmH.AckDM)

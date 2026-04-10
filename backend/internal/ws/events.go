@@ -1,6 +1,9 @@
 package ws
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Event is the wire format for all WebSocket messages
 type Event struct {
@@ -28,6 +31,10 @@ const (
 	OpNotificationCreate     = "notification_create"
 	OpDMMessageCreate        = "dm_message_create"
 	OpDMConversationCreate   = "dm_conversation_create"
+	OpDMConversationUpdate   = "dm_conversation_update"
+	OpDMConversationDelete   = "dm_conversation_delete"
+	OpDMCallRing             = "dm_call_ring"
+	OpDMCallRingEnd          = "dm_call_ring_end"
 	OpVoiceStateUpdate       = "voice_state_update"
 	OpFriendRequest          = "friend_request"
 	OpFriendAccept           = "friend_accept"
@@ -73,14 +80,16 @@ type SetStatusData struct {
 }
 
 type VoiceStateData struct {
-	StreamID string `json:"stream_id"`
-	UserID   string `json:"user_id"`
-	Action   string `json:"action"` // "join" or "leave"
+	StreamID       string `json:"stream_id,omitempty"`
+	ConversationID string `json:"conversation_id,omitempty"`
+	UserID         string `json:"user_id"`
+	Action         string `json:"action"` // "join" or "leave"
 }
 
 type VoiceStateClientData struct {
-	StreamID string `json:"stream_id"`
-	Action   string `json:"action"`
+	StreamID       string `json:"stream_id,omitempty"`
+	ConversationID string `json:"conversation_id,omitempty"`
+	Action         string `json:"action"`
 }
 
 type VoiceMoveData struct {
@@ -88,36 +97,64 @@ type VoiceMoveData struct {
 }
 
 type VoiceSpeakingData struct {
-	StreamID string `json:"stream_id"`
-	UserID   string `json:"user_id"`
-	Speaking bool   `json:"speaking"`
+	StreamID       string `json:"stream_id,omitempty"`
+	ConversationID string `json:"conversation_id,omitempty"`
+	UserID         string `json:"user_id"`
+	Speaking       bool   `json:"speaking"`
 }
 
 type VoiceSpeakingClientData struct {
-	StreamID string `json:"stream_id"`
-	Speaking bool   `json:"speaking"`
+	StreamID       string `json:"stream_id,omitempty"`
+	ConversationID string `json:"conversation_id,omitempty"`
+	Speaking       bool   `json:"speaking"`
 }
 
 type VoiceScreenShareData struct {
-	StreamID string `json:"stream_id"`
-	UserID   string `json:"user_id"`
-	Sharing  bool   `json:"sharing"`
+	StreamID       string `json:"stream_id,omitempty"`
+	ConversationID string `json:"conversation_id,omitempty"`
+	UserID         string `json:"user_id"`
+	Sharing        bool   `json:"sharing"`
 }
 
 type VoiceScreenShareClientData struct {
-	StreamID string `json:"stream_id"`
-	Sharing  bool   `json:"sharing"`
+	StreamID       string `json:"stream_id,omitempty"`
+	ConversationID string `json:"conversation_id,omitempty"`
+	Sharing        bool   `json:"sharing"`
 }
 
 type VoiceDeafenData struct {
-	StreamID string `json:"stream_id"`
-	UserID   string `json:"user_id"`
-	Deafened bool   `json:"deafened"`
+	StreamID       string `json:"stream_id,omitempty"`
+	ConversationID string `json:"conversation_id,omitempty"`
+	UserID         string `json:"user_id"`
+	Deafened       bool   `json:"deafened"`
 }
 
 type VoiceDeafenClientData struct {
-	StreamID string `json:"stream_id"`
-	Deafened bool   `json:"deafened"`
+	StreamID       string `json:"stream_id,omitempty"`
+	ConversationID string `json:"conversation_id,omitempty"`
+	Deafened       bool   `json:"deafened"`
+}
+
+type DMConversationDeleteData struct {
+	ConversationID string `json:"conversation_id"`
+}
+
+type DMCallRingData struct {
+	ConversationID string    `json:"conversation_id"`
+	InitiatorID    string    `json:"initiator_id"`
+	Mode           string    `json:"mode"`
+	StartedAt      time.Time `json:"started_at"`
+}
+
+type DMCallRingEndData struct {
+	ConversationID string `json:"conversation_id"`
+	Reason         string `json:"reason"`
+}
+
+type DMConversationCallStateData struct {
+	ConversationID string          `json:"conversation_id"`
+	MemberIDs      []string        `json:"member_ids,omitempty"`
+	Ring           *DMCallRingData `json:"ring,omitempty"`
 }
 
 func NewEvent(op string, data interface{}) []byte {
