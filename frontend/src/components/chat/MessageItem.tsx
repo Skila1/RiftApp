@@ -17,6 +17,7 @@ import ForwardMessageModal from '../modals/ForwardMessageModal';
 import ModalCloseButton from '../shared/ModalCloseButton';
 import BotBadge from '../shared/BotBadge';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
+import { formatShortDate, formatShortTime, isSameCalendarDay } from '../../utils/dateTime';
 import { hasPermission, PermManageMessages } from '../../utils/permissions';
 import { getReplyAuthorLabel, getReplyPreviewMeta } from '../../utils/replyPreview';
 import { jumpToMessageId } from '../../utils/messageJump';
@@ -35,16 +36,25 @@ function formatBytes(bytes: number): string {
 function formatTime(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
-  const isToday = date.toDateString() === now.toDateString();
+  const isToday = isSameCalendarDay(date, now);
 
-  const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  if (isToday) return `Today at ${time}`;
+  const time = formatShortTime(date);
+  if (isToday) return time;
 
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
-  if (date.toDateString() === yesterday.toDateString()) return `Yesterday at ${time}`;
+  if (isSameCalendarDay(date, yesterday)) return `Yesterday at ${time}`;
 
-  return `${date.toLocaleDateString()} ${time}`;
+  return `${formatShortDate(date)} ${time}`;
+}
+
+function ForwardedIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="m15 7 4 4-4 4" />
+      <path d="M19 11h-7a5 5 0 0 0-5 5v1" />
+    </svg>
+  );
 }
 
 // Generate a stable pastel accent color from string
@@ -319,9 +329,9 @@ const MessageItem = memo(function MessageItem({
     (!isDM && !!message.stream_id && hasPermission(hubPermissions, PermManageMessages));
 
   const canPin =
-    !isDM &&
-    !!message.stream_id &&
-    hasPermission(hubPermissions, PermManageMessages);
+    isDM
+      ? Boolean(message.conversation_id)
+      : !!message.stream_id && hasPermission(hubPermissions, PermManageMessages);
 
   const canEdit = isOwn && Boolean((message.content || '').trim());
 
@@ -441,6 +451,8 @@ const MessageItem = memo(function MessageItem({
       </button>
     )
   ) : null;
+
+  const isForwardedMessage = Boolean(message.forwarded_message_id);
 
   const handleProfileClick = useCallback((e: React.MouseEvent) => {
     if (interactionsDisabled) return;
@@ -625,6 +637,18 @@ const MessageItem = memo(function MessageItem({
       </div>
     );
 
+  const renderedMessageBody = isForwardedMessage ? (
+    <div className="mt-0.5 space-y-1">
+      <div className="flex items-center gap-1.5 text-[13px] italic text-riftapp-text-dim/80">
+        <ForwardedIcon className="h-3.5 w-3.5 shrink-0" />
+        <span>Forwarded</span>
+      </div>
+      <div className="border-l-2 border-white/10 pl-3">
+        {contentBlock}
+      </div>
+    </div>
+  ) : contentBlock;
+
   return (
     <div
       id={isPreview ? undefined : `message-${message.id}`}
@@ -717,13 +741,13 @@ const MessageItem = memo(function MessageItem({
                 <span className="ml-1 shrink-0 whitespace-nowrap text-[10px] text-riftapp-text-dim/60 select-none" title={`Edited ${renderTimestamp(message.edited_at)}`}>(edited)</span>
               )}
             </div>
-            {contentBlock}
+            {renderedMessageBody}
           </div>
         </div>
       ) : (
         <div className="rift-message-followup">
           {replyPreviewBlock}
-          {contentBlock}
+          {renderedMessageBody}
         </div>
       )}
 

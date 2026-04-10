@@ -8,6 +8,14 @@ type DesktopDisplaySource = {
   appIconDataUrl: string | null;
 };
 
+type DesktopDateTimePreferences = {
+  locale: string;
+  shortDatePattern: string | null;
+  longDatePattern: string | null;
+  shortTimePattern: string | null;
+  uses24HourClock: boolean | null;
+};
+
 const desktop = {
   minimize: () => {
     ipcRenderer.send("window:minimize");
@@ -28,6 +36,8 @@ const desktop = {
       arch: string;
       osVersion: string;
     }>,
+  getDateTimePreferences: () =>
+    ipcRenderer.invoke("app:get-date-time-preferences") as Promise<DesktopDateTimePreferences>,
   getUpdateStatus: () =>
     ipcRenderer.invoke("app:get-update-status") as Promise<{
       state: "idle" | "checking" | "downloading" | "ready" | "up-to-date" | "error";
@@ -36,6 +46,8 @@ const desktop = {
       message: string;
     }>,
   isUpdateReady: () => ipcRenderer.invoke("app:is-update-ready") as Promise<boolean>,
+  reloadFrontendIgnoringCache: () =>
+    ipcRenderer.invoke("app:reload-frontend-ignoring-cache") as Promise<boolean>,
   checkForUpdates: () =>
     ipcRenderer.invoke("app:check-for-updates") as Promise<{
       state: "idle" | "checking" | "downloading" | "ready" | "up-to-date" | "error";

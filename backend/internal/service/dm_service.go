@@ -3,9 +3,11 @@ package service
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/riftapp-cloud/riftapp/internal/apperror"
 	"github.com/riftapp-cloud/riftapp/internal/models"
@@ -54,65 +56,165 @@ func (s *DMService) ListConversations(ctx context.Context, userID string) ([]rep
 	return convos, nil
 }
 
-func (s *DMService) CreateOrOpen(ctx context.Context, userID, recipientID string) (map[string]interface{}, bool, error) {
+func (s *DMService) CreateOrOpen(ctx context.Context, userID, recipientID string) (repository.ConvResponse, bool, error) {
 	if recipientID == "" {
-		return nil, false, apperror.BadRequest("recipient_id is required")
+		return repository.ConvResponse{}, false, apperror.BadRequest("recipient_id is required")
 	}
 	if recipientID == userID {
-		return nil, false, apperror.BadRequest("cannot DM yourself")
+		return repository.ConvResponse{}, false, apperror.BadRequest("cannot DM yourself")
 	}
 
-	exists, _ := s.dmRepo.UserExists(ctx, recipientID)
-	if !exists {
-		return nil, false, apperror.NotFound("user not found")
+	return s.createOrOpenConversation(ctx, userID, []string{recipientID}, false)
+}
+
+func (s *DMService) CreateOrOpenGroup(ctx context.Context, userID string, memberIDs []string) (repository.ConvResponse, bool, error) {
+	return s.createOrOpenConversation(ctx, userID, memberIDs, true)
+}
+
+func (s *DMService) createOrOpenConversation(ctx context.Context, userID string, requestedMemberIDs []string, requireGroup bool) (repository.ConvResponse, bool, error) {
+	memberIDs, err := normalizeConversationMembers(userID, requestedMemberIDs)
+	if err != nil {
+		return repository.ConvResponse{}, false, err
+	}
+	if requireGroup && len(memberIDs) < 3 {
+		return repository.ConvResponse{}, false, apperror.BadRequest("group DMs require at least 3 members")
+	}
+
+	for _, memberID := range memberIDs {
+		if memberID == userID {
+			continue
+		}
+		exists, lookupErr := s.dmRepo.UserExists(ctx, memberID)
+		if lookupErr != nil {
+			return repository.ConvResponse{}, false, apperror.Internal("internal error", lookupErr)
+		}
+		if !exists {
+			return repository.ConvResponse{}, false, apperror.NotFound("user not found")
+		}
 	}
 
 	tx, err := s.dmRepo.BeginTx(ctx)
 	if err != nil {
-		return nil, false, apperror.Internal("internal error", err)
+		return repository.ConvResponse{}, false, apperror.Internal("internal error", err)
 	}
 	defer tx.Rollback(ctx)
 
-	lockKey := repository.AdvisoryLockKey(userID, recipientID)
+	lockKey := repository.AdvisoryConversationLockKey(memberIDs)
 	tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, lockKey)
 
-	existingID, err := s.dmRepo.FindExistingConversation(ctx, tx, userID, recipientID)
+	existingID, err := s.dmRepo.FindConversationByMembers(ctx, tx, memberIDs)
 	if err == nil {
 		tx.Rollback(ctx)
-		conv, _ := s.dmRepo.GetConversation(ctx, existingID)
-		recipient, _ := s.dmRepo.GetUserInfo(ctx, recipientID)
-		result := map[string]interface{}{
-			"id":         conv.ID,
-			"created_at": conv.CreatedAt,
-			"updated_at": conv.UpdatedAt,
-			"recipient":  recipient,
+		response, buildErr := s.buildConversationResponse(ctx, existingID, userID)
+		if buildErr != nil {
+			return repository.ConvResponse{}, false, buildErr
 		}
-		return result, false, nil
+		return response, false, nil
+	}
+	if err != pgx.ErrNoRows {
+		return repository.ConvResponse{}, false, apperror.Internal("internal error", err)
 	}
 
 	convID := uuid.New().String()
 	now := time.Now()
 
-	if err := s.dmRepo.CreateConversation(ctx, tx, convID, userID, recipientID, now); err != nil {
-		return nil, false, apperror.Internal("failed to create conversation", err)
+	if err := s.dmRepo.CreateConversation(ctx, tx, convID, memberIDs, now); err != nil {
+		return repository.ConvResponse{}, false, apperror.Internal("failed to create conversation", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return nil, false, apperror.Internal("internal error", err)
+		return repository.ConvResponse{}, false, apperror.Internal("internal error", err)
 	}
 
-	recipient, _ := s.dmRepo.GetUserInfo(ctx, recipientID)
-	initiator, _ := s.dmRepo.GetUserInfo(ctx, userID)
-
-	recipientPayload := map[string]interface{}{
-		"id": convID, "created_at": now, "updated_at": now, "recipient": initiator,
+	members, err := s.dmRepo.GetUsersInfo(ctx, memberIDs)
+	if err != nil {
+		return repository.ConvResponse{}, false, apperror.Internal("internal error", err)
 	}
-	s.hub.SendToUser(recipientID, ws.NewEvent(ws.OpDMConversationCreate, recipientPayload))
+	sort.SliceStable(members, func(i, j int) bool {
+		return indexOfMember(memberIDs, members[i].ID) < indexOfMember(memberIDs, members[j].ID)
+	})
 
-	result := map[string]interface{}{
-		"id": convID, "created_at": now, "updated_at": now, "recipient": recipient,
+	for _, memberID := range memberIDs {
+		if memberID == userID {
+			continue
+		}
+		payload := buildConversationPayload(convID, now, members, memberID)
+		s.hub.SendToUser(memberID, ws.NewEvent(ws.OpDMConversationCreate, payload))
 	}
-	return result, true, nil
+
+	return buildConversationPayload(convID, now, members, userID), true, nil
+}
+
+func buildConversationPayload(convID string, timestamp time.Time, members []models.User, viewerUserID string) repository.ConvResponse {
+	memberCopy := append([]models.User(nil), members...)
+	return repository.ConvResponse{
+		Conversation: models.Conversation{
+			ID:        convID,
+			CreatedAt: timestamp,
+			UpdatedAt: timestamp,
+			Members:   memberCopy,
+		},
+		Recipient: pickConversationRecipient(memberCopy, viewerUserID),
+	}
+}
+
+func pickConversationRecipient(members []models.User, viewerUserID string) models.User {
+	for _, member := range members {
+		if member.ID != viewerUserID {
+			return member
+		}
+	}
+	if len(members) > 0 {
+		return members[0]
+	}
+	return models.User{}
+}
+
+func normalizeConversationMembers(userID string, requestedMemberIDs []string) ([]string, error) {
+	seen := map[string]struct{}{userID: {}}
+	memberIDs := []string{userID}
+	for _, memberID := range requestedMemberIDs {
+		if memberID == "" {
+			continue
+		}
+		if memberID == userID {
+			continue
+		}
+		if _, exists := seen[memberID]; exists {
+			continue
+		}
+		seen[memberID] = struct{}{}
+		memberIDs = append(memberIDs, memberID)
+	}
+	if len(memberIDs) < 2 {
+		return nil, apperror.BadRequest("at least one recipient is required")
+	}
+	return memberIDs, nil
+}
+
+func indexOfMember(memberIDs []string, target string) int {
+	for index, memberID := range memberIDs {
+		if memberID == target {
+			return index
+		}
+	}
+	return len(memberIDs)
+}
+
+func (s *DMService) buildConversationResponse(ctx context.Context, convID, viewerUserID string) (repository.ConvResponse, error) {
+	conversation, err := s.dmRepo.GetConversation(ctx, convID)
+	if err != nil {
+		return repository.ConvResponse{}, apperror.Internal("internal error", err)
+	}
+	members, err := s.dmRepo.GetConversationMembersDetailed(ctx, convID)
+	if err != nil {
+		return repository.ConvResponse{}, apperror.Internal("internal error", err)
+	}
+	conversation.Members = members
+	return repository.ConvResponse{
+		Conversation: *conversation,
+		Recipient:    pickConversationRecipient(members, viewerUserID),
+	}, nil
 }
 
 func (s *DMService) ListMessages(ctx context.Context, convID, userID string, before *string, limit int) ([]models.Message, error) {
@@ -134,9 +236,10 @@ func (s *DMService) ListMessages(ctx context.Context, convID, userID string, bef
 }
 
 type SendDMInput struct {
-	Content          string   `json:"content"`
-	AttachmentIDs    []string `json:"attachment_ids"`
-	ReplyToMessageID *string  `json:"reply_to_message_id"`
+	Content            string   `json:"content"`
+	AttachmentIDs      []string `json:"attachment_ids"`
+	ReplyToMessageID   *string  `json:"reply_to_message_id"`
+	ForwardedMessageID *string  `json:"-"`
 }
 
 func (s *DMService) SendMessage(ctx context.Context, convID, userID string, input SendDMInput) (*models.Message, error) {
@@ -169,12 +272,13 @@ func (s *DMService) SendMessage(ctx context.Context, convID, userID string, inpu
 	}
 
 	msg := &models.Message{
-		ID:               uuid.New().String(),
-		ConversationID:   &convID,
-		AuthorID:         userID,
-		Content:          input.Content,
-		ReplyToMessageID: replyToMessageID,
-		CreatedAt:        time.Now(),
+		ID:                 uuid.New().String(),
+		ConversationID:     &convID,
+		AuthorID:           userID,
+		Content:            input.Content,
+		ReplyToMessageID:   replyToMessageID,
+		ForwardedMessageID: normalizeOptionalMessageID(input.ForwardedMessageID),
+		CreatedAt:          time.Now(),
 	}
 
 	if err := s.msgRepo.Create(ctx, msg); err != nil {

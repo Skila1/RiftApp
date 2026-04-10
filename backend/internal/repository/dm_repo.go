@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"hash/crc32"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -29,31 +31,71 @@ func (r *DMRepo) ListConversations(ctx context.Context, userID string) ([]ConvRe
 		`SELECT c.id, c.created_at, c.updated_at,
 		        u.id, u.username, u.display_name, u.avatar_url, u.status, u.last_seen
 		 FROM conversations c
-		 JOIN conversation_members cm1 ON c.id = cm1.conversation_id AND cm1.user_id = $1
-		 JOIN conversation_members cm2 ON c.id = cm2.conversation_id AND cm2.user_id != $1
-		 JOIN users u ON cm2.user_id = u.id
-		 ORDER BY c.updated_at DESC`, userID)
+		 JOIN conversation_members self_cm ON c.id = self_cm.conversation_id AND self_cm.user_id = $1
+		 JOIN conversation_members cm ON c.id = cm.conversation_id
+		 JOIN users u ON cm.user_id = u.id
+		 ORDER BY c.updated_at DESC, c.id, cm.joined_at ASC`, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var convos []ConvResponse
+	conversationsByID := make(map[string]*ConvResponse)
+	orderedIDs := make([]string, 0)
 	for rows.Next() {
-		var cr ConvResponse
+		var (
+			conversationID string
+			createdAt      time.Time
+			updatedAt      time.Time
+			member         models.User
+		)
 		if err := rows.Scan(
-			&cr.ID, &cr.CreatedAt, &cr.UpdatedAt,
-			&cr.Recipient.ID, &cr.Recipient.Username, &cr.Recipient.DisplayName,
-			&cr.Recipient.AvatarURL, &cr.Recipient.Status, &cr.Recipient.LastSeen,
+			&conversationID, &createdAt, &updatedAt,
+			&member.ID, &member.Username, &member.DisplayName,
+			&member.AvatarURL, &member.Status, &member.LastSeen,
 		); err != nil {
 			return nil, err
 		}
-		convos = append(convos, cr)
+
+		conversation, exists := conversationsByID[conversationID]
+		if !exists {
+			conversation = &ConvResponse{
+				Conversation: models.Conversation{
+					ID:        conversationID,
+					CreatedAt: createdAt,
+					UpdatedAt: updatedAt,
+					Members:   []models.User{},
+				},
+			}
+			conversationsByID[conversationID] = conversation
+			orderedIDs = append(orderedIDs, conversationID)
+		}
+
+		conversation.Members = append(conversation.Members, member)
+	}
+
+	convos := make([]ConvResponse, 0, len(orderedIDs))
+	for _, conversationID := range orderedIDs {
+		conversation := conversationsByID[conversationID]
+		conversation.Recipient = pickConversationRecipient(conversation.Members, userID)
+		convos = append(convos, *conversation)
 	}
 	if convos == nil {
 		convos = []ConvResponse{}
 	}
 	return convos, rows.Err()
+}
+
+func pickConversationRecipient(members []models.User, viewerUserID string) models.User {
+	for _, member := range members {
+		if member.ID != viewerUserID {
+			return member
+		}
+	}
+	if len(members) > 0 {
+		return members[0]
+	}
+	return models.User{}
 }
 
 func (r *DMRepo) FetchLastMessages(ctx context.Context, convoIDs []string) (map[string]models.Message, error) {
@@ -64,7 +106,7 @@ func (r *DMRepo) FetchLastMessages(ctx context.Context, convoIDs []string) (map[
 
 	rows, err := r.db.Query(ctx,
 		`SELECT DISTINCT ON (m.conversation_id)
-		        m.id, m.conversation_id, m.author_id, m.content, m.created_at,
+		        m.id, m.conversation_id, m.author_id, m.content, m.created_at, m.forwarded_message_id,
 		        u.id, u.username, u.display_name, u.avatar_url
 		 FROM messages m
 		 JOIN users u ON m.author_id = u.id
@@ -80,7 +122,7 @@ func (r *DMRepo) FetchLastMessages(ctx context.Context, convoIDs []string) (map[
 		var convID string
 		var author models.User
 		if err := rows.Scan(
-			&msg.ID, &convID, &msg.AuthorID, &msg.Content, &msg.CreatedAt,
+			&msg.ID, &convID, &msg.AuthorID, &msg.Content, &msg.CreatedAt, &msg.ForwardedMessageID,
 			&author.ID, &author.Username, &author.DisplayName, &author.AvatarURL,
 		); err != nil {
 			return nil, err
@@ -99,16 +141,19 @@ func (r *DMRepo) UserExists(ctx context.Context, userID string) (bool, error) {
 	return exists, err
 }
 
-func (r *DMRepo) FindExistingConversation(ctx context.Context, tx pgx.Tx, userID, recipientID string) (string, error) {
+func (r *DMRepo) FindConversationByMembers(ctx context.Context, tx pgx.Tx, memberIDs []string) (string, error) {
 	var existingID string
 	err := tx.QueryRow(ctx,
-		`SELECT cm1.conversation_id FROM conversation_members cm1
-		 JOIN conversation_members cm2 ON cm1.conversation_id = cm2.conversation_id
-		 WHERE cm1.user_id = $1 AND cm2.user_id = $2`, userID, recipientID).Scan(&existingID)
+		`SELECT conversation_id
+		 FROM conversation_members
+		 GROUP BY conversation_id
+		 HAVING COUNT(*) = $2
+		    AND COUNT(*) FILTER (WHERE user_id = ANY($1)) = $2
+		 LIMIT 1`, memberIDs, len(memberIDs)).Scan(&existingID)
 	return existingID, err
 }
 
-func (r *DMRepo) CreateConversation(ctx context.Context, tx pgx.Tx, convID, userID, recipientID string, now time.Time) error {
+func (r *DMRepo) CreateConversation(ctx context.Context, tx pgx.Tx, convID string, memberIDs []string, now time.Time) error {
 	_, err := tx.Exec(ctx,
 		`INSERT INTO conversations (id, created_at, updated_at) VALUES ($1, $2, $3)`,
 		convID, now, now)
@@ -116,10 +161,16 @@ func (r *DMRepo) CreateConversation(ctx context.Context, tx pgx.Tx, convID, user
 		return err
 	}
 
-	_, err = tx.Exec(ctx,
-		`INSERT INTO conversation_members (conversation_id, user_id, joined_at) VALUES ($1, $2, $3), ($1, $4, $3)`,
-		convID, userID, now, recipientID)
-	return err
+	for _, memberID := range memberIDs {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO conversation_members (conversation_id, user_id, joined_at) VALUES ($1, $2, $3)`,
+			convID, memberID, now,
+		); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (r *DMRepo) GetConversation(ctx context.Context, convID string) (*models.Conversation, error) {
@@ -142,6 +193,61 @@ func (r *DMRepo) GetUserInfo(ctx context.Context, userID string) (*models.User, 
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (r *DMRepo) GetUsersInfo(ctx context.Context, userIDs []string) ([]models.User, error) {
+	if len(userIDs) == 0 {
+		return []models.User{}, nil
+	}
+
+	rows, err := r.db.Query(ctx,
+		`SELECT id, username, display_name, avatar_url, status, last_seen
+		 FROM users
+		 WHERE id = ANY($1)`, userIDs,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	users := make([]models.User, 0, len(userIDs))
+	for rows.Next() {
+		var user models.User
+		if err := rows.Scan(&user.ID, &user.Username, &user.DisplayName, &user.AvatarURL, &user.Status, &user.LastSeen); err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+
+	if users == nil {
+		users = []models.User{}
+	}
+	return users, rows.Err()
+}
+
+func (r *DMRepo) GetConversationMembersDetailed(ctx context.Context, convID string) ([]models.User, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT u.id, u.username, u.display_name, u.avatar_url, u.status, u.last_seen
+		 FROM conversation_members cm
+		 JOIN users u ON cm.user_id = u.id
+		 WHERE cm.conversation_id = $1
+		 ORDER BY cm.joined_at ASC`, convID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	users := []models.User{}
+	for rows.Next() {
+		var user models.User
+		if err := rows.Scan(&user.ID, &user.Username, &user.DisplayName, &user.AvatarURL, &user.Status, &user.LastSeen); err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+
+	return users, rows.Err()
 }
 
 func (r *DMRepo) IsMember(ctx context.Context, convID, userID string) (bool, error) {
@@ -256,9 +362,15 @@ func (r *DMRepo) BeginTx(ctx context.Context) (pgx.Tx, error) {
 }
 
 func AdvisoryLockKey(userID, recipientID string) int64 {
-	pairKey := userID + ":" + recipientID
-	if recipientID < userID {
-		pairKey = recipientID + ":" + userID
+	return AdvisoryConversationLockKey([]string{userID, recipientID})
+}
+
+func AdvisoryConversationLockKey(memberIDs []string) int64 {
+	if len(memberIDs) == 0 {
+		return 0
 	}
-	return int64(crc32.ChecksumIEEE([]byte(pairKey)))
+
+	keyParts := append([]string(nil), memberIDs...)
+	sort.Strings(keyParts)
+	return int64(crc32.ChecksumIEEE([]byte(strings.Join(keyParts, ":"))))
 }

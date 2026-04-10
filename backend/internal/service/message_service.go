@@ -57,9 +57,10 @@ func (s *MessageService) SetModerationService(mod *moderation.Service) {
 }
 
 type CreateMessageInput struct {
-	Content          string   `json:"content"`
-	AttachmentIDs    []string `json:"attachment_ids"`
-	ReplyToMessageID *string  `json:"reply_to_message_id"`
+	Content            string   `json:"content"`
+	AttachmentIDs      []string `json:"attachment_ids"`
+	ReplyToMessageID   *string  `json:"reply_to_message_id"`
+	ForwardedMessageID *string  `json:"-"`
 }
 
 type SearchMessagesInput struct {
@@ -82,8 +83,9 @@ type SearchMessagesInput struct {
 }
 
 type ForwardMessageInput struct {
-	Content       string
-	AttachmentIDs []string
+	Content            string
+	AttachmentIDs      []string
+	ForwardedMessageID *string
 }
 
 func (s *MessageService) List(ctx context.Context, userID, streamID string, before *string, limit int) ([]models.Message, error) {
@@ -134,12 +136,13 @@ func (s *MessageService) Create(ctx context.Context, userID, streamID string, in
 	}
 
 	msg := &models.Message{
-		ID:               uuid.New().String(),
-		StreamID:         &streamID,
-		AuthorID:         userID,
-		Content:          input.Content,
-		ReplyToMessageID: replyToMessageID,
-		CreatedAt:        time.Now(),
+		ID:                 uuid.New().String(),
+		StreamID:           &streamID,
+		AuthorID:           userID,
+		Content:            input.Content,
+		ReplyToMessageID:   replyToMessageID,
+		ForwardedMessageID: normalizeOptionalMessageID(input.ForwardedMessageID),
+		CreatedAt:          time.Now(),
 	}
 
 	if err := s.msgRepo.Create(ctx, msg); err != nil {
@@ -235,6 +238,26 @@ func (s *MessageService) ListPinned(ctx context.Context, streamID, userID string
 	return messages, nil
 }
 
+func (s *MessageService) ListConversationPinned(ctx context.Context, conversationID, userID string, limit int) ([]models.Message, error) {
+	dmRepo := repository.NewDMRepo(s.msgRepo.GetDB())
+	isMember, err := dmRepo.IsMember(ctx, conversationID, userID)
+	if err != nil {
+		return nil, apperror.Internal("failed to validate conversation membership", err)
+	}
+	if !isMember {
+		return nil, apperror.Forbidden("not a member of this conversation")
+	}
+
+	messages, err := s.msgRepo.ListPinnedByConversation(ctx, conversationID, limit)
+	if err != nil {
+		return nil, apperror.Internal("failed to list pinned messages", err)
+	}
+	if err := s.msgRepo.EnrichMessages(ctx, messages); err != nil {
+		return nil, apperror.Internal("failed to load pinned messages", err)
+	}
+	return messages, nil
+}
+
 func (s *MessageService) Search(ctx context.Context, hubID, userID string, input SearchMessagesInput) ([]models.Message, error) {
 	visibleStreams, err := s.hubService.GetVisibleStreams(ctx, hubID, userID)
 	if err != nil {
@@ -283,6 +306,43 @@ func (s *MessageService) Search(ctx context.Context, hubID, userID string, input
 	}
 
 	messages, err := s.msgRepo.SearchInHub(ctx, hubID, filters)
+	if err != nil {
+		return nil, apperror.Internal("failed to search messages", err)
+	}
+	if err := s.msgRepo.EnrichMessages(ctx, messages); err != nil {
+		return nil, apperror.Internal("failed to load search results", err)
+	}
+	return messages, nil
+}
+
+func (s *MessageService) SearchConversation(ctx context.Context, conversationID, userID string, input SearchMessagesInput) ([]models.Message, error) {
+	dmRepo := repository.NewDMRepo(s.msgRepo.GetDB())
+	isMember, err := dmRepo.IsMember(ctx, conversationID, userID)
+	if err != nil {
+		return nil, apperror.Internal("failed to validate conversation membership", err)
+	}
+	if !isMember {
+		return nil, apperror.Forbidden("not a member of this conversation")
+	}
+
+	filters := repository.MessageSearchFilters{
+		Query:      strings.TrimSpace(input.Query),
+		AuthorID:   input.AuthorID,
+		AuthorType: strings.TrimSpace(input.AuthorType),
+		Mention:    strings.TrimSpace(input.Mention),
+		Has:        strings.TrimSpace(input.Has),
+		Before:     input.Before,
+		After:      input.After,
+		StartAt:    input.StartAt,
+		EndAt:      input.EndAt,
+		PinnedOnly: input.PinnedOnly,
+		LinkOnly:   input.LinkOnly,
+		Filename:   strings.TrimSpace(input.Filename),
+		Extension:  strings.TrimSpace(input.Extension),
+		Limit:      input.Limit,
+	}
+
+	messages, err := s.msgRepo.SearchInConversation(ctx, conversationID, filters)
 	if err != nil {
 		return nil, apperror.Internal("failed to search messages", err)
 	}
@@ -350,9 +410,15 @@ func (s *MessageService) PrepareForward(ctx context.Context, msgID, userID strin
 		return ForwardMessageInput{}, apperror.Internal("failed to clone message attachments", err)
 	}
 
+	forwardedMessageID := msg.ID
+	if msg.ForwardedMessageID != nil && *msg.ForwardedMessageID != "" {
+		forwardedMessageID = *msg.ForwardedMessageID
+	}
+
 	return ForwardMessageInput{
-		Content:       msg.Content,
-		AttachmentIDs: attachmentIDs,
+		Content:            msg.Content,
+		AttachmentIDs:      attachmentIDs,
+		ForwardedMessageID: &forwardedMessageID,
 	}, nil
 }
 
@@ -531,19 +597,28 @@ func (s *MessageService) togglePin(ctx context.Context, msgID, userID string, pi
 	if err != nil {
 		return nil, apperror.NotFound("message not found")
 	}
-	if msg.StreamID == nil {
-		return nil, apperror.BadRequest("only stream messages can be pinned")
-	}
-
-	if _, err := s.streamRepo.GetHubID(ctx, *msg.StreamID); err != nil {
-		return nil, apperror.NotFound("stream not found")
-	}
-	perms, _, err := s.hubService.GetStreamEffectivePermissions(ctx, *msg.StreamID, userID)
-	if err != nil {
-		return nil, err
-	}
-	if !models.HasPermission(perms, models.PermManageMessages) {
-		return nil, apperror.Forbidden("you do not have permission to pin this message")
+	if msg.StreamID != nil {
+		if _, err := s.streamRepo.GetHubID(ctx, *msg.StreamID); err != nil {
+			return nil, apperror.NotFound("stream not found")
+		}
+		perms, _, err := s.hubService.GetStreamEffectivePermissions(ctx, *msg.StreamID, userID)
+		if err != nil {
+			return nil, err
+		}
+		if !models.HasPermission(perms, models.PermManageMessages) {
+			return nil, apperror.Forbidden("you do not have permission to pin this message")
+		}
+	} else if msg.ConversationID != nil {
+		dmRepo := repository.NewDMRepo(s.msgRepo.GetDB())
+		isMember, err := dmRepo.IsMember(ctx, *msg.ConversationID, userID)
+		if err != nil {
+			return nil, apperror.Internal("failed to validate conversation membership", err)
+		}
+		if !isMember {
+			return nil, apperror.Forbidden("not a member of this conversation")
+		}
+	} else {
+		return nil, apperror.BadRequest("message cannot be pinned")
 	}
 
 	if pinned {
@@ -561,8 +636,12 @@ func (s *MessageService) togglePin(ctx context.Context, msgID, userID string, pi
 		return nil, apperror.Internal("failed to load updated message", err)
 	}
 
-	evt := ws.NewEvent(ws.OpMessageUpdate, updated)
-	s.hub.BroadcastToStream(*updated.StreamID, evt, "")
+	if updated.StreamID != nil {
+		evt := ws.NewEvent(ws.OpMessageUpdate, updated)
+		s.hub.BroadcastToStream(*updated.StreamID, evt, "")
+	} else if updated.ConversationID != nil {
+		s.broadcastToConversation(ctx, *updated.ConversationID, ws.OpMessageUpdate, updated)
+	}
 	return updated, nil
 }
 

@@ -1,10 +1,24 @@
-import type { DesktopAPI, DesktopBuildInfo, DesktopDisplaySource, DesktopUpdateStatus } from '@/types/desktop';
+import type {
+  DesktopAPI,
+  DesktopBuildInfo,
+  DesktopDateTimePreferences,
+  DesktopDisplaySource,
+  DesktopUpdateStatus,
+} from '@/types/desktop';
 
 export const idleDesktopUpdateStatus: DesktopUpdateStatus = {
   state: 'idle',
   version: '',
   progress: null,
   message: '',
+};
+
+export const defaultDesktopDateTimePreferences: DesktopDateTimePreferences = {
+  locale: typeof navigator !== 'undefined' && navigator.language ? navigator.language : Intl.DateTimeFormat().resolvedOptions().locale,
+  shortDatePattern: null,
+  longDatePattern: null,
+  shortTimePattern: null,
+  uses24HourClock: null,
 };
 
 export function getDesktop(): DesktopAPI | undefined {
@@ -31,8 +45,10 @@ export function getDesktop(): DesktopAPI | undefined {
         arch: '',
         osVersion: '',
       } satisfies DesktopBuildInfo),
+      getDateTimePreferences: () => d.getDateTimePreferences?.() ?? Promise.resolve(defaultDesktopDateTimePreferences),
       getUpdateStatus: () => d.getUpdateStatus?.() ?? Promise.resolve(idleDesktopUpdateStatus),
       isUpdateReady: () => d.isUpdateReady?.() ?? Promise.resolve(false),
+      reloadFrontendIgnoringCache: () => d.reloadFrontendIgnoringCache?.() ?? Promise.resolve(false),
       checkForUpdates: () => d.checkForUpdates?.() ?? Promise.resolve(idleDesktopUpdateStatus),
       listDisplaySources: () => d.listDisplaySources?.() ?? Promise.resolve([] satisfies DesktopDisplaySource[]),
       selectDisplaySource: (sourceId) => d.selectDisplaySource?.(sourceId) ?? Promise.resolve(false),
@@ -67,8 +83,10 @@ export function getDesktop(): DesktopAPI | undefined {
       arch: '',
       osVersion: '',
     }),
+    getDateTimePreferences: async () => defaultDesktopDateTimePreferences,
     getUpdateStatus: async () => idleDesktopUpdateStatus,
     isUpdateReady: async () => false,
+    reloadFrontendIgnoringCache: async () => false,
     checkForUpdates: async () => idleDesktopUpdateStatus,
     listDisplaySources: async () => [],
     selectDisplaySource: async () => false,

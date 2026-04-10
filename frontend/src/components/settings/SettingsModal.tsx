@@ -17,6 +17,7 @@ import { useFrontendUpdateStore } from '../../stores/frontendUpdateStore';
 import { useAppSettingsStore, type SettingsOverlayTab } from '../../stores/appSettingsStore';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { stripAssetVersion } from '../../utils/entityAssets';
+import { formatShortDate, formatShortDateTime } from '../../utils/dateTime';
 import { getDesktop, idleDesktopUpdateStatus } from '../../utils/desktop';
 import {
   AUTO_THRESHOLD_MIN,
@@ -65,13 +66,7 @@ function formatFrontendBuildTimestamp(buildId: string) {
   const buildMs = Date.parse(buildId);
   if (Number.isNaN(buildMs)) return buildId;
 
-  return new Date(buildMs).toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatShortDateTime(buildMs, 'medium');
 }
 
 function formatDesktopOsLabel(info: DesktopBuildInfo) {
@@ -2860,7 +2855,7 @@ function AccountTab({
           )}
           <div>
             <p className="text-riftapp-text-dim text-xs uppercase tracking-wide mb-0.5">Member Since</p>
-            <p>{new Date(user.created_at).toLocaleDateString()}</p>
+            <p>{formatShortDate(user.created_at)}</p>
           </div>
         </div>
       </div>

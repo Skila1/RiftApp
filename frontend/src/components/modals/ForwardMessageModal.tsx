@@ -6,6 +6,12 @@ import { useHubStore } from '../../stores/hubStore';
 import { useMessageStore } from '../../stores/messageStore';
 import type { Message, Stream, User } from '../../types';
 import { normalizeConversation, normalizeUser } from '../../utils/entityAssets';
+import {
+  getConversationAvatarUsers,
+  getConversationOtherMembers,
+  getConversationSubtitle,
+  getConversationTitle,
+} from '../../utils/conversations';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import ModalOverlay from '../shared/ModalOverlay';
 
@@ -200,12 +206,12 @@ export default function ForwardMessageModal({ message, onClose }: Props) {
     return conversations.map((conversation) => ({
       kind: 'conversation',
       id: conversation.id,
-      title: conversation.recipient.display_name || conversation.recipient.username,
-      subtitle: `@${conversation.recipient.username}`,
-      avatarUrl: conversation.recipient.avatar_url,
-      initial: (conversation.recipient.display_name || conversation.recipient.username || '?')[0]?.toUpperCase() ?? '?',
+      title: getConversationTitle(conversation, currentUserId),
+      subtitle: getConversationSubtitle(conversation, currentUserId),
+      avatarUrl: getConversationAvatarUsers(conversation, currentUserId, 1)[0]?.avatar_url,
+      initial: (getConversationTitle(conversation, currentUserId) || '?')[0]?.toUpperCase() ?? '?',
     }));
-  }, [conversations]);
+  }, [conversations, currentUserId]);
 
   const normalizedQuery = query.trim().toLowerCase();
 
@@ -242,8 +248,11 @@ export default function ForwardMessageModal({ message, onClose }: Props) {
 
   const existingConversationForSearch = useMemo(() => {
     if (!searchedUser) return null;
-    return conversations.find((conversation) => conversation.recipient.id === searchedUser.id) ?? null;
-  }, [conversations, searchedUser]);
+    return conversations.find((conversation) => {
+      const otherMembers = getConversationOtherMembers(conversation, currentUserId);
+      return otherMembers.length === 1 && otherMembers[0]?.id === searchedUser.id;
+    }) ?? null;
+  }, [conversations, currentUserId, searchedUser]);
 
   const newDMTarget = useMemo<UserForwardTarget | null>(() => {
     if (!searchedUser || existingConversationForSearch) {

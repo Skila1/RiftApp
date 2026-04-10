@@ -1,9 +1,19 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useFrontendUpdateStore } from '../frontendUpdateStore';
 
+const reloadFrontendIgnoringCache = vi.fn();
+
+vi.mock('../../utils/desktop', () => ({
+  getDesktop: () => ({
+    reloadFrontendIgnoringCache,
+  }),
+}));
+
 describe('frontendUpdateStore', () => {
   beforeEach(() => {
+    reloadFrontendIgnoringCache.mockReset();
+    reloadFrontendIgnoringCache.mockResolvedValue(false);
     useFrontendUpdateStore.setState({
       currentCommitSha: __RIFT_FRONTEND_COMMIT_SHA__,
       currentBuildId: __RIFT_FRONTEND_BUILD_ID__,
@@ -30,5 +40,13 @@ describe('frontendUpdateStore', () => {
     useFrontendUpdateStore.getState().markUpdateReadyFromAssetFailure();
 
     expect(useFrontendUpdateStore.getState().latestSignature).toBe('/assets/app-new.js|/assets/app-new.css');
+  });
+
+  it('asks the desktop shell to reload the frontend ignoring cache when applying an update', () => {
+    useFrontendUpdateStore.setState({ updateReady: true });
+
+    useFrontendUpdateStore.getState().applyUpdate();
+
+    expect(reloadFrontendIgnoringCache).toHaveBeenCalledTimes(1);
   });
 });

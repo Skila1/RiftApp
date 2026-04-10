@@ -9,6 +9,7 @@ import StatusDot, { statusLabel } from './StatusDot';
 import BotBadge from './BotBadge';
 import type { RelationshipType } from '../../types';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
+import { formatUserCreatedAt } from '../../utils/profileDates';
 
 const CARD_WIDTH = 300;
 const CARD_GAP = 8;
@@ -187,7 +188,7 @@ export default function UserProfilePopover() {
 
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-riftapp-text-dim mb-0.5">Member Since</p>
-              <p className="text-sm">{new Date(user.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              <p className="text-sm">{formatUserCreatedAt(user)}</p>
             </div>
           </div>
 

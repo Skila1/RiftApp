@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { getDesktop } from '../utils/desktop';
 import { reloadOnceForFrontendUpdate } from '../utils/frontendUpdate';
 
 interface FrontendUpdateState {
@@ -58,6 +59,16 @@ export const useFrontendUpdateStore = create<FrontendUpdateState>((set, get) => 
 
   applyUpdate: () => {
     if (!get().updateReady) {
+      return;
+    }
+
+    const desktop = getDesktop();
+    if (desktop) {
+      void desktop.reloadFrontendIgnoringCache().then((reloaded) => {
+        if (!reloaded) {
+          reloadOnceForFrontendUpdate();
+        }
+      });
       return;
     }
 

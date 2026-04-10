@@ -48,6 +48,27 @@ func (h *DMHandler) CreateOrOpen(w http.ResponseWriter, r *http.Request) {
 	writeData(w, status, result)
 }
 
+func (h *DMHandler) CreateOrOpenGroup(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	var body struct {
+		MemberIDs []string `json:"member_ids"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	result, created, err := h.svc.CreateOrOpenGroup(r.Context(), userID, body.MemberIDs)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	writeData(w, status, result)
+}
+
 func (h *DMHandler) Messages(w http.ResponseWriter, r *http.Request) {
 	convID := chi.URLParam(r, "conversationID")
 	userID := middleware.GetUserID(r.Context())

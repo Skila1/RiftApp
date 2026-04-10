@@ -12,6 +12,7 @@ import { MenuOverlay, menuDivider } from '../context-menus/MenuOverlay';
 import ModalOverlay from '../shared/ModalOverlay';
 import StatusDot from '../shared/StatusDot';
 import type { Hub, User, HubEmoji, HubSticker, HubSound, HubRole, HubInvite, RelationshipType } from '../../types';
+import { formatMediumDate, formatShortDate } from '../../utils/dateTime';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { normalizeUser, normalizeUsers } from '../../utils/entityAssets';
 import {
@@ -399,7 +400,7 @@ function OverviewTab({ hub, isOwner }: { hub: Hub; isOwner: boolean }) {
             </div>
             <div className="pt-6">
               <p className="text-[16px] font-bold text-white">{name}</p>
-              <p className="text-[12px] text-[#949ba4]">Created {new Date(hub.created_at).toLocaleDateString()}</p>
+              <p className="text-[12px] text-[#949ba4]">Created {formatShortDate(hub.created_at)}</p>
             </div>
           </div>
         </div>
@@ -527,7 +528,7 @@ function OverviewTab({ hub, isOwner }: { hub: Hub; isOwner: boolean }) {
           <div className="grid grid-cols-2 gap-4 text-[13px]">
             <div className="bg-[#2b2d31] rounded-lg p-3 border border-[#1e1f22]">
               <p className="text-[11px] text-[#949ba4] uppercase tracking-wide mb-0.5">Created</p>
-              <p className="text-[#dbdee1]">{new Date(hub.created_at).toLocaleDateString()}</p>
+              <p className="text-[#dbdee1]">{formatShortDate(hub.created_at)}</p>
             </div>
             <div className="bg-[#2b2d31] rounded-lg p-3 border border-[#1e1f22]">
               <p className="text-[11px] text-[#949ba4] uppercase tracking-wide mb-0.5">Owner</p>
@@ -675,12 +676,6 @@ function DeleteServerTab({ hub, isOwner, onCloseSettings }: { hub: Hub; isOwner:
    Members (Discord-style table)
    ═══════════════════════════════════════════════════ */
 
-const MEMBER_TABLE_DATE_FORMAT: Intl.DateTimeFormatOptions = {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-};
-
 type MemberOverlayState = {
   memberId: string;
   x: number;
@@ -697,7 +692,7 @@ function isUsableMemberDate(value: string | null | undefined): boolean {
 
 function formatMemberTableDate(value: string | null | undefined): string {
   if (!isUsableMemberDate(value)) return 'Unknown';
-  return new Date(value as string).toLocaleDateString(undefined, MEMBER_TABLE_DATE_FORMAT);
+  return formatMediumDate(value as string);
 }
 
 function formatMemberSinceDate(member: Pick<User, 'joined_at' | 'created_at'>): string {
@@ -1892,7 +1887,7 @@ function CustomizationTab({ hub, isOwner, kind, discordLayout }: { hub: Hub; isO
               <div className="flex-1 min-w-0">
                 <p className="text-[14px] font-medium text-[#dbdee1] truncate">{item.name}</p>
                 <p className="text-[11px] text-[#949ba4]">
-                  {new Date(item.created_at).toLocaleDateString()}
+                  {formatShortDate(item.created_at)}
                 </p>
               </div>
               <>

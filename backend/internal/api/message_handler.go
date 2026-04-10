@@ -66,6 +66,18 @@ func (h *MessageHandler) ListPinned(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusOK, messages)
 }
 
+func (h *MessageHandler) ListConversationPinned(w http.ResponseWriter, r *http.Request) {
+	conversationID := chi.URLParam(r, "conversationID")
+	userID := middleware.GetUserID(r.Context())
+	limit := parseLimit(r)
+	messages, err := h.svc.ListConversationPinned(r.Context(), conversationID, userID, limit)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, messages)
+}
+
 func (h *MessageHandler) Update(w http.ResponseWriter, r *http.Request) {
 	msgID := chi.URLParam(r, "messageID")
 	userID := middleware.GetUserID(r.Context())
@@ -143,8 +155,9 @@ func (h *MessageHandler) Forward(w http.ResponseWriter, r *http.Request) {
 
 	if streamID != nil {
 		msg, err := h.svc.Create(r.Context(), userID, *streamID, service.CreateMessageInput{
-			Content:       forwardInput.Content,
-			AttachmentIDs: forwardInput.AttachmentIDs,
+			Content:            forwardInput.Content,
+			AttachmentIDs:      forwardInput.AttachmentIDs,
+			ForwardedMessageID: forwardInput.ForwardedMessageID,
 		})
 		if err != nil {
 			writeAppError(w, err)
@@ -160,8 +173,9 @@ func (h *MessageHandler) Forward(w http.ResponseWriter, r *http.Request) {
 	}
 
 	msg, err := h.dmSvc.SendMessage(r.Context(), *conversationID, userID, service.SendDMInput{
-		Content:       forwardInput.Content,
-		AttachmentIDs: forwardInput.AttachmentIDs,
+		Content:            forwardInput.Content,
+		AttachmentIDs:      forwardInput.AttachmentIDs,
+		ForwardedMessageID: forwardInput.ForwardedMessageID,
 	})
 	if err != nil {
 		writeAppError(w, err)
@@ -173,75 +187,30 @@ func (h *MessageHandler) Forward(w http.ResponseWriter, r *http.Request) {
 func (h *MessageHandler) Search(w http.ResponseWriter, r *http.Request) {
 	hubID := chi.URLParam(r, "hubID")
 	userID := middleware.GetUserID(r.Context())
-	query := r.URL.Query()
-	input := service.SearchMessagesInput{
-		Query:      query.Get("q"),
-		AuthorType: query.Get("author_type"),
-		Mention:    query.Get("mentions"),
-		Has:        query.Get("has"),
-		Filename:   query.Get("filename"),
-		Extension:  query.Get("ext"),
-		Limit:      parseLimit(r),
-	}
-	if streamID := query.Get("stream_id"); streamID != "" {
-		input.StreamID = &streamID
-	}
-	if authorID := query.Get("author_id"); authorID != "" {
-		input.AuthorID = &authorID
-	}
-
-	if after := query.Get("after"); after != "" {
-		parsed, err := parseSearchTime(after)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid after filter")
-			return
-		}
-		input.After = parsed
-	}
-	if before := query.Get("before"); before != "" {
-		parsed, err := parseSearchTime(before)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid before filter")
-			return
-		}
-		input.Before = parsed
-	}
-	if on := query.Get("on"); on != "" {
-		start, end, err := parseSearchDayRange(on)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid on filter")
-			return
-		}
-		input.StartAt = &start
-		input.EndAt = &end
-	} else if during := query.Get("during"); during != "" {
-		start, end, err := parseSearchDayRange(during)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid during filter")
-			return
-		}
-		input.StartAt = &start
-		input.EndAt = &end
-	}
-
-	if raw := query.Get("pinned"); raw != "" {
-		value, err := strconv.ParseBool(raw)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid pinned filter")
-			return
-		}
-		input.PinnedOnly = value
-	}
-	if raw := query.Get("link"); raw != "" {
-		value, err := strconv.ParseBool(raw)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid link filter")
-			return
-		}
-		input.LinkOnly = value
+	input, parseErr := parseSearchInput(r)
+	if parseErr != "" {
+		writeError(w, http.StatusBadRequest, parseErr)
+		return
 	}
 
 	messages, err := h.svc.Search(r.Context(), hubID, userID, input)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, messages)
+}
+
+func (h *MessageHandler) SearchConversation(w http.ResponseWriter, r *http.Request) {
+	conversationID := chi.URLParam(r, "conversationID")
+	userID := middleware.GetUserID(r.Context())
+	input, parseErr := parseSearchInput(r)
+	if parseErr != "" {
+		writeError(w, http.StatusBadRequest, parseErr)
+		return
+	}
+
+	messages, err := h.svc.SearchConversation(r.Context(), conversationID, userID, input)
 	if err != nil {
 		writeAppError(w, err)
 		return
@@ -311,4 +280,70 @@ func parseSearchDayRange(raw string) (time.Time, time.Time, error) {
 	start := time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 0, 0, 0, 0, parsed.Location())
 	end := start.Add(24 * time.Hour)
 	return start, end, nil
+}
+
+func parseSearchInput(r *http.Request) (service.SearchMessagesInput, string) {
+	query := r.URL.Query()
+	input := service.SearchMessagesInput{
+		Query:      query.Get("q"),
+		AuthorType: query.Get("author_type"),
+		Mention:    query.Get("mentions"),
+		Has:        query.Get("has"),
+		Filename:   query.Get("filename"),
+		Extension:  query.Get("ext"),
+		Limit:      parseLimit(r),
+	}
+	if streamID := query.Get("stream_id"); streamID != "" {
+		input.StreamID = &streamID
+	}
+	if authorID := query.Get("author_id"); authorID != "" {
+		input.AuthorID = &authorID
+	}
+
+	if after := query.Get("after"); after != "" {
+		parsed, err := parseSearchTime(after)
+		if err != nil {
+			return service.SearchMessagesInput{}, "invalid after filter"
+		}
+		input.After = parsed
+	}
+	if before := query.Get("before"); before != "" {
+		parsed, err := parseSearchTime(before)
+		if err != nil {
+			return service.SearchMessagesInput{}, "invalid before filter"
+		}
+		input.Before = parsed
+	}
+	if on := query.Get("on"); on != "" {
+		start, end, err := parseSearchDayRange(on)
+		if err != nil {
+			return service.SearchMessagesInput{}, "invalid on filter"
+		}
+		input.StartAt = &start
+		input.EndAt = &end
+	} else if during := query.Get("during"); during != "" {
+		start, end, err := parseSearchDayRange(during)
+		if err != nil {
+			return service.SearchMessagesInput{}, "invalid during filter"
+		}
+		input.StartAt = &start
+		input.EndAt = &end
+	}
+
+	if raw := query.Get("pinned"); raw != "" {
+		value, err := strconv.ParseBool(raw)
+		if err != nil {
+			return service.SearchMessagesInput{}, "invalid pinned filter"
+		}
+		input.PinnedOnly = value
+	}
+	if raw := query.Get("link"); raw != "" {
+		value, err := strconv.ParseBool(raw)
+		if err != nil {
+			return service.SearchMessagesInput{}, "invalid link filter"
+		}
+		input.LinkOnly = value
+	}
+
+	return input, ""
 }

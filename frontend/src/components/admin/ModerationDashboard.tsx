@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import type { Report } from '../../types';
 import { useNavigate } from 'react-router-dom';
+import { formatShortDateTime } from '../../utils/dateTime';
 
 const STATUS_COLORS: Record<string, string> = {
   open: 'bg-yellow-500/20 text-yellow-400',
@@ -185,7 +186,7 @@ export default function ModerationDashboard() {
                     {r.status}
                   </span>
                   <span className="text-xs text-riftapp-text-dim px-2 py-0.5 rounded bg-white/5">{CATEGORY_LABELS[r.category] || r.category}</span>
-                  <span className="text-xs text-riftapp-text-dim ml-auto">{new Date(r.created_at).toLocaleString()}</span>
+                  <span className="text-xs text-riftapp-text-dim ml-auto">{formatShortDateTime(r.created_at)}</span>
                 </div>
                 <p className="text-sm mb-1">
                   <span className="text-riftapp-text-dim">Reporter:</span> {r.reporter_name || r.reporter_id.slice(0, 8)}

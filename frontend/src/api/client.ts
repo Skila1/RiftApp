@@ -252,6 +252,36 @@ class ApiClient {
 
   getDMs() { return this.request<Conversation[]>('/dms'); }
   createOrOpenDM(recipientId: string) { return this.request<Conversation>('/dms', { method: 'POST', body: JSON.stringify({ recipient_id: recipientId }) }); }
+  createOrOpenGroupDM(memberIds: string[]) {
+    return this.request<Conversation>('/dms/groups', {
+      method: 'POST',
+      body: JSON.stringify({ member_ids: memberIds }),
+    });
+  }
+  getPinnedDMMessages(conversationId: string, limit?: number) {
+    const params = new URLSearchParams();
+    if (limit != null) params.set('limit', String(limit));
+    const query = params.toString();
+    return this.request<Message[]>(`/dms/${conversationId}/pins${query ? `?${query}` : ''}`);
+  }
+  searchDMMessages(conversationId: string, filters: MessageSearchFilters) {
+    const params = new URLSearchParams();
+    if (filters.query) params.set('q', filters.query);
+    if (filters.author_id) params.set('author_id', filters.author_id);
+    if (filters.author_type) params.set('author_type', filters.author_type);
+    if (filters.mentions) params.set('mentions', filters.mentions);
+    if (filters.has) params.set('has', filters.has);
+    if (filters.before) params.set('before', filters.before);
+    if (filters.after) params.set('after', filters.after);
+    if (filters.on) params.set('on', filters.on);
+    if (filters.during) params.set('during', filters.during);
+    if (filters.pinned != null) params.set('pinned', String(filters.pinned));
+    if (filters.link != null) params.set('link', String(filters.link));
+    if (filters.filename) params.set('filename', filters.filename);
+    if (filters.ext) params.set('ext', filters.ext);
+    if (filters.limit != null) params.set('limit', String(filters.limit));
+    return this.request<Message[]>(`/dms/${conversationId}/messages/search?${params}`);
+  }
   getDMMessages(conversationId: string, before?: string, limit = 50) {
     const params = new URLSearchParams({ limit: String(limit) });
     if (before) params.set('before', before);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildFrontendUpdateReloadUrl,
   isDynamicImportFailureMessage,
   isFrontendAssetFailureEvent,
   isFrontendAssetLoadError,
@@ -48,5 +49,11 @@ describe('frontendUpdate helpers', () => {
     releaseLoad();
     await expect(loadPromise).resolves.toBe('loaded');
     expect(shouldAutoReloadForFrontendAssetFailure()).toBe(true);
+  });
+
+  it('builds a cache-busting reload URL that preserves the current route', () => {
+    const url = buildFrontendUpdateReloadUrl('https://riftapp.io/app/hubs/123/general?foo=bar#messages', 12345);
+
+    expect(url).toBe('https://riftapp.io/app/hubs/123/general?foo=bar&riftappFrontendUpdate=12345#messages');
   });
 });

@@ -1,10 +1,5 @@
 import type { User } from '../types';
-
-const MEMBER_SINCE_FORMAT: Intl.DateTimeFormatOptions = {
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric',
-};
+import { formatLongDate } from './dateTime';
 
 const MIN_VALID_PROFILE_YEAR = 1900;
 
@@ -18,5 +13,5 @@ export function formatUserCreatedAt(user: Pick<User, 'created_at'> | null | unde
   if (!hasUsableCreatedAt(user)) return 'Unknown';
   const createdAt = user?.created_at;
   if (!createdAt) return 'Unknown';
-  return new Date(createdAt).toLocaleDateString(undefined, MEMBER_SINCE_FORMAT);
+  return formatLongDate(createdAt);
 }

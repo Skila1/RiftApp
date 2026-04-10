@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { adminApi, type AdminSession, type UserSession } from '../../api/adminClient';
+import { formatShortDateTime } from '../../utils/dateTime';
 
 export default function SessionsPage() {
   const [tab, setTab] = useState<'admin' | 'user'>('admin');
@@ -67,8 +68,8 @@ function AdminSessions() {
               <tr key={s.id} className="border-b border-[#3f4147]/20 last:border-0">
                 <td className="px-5 py-3 text-white">{s.display_name || s.username}</td>
                 <td className="px-5 py-3 text-[#949ba4] font-mono text-xs">{s.ip_address}</td>
-                <td className="px-5 py-3 text-[#949ba4]">{new Date(s.created_at).toLocaleString()}</td>
-                <td className="px-5 py-3 text-[#949ba4]">{new Date(s.expires_at).toLocaleString()}</td>
+                <td className="px-5 py-3 text-[#949ba4]">{formatShortDateTime(s.created_at)}</td>
+                <td className="px-5 py-3 text-[#949ba4]">{formatShortDateTime(s.expires_at)}</td>
                 <td className="px-5 py-3">
                   {revoked ? <span className="text-[#ed4245] text-xs">Revoked</span>
                     : expired ? <span className="text-[#949ba4] text-xs">Expired</span>
@@ -134,8 +135,8 @@ function UserSessions() {
               <tr key={s.id} className="border-b border-[#3f4147]/20 last:border-0">
                 <td className="px-5 py-3 text-white">{s.username}</td>
                 <td className="px-5 py-3 text-[#949ba4]">{s.email || '—'}</td>
-                <td className="px-5 py-3 text-[#949ba4]">{new Date(s.created_at).toLocaleString()}</td>
-                <td className="px-5 py-3 text-[#949ba4]">{new Date(s.expires_at).toLocaleString()}</td>
+                <td className="px-5 py-3 text-[#949ba4]">{formatShortDateTime(s.created_at)}</td>
+                <td className="px-5 py-3 text-[#949ba4]">{formatShortDateTime(s.expires_at)}</td>
                 <td className="px-5 py-3 text-right">
                   {!expired && (
                     <button onClick={() => revoke(s.id)} className="px-3 py-1 text-xs font-medium rounded bg-[#ed4245]/20 text-[#ed4245] hover:bg-[#ed4245]/30 transition-colors">Revoke</button>

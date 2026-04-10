@@ -23,7 +23,9 @@ import MessageItem from './MessageItem';
 import PinSystemMessage from './PinSystemMessage';
 import TypingIndicator from './TypingIndicator';
 import UpdateActionButton from '../shared/UpdateActionButton';
+import AddFriendsToDMModal from '../modals/AddFriendsToDMModal';
 import type {
+  Conversation,
   Message,
   MessageSearchFilters,
   Notification,
@@ -32,12 +34,24 @@ import type {
 } from '../../types';
 import type { ChatTimelineItem } from '../../utils/chatTimeline';
 import { buildChatTimeline } from '../../utils/chatTimeline';
+import {
+  formatLongDateWithWeekday,
+  formatShortDateTime,
+  formatShortTime,
+  isSameCalendarDay,
+} from '../../utils/dateTime';
 import { normalizeMessages } from '../../utils/entityAssets';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import {
   subscribeToChatSearchRequests,
   type ChatSearchFocusFilter,
 } from '../../utils/chatSearchBridge';
+import {
+  getConversationAvatarUsers,
+  getConversationOtherMembers,
+  getConversationTitle,
+  isGroupConversation,
+} from '../../utils/conversations';
 import { jumpToMessageId } from '../../utils/messageJump';
 
 type HeaderPanel = 'notifications' | 'pins' | 'search' | 'inbox' | null;
@@ -72,46 +86,27 @@ const STREAM_NOTIFICATION_TOGGLES: ReadonlyArray<readonly [StreamNotificationTog
 function formatDateSeparator(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
-  if (date.toDateString() === now.toDateString()) return 'Today';
+  if (isSameCalendarDay(date, now)) return 'Today';
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
-  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
-  return date.toLocaleDateString(undefined, {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  if (isSameCalendarDay(date, yesterday)) return 'Yesterday';
+  return formatLongDateWithWeekday(date);
 }
 
 function formatCompactTimestamp(dateStr: string): string {
-  return new Date(dateStr).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  return formatShortDateTime(dateStr, 'medium');
 }
 
 function formatPinnedMessageTimestamp(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
-  const isSameDay = date.toDateString() === now.toDateString();
+  const isSameDay = isSameCalendarDay(date, now);
 
   if (isSameDay) {
-    return date.toLocaleTimeString(undefined, {
-      hour: 'numeric',
-      minute: '2-digit',
-    });
+    return formatShortTime(date);
   }
 
-  return date.toLocaleString(undefined, {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  return formatShortDateTime(date);
 }
 
 function formatRelativeTimestamp(dateStr: string): string {
@@ -170,14 +165,7 @@ function buildSearchFilters(query?: string): MessageSearchFilters {
 }
 
 function formatSearchResultTimestamp(dateStr: string): string {
-  return new Date(dateStr).toLocaleString(undefined, {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
+  return formatShortDateTime(dateStr);
 }
 
 function searchResultAuthorColor(name: string): string {
@@ -387,6 +375,35 @@ function UserAvatar({
   return (
     <div className={`${sizeClass} rounded-full bg-riftapp-accent/15 text-riftapp-accent flex items-center justify-center shrink-0`}>
       <span className={`${textClass} font-semibold uppercase`}>{getUserInitial(user)}</span>
+    </div>
+  );
+}
+
+function ConversationAvatar({
+  conversation,
+  viewerUserId,
+  sizeClass = 'w-9 h-9',
+  textClass = 'text-sm',
+}: {
+  conversation?: Conversation;
+  viewerUserId?: string | null;
+  sizeClass?: string;
+  textClass?: string;
+}) {
+  if (!isGroupConversation(conversation, viewerUserId)) {
+    const member = getConversationOtherMembers(conversation, viewerUserId)[0] ?? conversation?.recipient;
+    return <UserAvatar user={member} sizeClass={sizeClass} textClass={textClass} />;
+  }
+
+  const avatarUsers = getConversationAvatarUsers(conversation, viewerUserId, 2);
+  return (
+    <div className={`${sizeClass} relative shrink-0`}>
+      <div className="absolute left-0 top-0">
+        <UserAvatar user={avatarUsers[0]} sizeClass="h-[17px] w-[17px]" textClass="text-[8px]" />
+      </div>
+      <div className="absolute bottom-0 right-0">
+        <UserAvatar user={avatarUsers[1]} sizeClass="h-[17px] w-[17px]" textClass="text-[8px]" />
+      </div>
     </div>
   );
 }
@@ -749,6 +766,7 @@ export default function ChatPanel({
   const activeConversationId = useDMStore((s) => s.activeConversationId);
   const dmMessages = useDMStore((s) => s.dmMessages);
   const dmMessagesLoading = useDMStore((s) => s.dmMessagesLoading);
+  const dmPinMutationVersion = useDMStore((s) => s.dmPinMutationVersion);
   const conversations = useDMStore((s) => s.conversations);
   const sendDMMessage = useDMStore((s) => s.sendDMMessage);
   const ackDM = useDMStore((s) => s.ackDM);
@@ -763,6 +781,11 @@ export default function ChatPanel({
   const activeConversation = useMemo(
     () => conversations.find((c) => c.id === activeConversationId),
     [conversations, activeConversationId]
+  );
+
+  const activeConversationLabel = useMemo(
+    () => getConversationTitle(activeConversation, user?.id),
+    [activeConversation, user?.id],
   );
 
   const streamMap = useMemo(
@@ -784,6 +807,17 @@ export default function ChatPanel({
     const members = Object.values(hubMembers);
     return [...members].sort((a, b) => getUserLabel(a).localeCompare(getUserLabel(b)));
   }, [hubMembers]);
+
+  const dmSearchAuthorOptions = useMemo(() => {
+    const optionsByID = new Map<string, User>();
+    if (user) {
+      optionsByID.set(user.id, user);
+    }
+    for (const member of getConversationOtherMembers(activeConversation, user?.id)) {
+      optionsByID.set(member.id, member);
+    }
+    return [...optionsByID.values()].sort((left, right) => getUserLabel(left).localeCompare(getUserLabel(right)));
+  }, [activeConversation, user]);
 
   const displayMessages = isDMMode ? dmMessages : messages;
   const isLoading = isDMMode ? dmMessagesLoading : messagesLoading;
@@ -829,7 +863,8 @@ export default function ChatPanel({
   }, [notifications, inboxTab]);
 
   const activeSearchFilterCount = useMemo(() => countSearchFilters(searchFilters), [searchFilters]);
-  const searchSidebarOpen = activePanel === 'search' && !isDMMode && Boolean(activeHubId) && Boolean(activeStreamId);
+  const searchSidebarOpen = activePanel === 'search'
+    && (isDMMode ? Boolean(activeConversationId) : Boolean(activeHubId) && Boolean(activeStreamId));
   const searchQuery = searchFilters.query ?? '';
 
   const sortedSearchResults = useMemo(() => {
@@ -843,6 +878,10 @@ export default function ChatPanel({
   }, [searchResults, searchSortOrder]);
 
   const searchResultSections = useMemo(() => {
+    if (isDMMode) {
+      return [];
+    }
+
     const sections: Array<{ key: string; streamName: string; categoryName?: string; messages: Message[] }> = [];
 
     for (const message of sortedSearchResults) {
@@ -866,7 +905,7 @@ export default function ChatPanel({
     }
 
     return sections;
-  }, [sortedSearchResults, streamMap, categoryMap]);
+  }, [categoryMap, isDMMode, sortedSearchResults, streamMap]);
 
   // Compute unread divider position for stream messages
   const firstUnreadIndex = useMemo(() => {
@@ -1115,7 +1154,22 @@ export default function ChatPanel({
   }, []);
 
   const refreshPinnedMessages = useCallback(async () => {
-    if (!activeStreamId || isDMMode) return;
+    if (isDMMode) {
+      if (!activeConversationId) return;
+      setPinnedLoading(true);
+      setPinnedError(null);
+      try {
+        const items = normalizeMessages(await api.getPinnedDMMessages(activeConversationId));
+        setPinnedMessages(items);
+      } catch (error) {
+        setPinnedError(error instanceof Error ? error.message : 'Could not load pinned messages');
+      } finally {
+        setPinnedLoading(false);
+      }
+      return;
+    }
+
+    if (!activeStreamId) return;
     setPinnedLoading(true);
     setPinnedError(null);
     try {
@@ -1126,10 +1180,20 @@ export default function ChatPanel({
     } finally {
       setPinnedLoading(false);
     }
-  }, [activeStreamId, isDMMode]);
+  }, [activeConversationId, activeStreamId, isDMMode]);
 
   const openPinnedMessageFromTimeline = useCallback(
     async (messageId: string) => {
+      if (isDMMode) {
+        if (!activeConversationId) return;
+        if (focusMessage(messageId)) return;
+        await useDMStore.getState().ensureMessageLoaded(activeConversationId, messageId);
+        requestAnimationFrame(() => {
+          focusMessage(messageId);
+        });
+        return;
+      }
+
       if (!activeStreamId) return;
       if (focusMessage(messageId)) return;
       await useMessageStore.getState().ensureMessageLoaded(activeStreamId, messageId);
@@ -1137,7 +1201,7 @@ export default function ChatPanel({
         focusMessage(messageId);
       });
     },
-    [activeStreamId, focusMessage],
+    [activeConversationId, activeStreamId, focusMessage, isDMMode],
   );
 
   const openPinnedMessagesPanel = useCallback(() => {
@@ -1188,8 +1252,30 @@ export default function ChatPanel({
     setSearchPerformed(false);
   }, []);
 
+  useEffect(() => {
+    if (!isDMMode) return;
+
+    setSearchFilters((current) => {
+      if (!current.stream_id && !current.author_type && !current.mentions) {
+        return current;
+      }
+
+      return {
+        ...current,
+        stream_id: undefined,
+        author_type: undefined,
+        mentions: undefined,
+      };
+    });
+  }, [isDMMode, activeConversationId]);
+
   const runSearch = useCallback(async (overrides?: Partial<MessageSearchFilters>) => {
-    if (!activeHubId || isDMMode) return;
+    if (isDMMode) {
+      if (!activeConversationId) return;
+    } else if (!activeHubId) {
+      return;
+    }
+
     const nextFilters = {
       ...searchFilters,
       ...overrides,
@@ -1200,14 +1286,18 @@ export default function ChatPanel({
     setSearchPerformed(true);
     setSearchFilters(nextFilters);
     try {
-      const results = normalizeMessages(await api.searchHubMessages(activeHubId, cleanSearchFilters(nextFilters)));
+      const results = normalizeMessages(
+        isDMMode && activeConversationId
+          ? await api.searchDMMessages(activeConversationId, cleanSearchFilters(nextFilters))
+          : await api.searchHubMessages(activeHubId!, cleanSearchFilters(nextFilters)),
+      );
       setSearchResults(results);
     } catch (error) {
       setSearchError(error instanceof Error ? error.message : 'Could not search messages');
     } finally {
       setSearchLoading(false);
     }
-  }, [activeHubId, isDMMode, searchFilters]);
+  }, [activeConversationId, activeHubId, isDMMode, searchFilters]);
 
   const runSearchFromSidebar = useCallback(() => {
     setSearchPopover(null);
@@ -1289,6 +1379,23 @@ export default function ChatPanel({
     [activeHubId, focusMessage],
   );
 
+  const openConversationMessage = useCallback(
+    async (message: Pick<Message, 'id' | 'conversation_id'>) => {
+      if (!message.conversation_id) return;
+      if (useDMStore.getState().activeConversationId !== message.conversation_id) {
+        await useDMStore.getState().setActiveConversation(message.conversation_id);
+      }
+      await useDMStore.getState().ensureMessageLoaded(message.conversation_id, message.id);
+      setActivePanel(null);
+      if (!focusMessage(message.id)) {
+        requestAnimationFrame(() => {
+          focusMessage(message.id);
+        });
+      }
+    },
+    [focusMessage],
+  );
+
   const openNotificationItem = useCallback(
     async (notification: Notification) => {
       if (!notification.read) {
@@ -1330,7 +1437,7 @@ export default function ChatPanel({
   useEffect(() => {
     if (activePanel !== 'pins') return;
     void refreshPinnedMessages();
-  }, [activePanel, refreshPinnedMessages, pinMutationVersion]);
+  }, [activePanel, dmPinMutationVersion, pinMutationVersion, refreshPinnedMessages]);
 
   useEffect(() => {
     if (activePanel !== 'notifications') return;
@@ -1378,13 +1485,16 @@ export default function ChatPanel({
     setActivePanel(null);
   }, [activeHubId, activeStreamId, activeConversationId]);
 
-  const canShowChannelTools = !showWelcome && !isDMMode && Boolean(activeHubId);
+  const canShowNotificationTools = !showWelcome && !isDMMode && Boolean(activeHubId);
+  const canShowPinnedTools = !showWelcome && Boolean(activeStreamId || activeConversationId);
+  const canShowMemberListToggle = !showWelcome && !isDMMode && Boolean(activeHubId);
   const searchSidebarTitle = searchLoading ? 'Searching…' : searchPerformed ? `${searchResults.length} Results` : 'Search';
   const searchInputClass = 'w-full rounded-md border border-[#2b2d31] bg-[#1a1b1e] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors placeholder:text-[#72767d] focus:border-[#4f545c]';
   const searchSelectClass = 'w-full rounded-md border border-[#2b2d31] bg-[#1a1b1e] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-[#4f545c]';
+  const [showAddFriendsModal, setShowAddFriendsModal] = useState(false);
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-riftapp-content min-w-0 relative">
+    <div className={`flex-1 min-h-0 flex flex-col bg-riftapp-content min-w-0 relative ${searchSidebarOpen ? 'pr-[320px]' : ''}`}>
       {/* Header */}
       {!showWelcome && (
         <div
@@ -1394,10 +1504,10 @@ export default function ChatPanel({
           <div className="flex min-w-0 flex-1 items-center gap-3">
             {isDMMode ? (
               <>
-                <UserAvatar user={activeConversation?.recipient} sizeClass="w-7 h-7" textClass="text-[11px]" />
+                <ConversationAvatar conversation={activeConversation} viewerUserId={user?.id} sizeClass="w-7 h-7" textClass="text-[11px]" />
                 <div className="min-w-0">
                   <h3 className="truncate text-[15px] font-semibold text-[#f2f3f5]">
-                    {activeConversation?.recipient?.display_name || 'Direct Message'}
+					  {activeConversationLabel}
                   </h3>
                 </div>
               </>
@@ -1411,7 +1521,7 @@ export default function ChatPanel({
             )}
           </div>
 
-          {canShowChannelTools ? (
+          {canShowNotificationTools ? (
             <>
               <div className="hidden h-5 w-px bg-white/10 lg:block" />
               <div className="hidden items-center gap-2 lg:flex">
@@ -1434,9 +1544,51 @@ export default function ChatPanel({
             </>
           ) : null}
 
+          {isDMMode ? (
+            <>
+              <div className="hidden h-5 w-px bg-white/10 lg:block" />
+              <div className="hidden items-center gap-2 lg:flex">
+                <button
+                  type="button"
+                  onClick={() => setActivePanel('search')}
+                  className="flex h-7 min-w-[220px] max-w-[260px] items-center justify-between gap-3 rounded-[4px] bg-[#202225] px-3 text-left text-[12px] text-[#949ba4] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors hover:bg-[#25262b] hover:text-[#dcddde]"
+                  aria-label={`Search messages with ${activeConversationLabel}`}
+                >
+                  <span className="truncate">{searchQuery.trim() || `Search ${activeConversationLabel}`}</span>
+                  <IconSearch className="h-3.5 w-3.5 shrink-0 text-[#72767d]" />
+                </button>
+
+                <HeaderIconButton
+                  label="Pinned messages"
+                  active={activePanel === 'pins'}
+                  onClick={() => togglePanel('pins')}
+                >
+                  <IconPin className="h-4 w-4" />
+                </HeaderIconButton>
+              </div>
+            </>
+          ) : null}
+
           {!showWelcome ? (
             <div className="flex items-center gap-2">
-              {canShowChannelTools ? (
+        {isDMMode && activeConversation ? (
+          <HeaderIconButton
+            label="Add friends to DM"
+            onClick={() => setShowAddFriendsModal(true)}
+          >
+            <IconUsers className="h-4 w-4" />
+          </HeaderIconButton>
+        ) : null}
+			  {isDMMode ? (
+				  <HeaderIconButton
+					  label="Search messages"
+					  active={activePanel === 'search'}
+					  onClick={() => togglePanel('search')}
+				  >
+					  <IconSearch className="h-4 w-4" />
+				  </HeaderIconButton>
+			  ) : null}
+			  {canShowMemberListToggle ? (
                 <HeaderIconButton
                   label={showMemberList ? 'Hide user list' : 'Show user list'}
                   active={showMemberList}
@@ -1452,78 +1604,77 @@ export default function ChatPanel({
         </div>
       )}
 
-      {/* Messages */}
-      <div className="flex-1 overflow-hidden relative">
-        {searchSidebarOpen ? (
-          <div ref={floatingPanelRef} className="absolute inset-y-0 right-0 z-30 flex w-[320px] flex-col border-l border-white/6 bg-[#111214] shadow-[-18px_0_36px_rgba(0,0,0,0.28)]">
-            <div className="border-b border-white/6 px-4 py-3">
-              <div className="flex h-7 items-center gap-2 rounded-[4px] bg-[#202225] px-2 text-[#dcddde] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                <IconSearch className="h-3.5 w-3.5 shrink-0 text-[#72767d]" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(event) => {
-                    const nextQuery = event.target.value;
+      {searchSidebarOpen ? (
+        <div ref={floatingPanelRef} className="absolute inset-y-0 right-0 z-30 flex w-[320px] flex-col bg-riftapp-panel shadow-modal">
+          <div className="flex h-12 items-center px-4">
+            <div className="flex h-7 w-full items-center gap-2 rounded-[4px] bg-[#202225] px-2 text-[#dcddde] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+              <IconSearch className="h-3.5 w-3.5 shrink-0 text-[#72767d]" />
+              <input
+                type="text"
+                value={searchQuery}
+                placeholder={isDMMode ? `Search ${activeConversationLabel}` : 'Search this server'}
+                onChange={(event) => {
+                  const nextQuery = event.target.value;
+                  setSearchFilters((current) => ({
+                    ...current,
+                    query: nextQuery || undefined,
+                  }));
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    runSearchFromSidebar();
+                  }
+                }}
+                className="min-w-0 flex-1 bg-transparent text-[12px] leading-5 text-[#dcddde] outline-none placeholder:text-[#72767d]"
+              />
+              {searchQuery ? (
+                <button
+                  type="button"
+                  onClick={() => {
                     setSearchFilters((current) => ({
                       ...current,
-                      query: nextQuery || undefined,
+                      query: undefined,
                     }));
                   }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      runSearchFromSidebar();
-                    }
-                  }}
-                  placeholder="Search"
-                  className="min-w-0 flex-1 bg-transparent text-[12px] leading-5 text-[#dcddde] outline-none placeholder:text-[#72767d]"
+                  className="inline-flex h-4 w-4 items-center justify-center rounded text-[#72767d] transition-colors hover:text-[#dcddde]"
+                  aria-label="Clear search query"
+                >
+                  <IconClose className="h-3 w-3" />
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="relative px-4 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[15px] font-semibold text-[#f2f3f5]">{searchSidebarTitle}</span>
+              <div className="flex items-center gap-2">
+                <SearchSidebarActionButton
+                  label="Filters"
+                  icon={<IconSlidersHorizontal className="h-3.5 w-3.5" />}
+                  badge={activeSearchFilterCount || undefined}
+                  active={searchPopover === 'filters'}
+                  onClick={() => setSearchPopover((current) => (current === 'filters' ? null : 'filters'))}
                 />
-                {searchQuery ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearchFilters((current) => ({
-                        ...current,
-                        query: undefined,
-                      }));
-                    }}
-                    className="inline-flex h-4 w-4 items-center justify-center rounded text-[#72767d] transition-colors hover:text-[#dcddde]"
-                    aria-label="Clear search query"
-                  >
-                    <IconClose className="h-3 w-3" />
-                  </button>
-                ) : null}
+                <SearchSidebarActionButton
+                  label="Sort"
+                  icon={<IconArrowDownUp className="h-3.5 w-3.5" />}
+                  active={searchPopover === 'sort'}
+                  onClick={() => setSearchPopover((current) => (current === 'sort' ? null : 'sort'))}
+                />
               </div>
             </div>
 
-            <div className="relative border-b border-white/6 px-4 py-3">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[15px] font-semibold text-[#f2f3f5]">{searchSidebarTitle}</span>
-                <div className="flex items-center gap-2">
-                  <SearchSidebarActionButton
-                    label="Filters"
-                    icon={<IconSlidersHorizontal className="h-3.5 w-3.5" />}
-                    badge={activeSearchFilterCount || undefined}
-                    active={searchPopover === 'filters'}
-                    onClick={() => setSearchPopover((current) => (current === 'filters' ? null : 'filters'))}
-                  />
-                  <SearchSidebarActionButton
-                    label="Sort"
-                    icon={<IconArrowDownUp className="h-3.5 w-3.5" />}
-                    active={searchPopover === 'sort'}
-                    onClick={() => setSearchPopover((current) => (current === 'sort' ? null : 'sort'))}
-                  />
+            {searchPopover === 'filters' ? (
+              <div className="absolute right-4 top-[calc(100%+8px)] z-20 w-[292px] overflow-hidden rounded-xl bg-riftapp-panel shadow-modal">
+                <div className="px-4 py-3">
+                  <h5 className="text-sm font-semibold text-[#f2f3f5]">Filters</h5>
+                  <p className="mt-0.5 text-xs text-[#949ba4]">{isDMMode ? `Refine results across your conversation with ${activeConversationLabel}.` : 'Refine results across this server.'}</p>
                 </div>
-              </div>
-
-              {searchPopover === 'filters' ? (
-                <div className="absolute right-4 top-[calc(100%+8px)] z-20 w-[292px] overflow-hidden rounded-xl border border-[#232428] bg-[#111214] shadow-[0_18px_48px_rgba(0,0,0,0.45)]">
-                  <div className="border-b border-white/6 px-4 py-3">
-                    <h5 className="text-sm font-semibold text-[#f2f3f5]">Filters</h5>
-                    <p className="mt-0.5 text-xs text-[#949ba4]">Refine results across this server.</p>
-                  </div>
-                  <div className="max-h-[min(68vh,640px)] space-y-3 overflow-y-auto p-4">
-                    <div className="grid grid-cols-1 gap-3">
+                <div className="max-h-[min(68vh,640px)] space-y-3 overflow-y-auto p-4">
+                  <div className="grid grid-cols-1 gap-3">
+                    {!isDMMode ? (
                       <SearchField label="Channel">
                         <select
                           ref={(element) => {
@@ -1541,317 +1692,335 @@ export default function ChatPanel({
                           ))}
                         </select>
                       </SearchField>
+                    ) : null}
 
-                      <SearchField label="Author">
-                        <select
-                          ref={(element) => {
-                            searchFieldRefs.current.author_id = element;
-                          }}
-                          value={searchFilters.author_id ?? ''}
-                          onChange={(event) => updateSearchFilter('author_id', event.target.value || undefined)}
-                          className={searchSelectClass}
-                        >
-                          <option value="">Anyone</option>
-                          {memberOptions.map((member) => (
-                            <option key={member.id} value={member.id}>
-                              {getUserLabel(member)}
-                            </option>
-                          ))}
-                        </select>
-                      </SearchField>
-
-                      <SearchField label="Author Type">
-                        <select
-                          ref={(element) => {
-                            searchFieldRefs.current.author_type = element;
-                          }}
-                          value={searchFilters.author_type ?? ''}
-                          onChange={(event) => updateSearchFilter('author_type', (event.target.value || undefined) as MessageSearchFilters['author_type'])}
-                          className={searchSelectClass}
-                        >
-                          <option value="">Any</option>
-                          <option value="user">User</option>
-                          <option value="bot">Bot</option>
-                          <option value="webhook">Webhook</option>
-                        </select>
-                      </SearchField>
-
-                      <SearchField label="Mentions Username">
-                        <>
-                          <input
-                            ref={(element) => {
-                              searchFieldRefs.current.mentions = element;
-                            }}
-                            type="text"
-                            list="search-sidebar-mention-usernames"
-                            value={searchFilters.mentions ?? ''}
-                            onChange={(event) => updateSearchFilter('mentions', event.target.value || undefined)}
-                            placeholder="username"
-                            className={searchInputClass}
-                          />
-                          <datalist id="search-sidebar-mention-usernames">
-                            {memberOptions.map((member) => (
-                              <option key={member.id} value={member.username} />
-                            ))}
-                          </datalist>
-                        </>
-                      </SearchField>
-
-                      <SearchField label="Has">
-                        <select
-                          ref={(element) => {
-                            searchFieldRefs.current.has = element;
-                          }}
-                          value={searchFilters.has ?? ''}
-                          onChange={(event) => updateSearchFilter('has', (event.target.value || undefined) as MessageSearchFilters['has'])}
-                          className={searchSelectClass}
-                        >
-                          <option value="">Anything</option>
-                          <option value="file">File</option>
-                          <option value="image">Image</option>
-                          <option value="video">Video</option>
-                          <option value="audio">Audio</option>
-                          <option value="link">Link</option>
-                        </select>
-                      </SearchField>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <SearchField label="Before">
-                          <input
-                            ref={(element) => {
-                              searchFieldRefs.current.before = element;
-                            }}
-                            type="date"
-                            value={searchFilters.before ?? ''}
-                            onChange={(event) => updateSearchFilter('before', event.target.value || undefined)}
-                            className={searchInputClass}
-                          />
-                        </SearchField>
-
-                        <SearchField label="After">
-                          <input
-                            ref={(element) => {
-                              searchFieldRefs.current.after = element;
-                            }}
-                            type="date"
-                            value={searchFilters.after ?? ''}
-                            onChange={(event) => updateSearchFilter('after', event.target.value || undefined)}
-                            className={searchInputClass}
-                          />
-                        </SearchField>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <SearchField label="On">
-                          <input
-                            ref={(element) => {
-                              searchFieldRefs.current.on = element;
-                            }}
-                            type="date"
-                            value={searchFilters.on ?? ''}
-                            onChange={(event) => {
-                              const value = event.target.value || undefined;
-                              setSearchFilters((current) => ({
-                                ...current,
-                                on: value,
-                                during: value ? undefined : current.during,
-                              }));
-                            }}
-                            className={searchInputClass}
-                          />
-                        </SearchField>
-
-                        <SearchField label="During">
-                          <input
-                            ref={(element) => {
-                              searchFieldRefs.current.during = element;
-                            }}
-                            type="date"
-                            value={searchFilters.during ?? ''}
-                            onChange={(event) => {
-                              const value = event.target.value || undefined;
-                              setSearchFilters((current) => ({
-                                ...current,
-                                during: value,
-                                on: value ? undefined : current.on,
-                              }));
-                            }}
-                            className={searchInputClass}
-                          />
-                        </SearchField>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <SearchField label="Filename">
-                          <input
-                            ref={(element) => {
-                              searchFieldRefs.current.filename = element;
-                            }}
-                            type="text"
-                            value={searchFilters.filename ?? ''}
-                            onChange={(event) => updateSearchFilter('filename', event.target.value || undefined)}
-                            placeholder="clip, export"
-                            className={searchInputClass}
-                          />
-                        </SearchField>
-
-                        <SearchField label="Extension">
-                          <input
-                            ref={(element) => {
-                              searchFieldRefs.current.ext = element;
-                            }}
-                            type="text"
-                            value={searchFilters.ext ?? ''}
-                            onChange={(event) => updateSearchFilter('ext', event.target.value || undefined)}
-                            placeholder="png, mp4"
-                            className={searchInputClass}
-                          />
-                        </SearchField>
-                      </div>
-
-                      <SearchField label="Limit">
-                        <select
-                          value={searchFilters.limit ?? 25}
-                          onChange={(event) => updateSearchFilter('limit', Number(event.target.value))}
-                          className={searchSelectClass}
-                        >
-                          <option value={25}>25 results</option>
-                          <option value={50}>50 results</option>
-                          <option value={100}>100 results</option>
-                        </select>
-                      </SearchField>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <label className="inline-flex items-center gap-2 text-sm text-[#dbdee1]">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(searchFilters.pinned)}
-                          onChange={(event) => updateSearchFilter('pinned', event.target.checked || undefined)}
-                          className="h-4 w-4 rounded border-[#4f545c] bg-[#17181c]"
-                        />
-                        Pinned only
-                      </label>
-                      <label className="inline-flex items-center gap-2 text-sm text-[#dbdee1]">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(searchFilters.link)}
-                          onChange={(event) => updateSearchFilter('link', event.target.checked || undefined)}
-                          className="h-4 w-4 rounded border-[#4f545c] bg-[#17181c]"
-                        />
-                        Contains link
-                      </label>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between border-t border-white/6 px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={resetSearch}
-                      className="rounded-md px-2.5 py-1 text-xs font-semibold text-[#b5bac1] transition-colors hover:bg-[#232428] hover:text-[#f2f3f5]"
-                    >
-                      Reset
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSearchPopover(null);
-                        void runSearch();
-                      }}
-                      className="inline-flex items-center gap-1 rounded-md bg-[#5865f2] px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-[#4752c4]"
-                    >
-                      <IconSearch className="h-3.5 w-3.5" />
-                      Search
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-
-              {searchPopover === 'sort' ? (
-                <div className="absolute right-4 top-[calc(100%+8px)] z-20 w-[180px] overflow-hidden rounded-xl border border-[#232428] bg-[#111214] p-1.5 shadow-[0_18px_48px_rgba(0,0,0,0.45)]">
-                  {([
-                    ['newest', 'Newest'],
-                    ['oldest', 'Oldest'],
-                  ] as const).map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => {
-                        setSearchSortOrder(value);
-                        setSearchPopover(null);
-                      }}
-                      className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${searchSortOrder === value ? 'bg-[#232428] text-[#f2f3f5]' : 'text-[#b5bac1] hover:bg-[#1a1b1e] hover:text-[#f2f3f5]'}`}
-                    >
-                      <span>{label}</span>
-                      {searchSortOrder === value ? <IconCheck className="h-3.5 w-3.5" /> : null}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-3 py-3">
-              {searchLoading ? (
-                <div className="space-y-4">
-                  {[0, 1, 2, 3].map((item) => (
-                    <div key={item} className="space-y-2">
-                      <div className="h-3 w-28 animate-pulse rounded-full bg-[#1b1d22]" />
-                      <div className="h-20 animate-pulse rounded-[8px] bg-[#17181c]" />
-                    </div>
-                  ))}
-                </div>
-              ) : searchError ? (
-                <EmptyPanelState
-                  title="Search failed"
-                  description={searchError}
-                  icon={<IconSearch className="h-5 w-5" />}
-                />
-              ) : searchResultSections.length > 0 ? (
-                <div className="space-y-4">
-                  {searchResultSections.map((section, index) => (
-                    <div key={`${section.key}-${index}`} className="space-y-2">
-                      <div className="flex items-center gap-1.5 px-1 text-[12px] font-semibold text-[#dcddde]">
-                        <span className="text-[#b9bbbe]">#</span>
-                        <span>{section.streamName}</span>
-                        {section.categoryName ? (
-                          <>
-                            <IconFolder className="ml-1 h-3.5 w-3.5 text-[#72767d]" />
-                            <span className="truncate text-[11px] font-medium text-[#8e9297]">{section.categoryName}</span>
-                          </>
-                        ) : null}
-                      </div>
-                      <div className="space-y-2">
-                        {section.messages.map((message) => (
-                          <SearchResultCard
-                            key={message.id}
-                            message={message}
-                            query={searchQuery}
-                            onOpen={() => void openStreamMessage(message)}
-                          />
+                    <SearchField label="Author">
+                      <select
+                        ref={(element) => {
+                          searchFieldRefs.current.author_id = element;
+                        }}
+                        value={searchFilters.author_id ?? ''}
+                        onChange={(event) => updateSearchFilter('author_id', event.target.value || undefined)}
+                        className={searchSelectClass}
+                      >
+                        <option value="">Anyone</option>
+                        {(isDMMode ? dmSearchAuthorOptions : memberOptions).map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {getUserLabel(member)}
+                          </option>
                         ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : searchPerformed ? (
-                <EmptyPanelState
-                  title="No messages matched"
-                  description="Adjust the filters or broaden the query and try again."
-                  icon={<IconSearch className="h-5 w-5" />}
-                />
-              ) : (
-                <EmptyPanelState
-                  title="Search the server"
-                  description="Type in the search box or open filters to narrow down results by channel, author, file, or date."
-                  icon={<IconSearch className="h-5 w-5" />}
-                />
-              )}
-            </div>
-          </div>
-        ) : null}
+                      </select>
+                    </SearchField>
 
+                    {!isDMMode ? (
+                      <>
+                        <SearchField label="Author Type">
+                          <select
+                            ref={(element) => {
+                              searchFieldRefs.current.author_type = element;
+                            }}
+                            value={searchFilters.author_type ?? ''}
+                            onChange={(event) => updateSearchFilter('author_type', (event.target.value || undefined) as MessageSearchFilters['author_type'])}
+                            className={searchSelectClass}
+                          >
+                            <option value="">Any</option>
+                            <option value="user">User</option>
+                            <option value="bot">Bot</option>
+                            <option value="webhook">Webhook</option>
+                          </select>
+                        </SearchField>
+
+                        <SearchField label="Mentions Username">
+                          <>
+                            <input
+                              ref={(element) => {
+                                searchFieldRefs.current.mentions = element;
+                              }}
+                              type="text"
+                              list="search-sidebar-mention-usernames"
+                              value={searchFilters.mentions ?? ''}
+                              onChange={(event) => updateSearchFilter('mentions', event.target.value || undefined)}
+                              placeholder="username"
+                              className={searchInputClass}
+                            />
+                            <datalist id="search-sidebar-mention-usernames">
+                              {memberOptions.map((member) => (
+                                <option key={member.id} value={member.username} />
+                              ))}
+                            </datalist>
+                          </>
+                        </SearchField>
+                      </>
+                    ) : null}
+
+                    <SearchField label="Has">
+                      <select
+                        ref={(element) => {
+                          searchFieldRefs.current.has = element;
+                        }}
+                        value={searchFilters.has ?? ''}
+                        onChange={(event) => updateSearchFilter('has', (event.target.value || undefined) as MessageSearchFilters['has'])}
+                        className={searchSelectClass}
+                      >
+                        <option value="">Anything</option>
+                        <option value="file">File</option>
+                        <option value="image">Image</option>
+                        <option value="video">Video</option>
+                        <option value="audio">Audio</option>
+                        <option value="link">Link</option>
+                      </select>
+                    </SearchField>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <SearchField label="Before">
+                        <input
+                          ref={(element) => {
+                            searchFieldRefs.current.before = element;
+                          }}
+                          type="date"
+                          value={searchFilters.before ?? ''}
+                          onChange={(event) => updateSearchFilter('before', event.target.value || undefined)}
+                          className={searchInputClass}
+                        />
+                      </SearchField>
+
+                      <SearchField label="After">
+                        <input
+                          ref={(element) => {
+                            searchFieldRefs.current.after = element;
+                          }}
+                          type="date"
+                          value={searchFilters.after ?? ''}
+                          onChange={(event) => updateSearchFilter('after', event.target.value || undefined)}
+                          className={searchInputClass}
+                        />
+                      </SearchField>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <SearchField label="On">
+                        <input
+                          ref={(element) => {
+                            searchFieldRefs.current.on = element;
+                          }}
+                          type="date"
+                          value={searchFilters.on ?? ''}
+                          onChange={(event) => {
+                            const value = event.target.value || undefined;
+                            setSearchFilters((current) => ({
+                              ...current,
+                              on: value,
+                              during: value ? undefined : current.during,
+                            }));
+                          }}
+                          className={searchInputClass}
+                        />
+                      </SearchField>
+
+                      <SearchField label="During">
+                        <input
+                          ref={(element) => {
+                            searchFieldRefs.current.during = element;
+                          }}
+                          type="date"
+                          value={searchFilters.during ?? ''}
+                          onChange={(event) => {
+                            const value = event.target.value || undefined;
+                            setSearchFilters((current) => ({
+                              ...current,
+                              during: value,
+                              on: value ? undefined : current.on,
+                            }));
+                          }}
+                          className={searchInputClass}
+                        />
+                      </SearchField>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <SearchField label="Filename">
+                        <input
+                          ref={(element) => {
+                            searchFieldRefs.current.filename = element;
+                          }}
+                          type="text"
+                          value={searchFilters.filename ?? ''}
+                          onChange={(event) => updateSearchFilter('filename', event.target.value || undefined)}
+                          placeholder="clip, export"
+                          className={searchInputClass}
+                        />
+                      </SearchField>
+
+                      <SearchField label="Extension">
+                        <input
+                          ref={(element) => {
+                            searchFieldRefs.current.ext = element;
+                          }}
+                          type="text"
+                          value={searchFilters.ext ?? ''}
+                          onChange={(event) => updateSearchFilter('ext', event.target.value || undefined)}
+                          placeholder="png, mp4"
+                          className={searchInputClass}
+                        />
+                      </SearchField>
+                    </div>
+
+                    <SearchField label="Limit">
+                      <select
+                        value={searchFilters.limit ?? 25}
+                        onChange={(event) => updateSearchFilter('limit', Number(event.target.value))}
+                        className={searchSelectClass}
+                      >
+                        <option value={25}>25 results</option>
+                        <option value={50}>50 results</option>
+                        <option value={100}>100 results</option>
+                      </select>
+                    </SearchField>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <label className="inline-flex items-center gap-2 text-sm text-[#dbdee1]">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(searchFilters.pinned)}
+                        onChange={(event) => updateSearchFilter('pinned', event.target.checked || undefined)}
+                        className="h-4 w-4 rounded border-[#4f545c] bg-[#17181c]"
+                      />
+                      Pinned only
+                    </label>
+                    <label className="inline-flex items-center gap-2 text-sm text-[#dbdee1]">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(searchFilters.link)}
+                        onChange={(event) => updateSearchFilter('link', event.target.checked || undefined)}
+                        className="h-4 w-4 rounded border-[#4f545c] bg-[#17181c]"
+                      />
+                      Contains link
+                    </label>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={resetSearch}
+                    className="rounded-md px-2.5 py-1 text-xs font-semibold text-[#b5bac1] transition-colors hover:bg-[#232428] hover:text-[#f2f3f5]"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchPopover(null);
+                      void runSearch();
+                    }}
+                    className="inline-flex items-center gap-1 rounded-md bg-[#5865f2] px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-[#4752c4]"
+                  >
+                    <IconSearch className="h-3.5 w-3.5" />
+                    Search
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {searchPopover === 'sort' ? (
+              <div className="absolute right-4 top-[calc(100%+8px)] z-20 w-[180px] overflow-hidden rounded-xl bg-riftapp-panel p-1.5 shadow-modal">
+                {([
+                  ['newest', 'Newest'],
+                  ['oldest', 'Oldest'],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => {
+                      setSearchSortOrder(value);
+                      setSearchPopover(null);
+                    }}
+                    className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${searchSortOrder === value ? 'bg-[#232428] text-[#f2f3f5]' : 'text-[#b5bac1] hover:bg-[#1a1b1e] hover:text-[#f2f3f5]'}`}
+                  >
+                    <span>{label}</span>
+                    {searchSortOrder === value ? <IconCheck className="h-3.5 w-3.5" /> : null}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-3 py-3">
+            {searchLoading ? (
+              <div className="space-y-4">
+                {[0, 1, 2, 3].map((item) => (
+                  <div key={item} className="space-y-2">
+                    <div className="h-3 w-28 animate-pulse rounded-full bg-[#1b1d22]" />
+                    <div className="h-20 animate-pulse rounded-[8px] bg-[#17181c]" />
+                  </div>
+                ))}
+              </div>
+            ) : searchError ? (
+              <EmptyPanelState
+                title="Search failed"
+                description={searchError}
+                icon={<IconSearch className="h-5 w-5" />}
+              />
+            ) : searchResultSections.length > 0 ? (
+              <div className="space-y-4">
+                {searchResultSections.map((section, index) => (
+                  <div key={`${section.key}-${index}`} className="space-y-2">
+                    <div className="flex items-center gap-1.5 px-1 text-[12px] font-semibold text-[#dcddde]">
+                      <span className="text-[#b9bbbe]">#</span>
+                      <span>{section.streamName}</span>
+                      {section.categoryName ? (
+                        <>
+                          <IconFolder className="ml-1 h-3.5 w-3.5 text-[#72767d]" />
+                          <span className="truncate text-[11px] font-medium text-[#8e9297]">{section.categoryName}</span>
+                        </>
+                      ) : null}
+                    </div>
+                    <div className="space-y-2">
+                      {section.messages.map((message) => (
+                        <SearchResultCard
+                          key={message.id}
+                          message={message}
+                          query={searchQuery}
+                          onOpen={() => void openStreamMessage(message)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : isDMMode && sortedSearchResults.length > 0 ? (
+              <div className="space-y-2">
+                {sortedSearchResults.map((message) => (
+                  <SearchResultCard
+                    key={message.id}
+                    message={message}
+                    query={searchQuery}
+                    onOpen={() => void openConversationMessage(message)}
+                  />
+                ))}
+              </div>
+            ) : searchPerformed ? (
+              <EmptyPanelState
+                title="No messages matched"
+                description="Adjust the filters or broaden the query and try again."
+                icon={<IconSearch className="h-5 w-5" />}
+              />
+            ) : (
+              <EmptyPanelState
+                title={isDMMode ? 'Search this conversation' : 'Search the server'}
+                description={isDMMode ? `Type in the search box or open filters to narrow down results with ${activeConversationLabel}.` : 'Type in the search box or open filters to narrow down results by channel, author, file, or date.'}
+                icon={<IconSearch className="h-5 w-5" />}
+              />
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Messages */}
+      <div className="flex-1 overflow-hidden relative">
         {activePanel && activePanel !== 'search' ? (
           <div ref={floatingPanelRef} className="absolute right-4 top-3 z-30">
-            {activePanel === 'notifications' && canShowChannelTools ? (
+            {activePanel === 'notifications' && canShowNotificationTools ? (
               <FloatingPanel
                 title="Notification Settings"
                 subtitle={streamNotifSettings ? `${notifLevelSubtitle(streamNotifSettings.notification_level)} for #${activeStream?.name ?? 'channel'}` : `Controls for #${activeStream?.name ?? 'channel'}`}
@@ -1929,7 +2098,7 @@ export default function ChatPanel({
               </FloatingPanel>
             ) : null}
 
-            {activePanel === 'pins' && canShowChannelTools ? (
+            {activePanel === 'pins' && canShowPinnedTools ? (
               <FloatingPanel
                 title={(
                   <span className="inline-flex items-center gap-2">
@@ -1937,7 +2106,7 @@ export default function ChatPanel({
                     <span>Pinned Messages</span>
                   </span>
                 )}
-                subtitle={activeStream ? `#${activeStream.name}` : 'Current channel'}
+                subtitle={isDMMode ? activeConversationLabel : activeStream ? `#${activeStream.name}` : 'Current channel'}
                 widthClass="w-[360px]"
                 contentClassName="max-h-[min(72vh,680px)] overflow-y-auto px-2.5 py-3"
                 showHeaderDivider={false}
@@ -1973,14 +2142,14 @@ export default function ChatPanel({
                         message={message}
                         isOwn={message.author_id === user?.id}
                         hubId={activeHubId}
-                        onOpen={() => void openStreamMessage(message)}
+                        onOpen={() => void (isDMMode ? openPinnedMessageFromTimeline(message.id) : openStreamMessage(message))}
                       />
                     ))}
                   </div>
                 ) : (
                   <EmptyPanelState
                     title="No pinned messages"
-                    description="Pin a message from its context menu and it will show up here."
+                    description={isDMMode ? 'Pin a DM from its context menu and it will show up here.' : 'Pin a message from its context menu and it will show up here.'}
                     icon={<IconPin className="h-5 w-5" />}
                   />
                 )}
@@ -2088,7 +2257,7 @@ export default function ChatPanel({
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
           </button>
         )}
-        <div ref={scrollContainerRef} onScroll={handleScroll} className={`h-full overflow-y-auto ${searchSidebarOpen ? 'pr-[332px]' : ''}`}>
+        <div ref={scrollContainerRef} onScroll={handleScroll} className="h-full overflow-y-auto">
         {isLoading ? (
           <div className="px-4 py-4 space-y-4 animate-fade-in">
             {[...Array(6)].map((_, i) => (
@@ -2118,9 +2287,9 @@ export default function ChatPanel({
               </div>
               {isDMMode ? (
                 <>
-                  <h3 className="text-xl font-bold mb-1">{activeConversation?.recipient?.display_name}</h3>
+                  <h3 className="text-xl font-bold mb-1">{activeConversationLabel}</h3>
                   <p className="text-riftapp-text-dim text-sm max-w-sm">
-                    This is the beginning of your conversation with <span className="font-semibold text-riftapp-text">{activeConversation?.recipient?.display_name}</span>.
+                    This is the beginning of your conversation with <span className="font-semibold text-riftapp-text">{activeConversationLabel}</span>.
                   </p>
                 </>
               ) : (
@@ -2211,14 +2380,14 @@ export default function ChatPanel({
 
       {/* Typing indicator + Input */}
       {!showWelcome && activeStreamId ? (
-        <div className={searchSidebarOpen ? 'mr-[320px]' : undefined}>
+        <div>
           <TypingIndicator streamId={activeStreamId} />
         </div>
       ) : null}
       {!showWelcome ? (
-        <div className={searchSidebarOpen ? 'mr-[320px]' : undefined}>
+        <div>
           <MessageInput
-            streamName={isDMMode ? (activeConversation?.recipient?.display_name || '') : (activeStream?.name || '')}
+            streamName={isDMMode ? activeConversationLabel : (activeStream?.name || '')}
             onTyping={isDMMode ? undefined : onTyping}
             onTypingStop={isDMMode ? undefined : onTypingStop}
             isDMMode={isDMMode}
@@ -2227,6 +2396,13 @@ export default function ChatPanel({
           />
         </div>
       ) : null}
+
+	  {showAddFriendsModal && activeConversation ? (
+		  <AddFriendsToDMModal
+			  conversation={activeConversation}
+			  onClose={() => setShowAddFriendsModal(false)}
+		  />
+	  ) : null}
     </div>
   );
 }

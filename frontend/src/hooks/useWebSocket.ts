@@ -116,9 +116,15 @@ export function useWebSocket() {
           case 'message_create':
             useMessageStore.getState().addMessage(evt.d as Message);
             break;
-          case 'message_update':
-            useMessageStore.getState().updateMessage(evt.d as Message);
+          case 'message_update': {
+            const nextMessage = evt.d as Message;
+            if (nextMessage.conversation_id) {
+              useDMStore.getState().updateDMMessage(nextMessage);
+            } else {
+              useMessageStore.getState().updateMessage(nextMessage);
+            }
             break;
+          }
           case 'message_delete': {
             const d = evt.d as { id: string; stream_id?: string; conversation_id?: string };
             if (d.stream_id) {

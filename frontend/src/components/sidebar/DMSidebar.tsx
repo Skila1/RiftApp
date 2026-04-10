@@ -1,20 +1,94 @@
 import { useEffect, useState, useRef } from 'react';
 import { useDMStore } from '../../stores/dmStore';
+import { useAuthStore } from '../../stores/auth';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useFriendStore } from '../../stores/friendStore';
 import { api } from '../../api/client';
-import type { User } from '../../types';
+import type { Conversation, User } from '../../types';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { normalizeUser } from '../../utils/entityAssets';
+import {
+  getConversationOtherMembers,
+  getConversationTitle,
+  isGroupConversation,
+} from '../../utils/conversations';
 import StatusDot from '../shared/StatusDot';
 import BotBadge from '../shared/BotBadge';
+
+function AvatarCircle({
+  user,
+  sizeClass = 'w-8 h-8',
+  textClass = 'text-xs',
+  ringClassName = '',
+}: {
+  user?: User;
+  sizeClass?: string;
+  textClass?: string;
+  ringClassName?: string;
+}) {
+  if (user?.avatar_url) {
+    return (
+      <img
+        src={publicAssetUrl(user.avatar_url)}
+        alt=""
+        className={`${sizeClass} rounded-full object-cover ${ringClassName}`.trim()}
+      />
+    );
+  }
+
+  return (
+    <div className={`${sizeClass} rounded-full bg-riftapp-accent/20 flex items-center justify-center font-semibold text-riftapp-accent ${textClass} ${ringClassName}`.trim()}>
+      {(user?.display_name || user?.username || '?').slice(0, 2).toUpperCase()}
+    </div>
+  );
+}
+
+function ConversationAvatar({
+  conversation,
+  viewerUserId,
+  fallbackStatus,
+}: {
+  conversation: Conversation;
+  viewerUserId?: string | null;
+  fallbackStatus?: number;
+}) {
+  const otherMembers = getConversationOtherMembers(conversation, viewerUserId);
+
+  if (otherMembers.length <= 1) {
+    const member = otherMembers[0] ?? conversation.recipient;
+    return (
+      <div className="relative flex-shrink-0">
+        <AvatarCircle user={member} />
+        <StatusDot
+          userId={member?.id}
+          fallbackStatus={fallbackStatus}
+          className="absolute -bottom-0.5 -right-0.5 ring-2 ring-riftapp-chrome"
+        />
+      </div>
+    );
+  }
+
+  const avatarMembers = otherMembers.slice(0, 2);
+  return (
+    <div className="relative h-8 w-8 flex-shrink-0">
+      <div className="absolute left-0 top-0">
+        <AvatarCircle user={avatarMembers[0]} sizeClass="h-[19px] w-[19px]" textClass="text-[9px]" ringClassName="ring-2 ring-riftapp-chrome" />
+      </div>
+      <div className="absolute bottom-0 right-0">
+        <AvatarCircle user={avatarMembers[1]} sizeClass="h-[19px] w-[19px]" textClass="text-[9px]" ringClassName="ring-2 ring-riftapp-chrome" />
+      </div>
+    </div>
+  );
+}
 
 export default function DMSidebar() {
   const conversations = useDMStore((s) => s.conversations);
   const activeConversationId = useDMStore((s) => s.activeConversationId);
   const setActiveConversation = useDMStore((s) => s.setActiveConversation);
+  const openDM = useDMStore((s) => s.openDM);
   const loadConversations = useDMStore((s) => s.loadConversations);
   const ackDM = useDMStore((s) => s.ackDM);
+  const currentUserId = useAuthStore((s) => s.user?.id);
   const presence = usePresenceStore((s) => s.presence);
   const pendingCount = useFriendStore((s) => s.pendingCount);
   const loadPendingCount = useFriendStore((s) => s.loadPendingCount);
@@ -53,9 +127,7 @@ export default function DMSidebar() {
   const handleOpenDM = async (userId: string) => {
     setOpening(true);
     try {
-      const conv = await api.createOrOpenDM(userId);
-      await loadConversations();
-      setActiveConversation(conv.id);
+      await openDM(userId);
       setShowSearch(false);
       setSearchQuery('');
       setSearchResult(null);
@@ -201,7 +273,11 @@ export default function DMSidebar() {
           <div className="space-y-0.5">
             {conversations.map((conv) => {
               const isActive = conv.id === activeConversationId;
-              const recipientStatus = presence[conv.recipient.id] ?? conv.recipient.status;
+              const otherMembers = getConversationOtherMembers(conv, currentUserId);
+              const primaryMember = otherMembers[0] ?? conv.recipient;
+              const recipientStatus = primaryMember ? (presence[primaryMember.id] ?? primaryMember.status) : undefined;
+              const conversationTitle = getConversationTitle(conv, currentUserId);
+              const isGroupDm = isGroupConversation(conv, currentUserId);
 
               return (
                 <button
@@ -216,31 +292,18 @@ export default function DMSidebar() {
                       : 'text-riftapp-text-muted hover:bg-riftapp-chrome-hover/80 hover:text-riftapp-text'
                   }`}
                 >
-                  {/* Avatar */}
-                  <div className="relative flex-shrink-0">
-                    <div className="w-8 h-8 rounded-full bg-riftapp-accent/20 flex items-center justify-center text-xs font-semibold text-riftapp-accent">
-                      {conv.recipient.avatar_url ? (
-                        <img
-                          src={publicAssetUrl(conv.recipient.avatar_url)}
-                          alt=""
-                          className="w-8 h-8 rounded-full object-cover"
-                        />
-                      ) : (
-                        conv.recipient.display_name.slice(0, 2).toUpperCase()
-                      )}
-                    </div>
-                    <StatusDot
-                      userId={conv.recipient.id}
-                      fallbackStatus={recipientStatus}
-                      className="absolute -bottom-0.5 -right-0.5 ring-2 ring-riftapp-chrome"
-                    />
-                  </div>
+                  <ConversationAvatar conversation={conv} viewerUserId={currentUserId} fallbackStatus={recipientStatus} />
 
                   {/* Name + last message */}
                   <div className="flex-1 min-w-0 text-left">
                     <div className="text-sm font-medium truncate flex items-center gap-1.5">
-                      <span className="truncate">{conv.recipient.display_name}</span>
-                      {conv.recipient.is_bot && <BotBadge />}
+                      <span className="truncate">{conversationTitle}</span>
+                      {!isGroupDm && primaryMember?.is_bot && <BotBadge />}
+                      {isGroupDm ? (
+                        <span className="rounded-full bg-riftapp-content-elevated px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-riftapp-text-dim">
+                          Group
+                        </span>
+                      ) : null}
                     </div>
                     {conv.last_message && (
                       <div className="text-xs text-riftapp-text-dim truncate">

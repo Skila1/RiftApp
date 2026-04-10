@@ -9,6 +9,7 @@ import {
   session,
   desktopCapturer,
 } from "electron";
+import { execFileSync } from "child_process";
 import os from "os";
 import path from "path";
 import fs from "fs";
@@ -48,6 +49,22 @@ type DesktopDisplaySource = {
   appIconDataUrl: string | null;
 };
 
+type DesktopDateTimePreferences = {
+  locale: string;
+  shortDatePattern: string | null;
+  longDatePattern: string | null;
+  shortTimePattern: string | null;
+  uses24HourClock: boolean | null;
+};
+
+type WindowsInternationalValueName =
+  | "LocaleName"
+  | "sShortDate"
+  | "sLongDate"
+  | "sShortTime"
+  | "sTimeFormat"
+  | "iTime";
+
 const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
 const appVersion = app.getVersion();
 
@@ -71,6 +88,7 @@ let updateStatus: DesktopUpdateStatus = {
   message: "",
 };
 let pendingDisplaySourceId: string | null = null;
+let desktopDateTimePreferencesCache: DesktopDateTimePreferences | null = null;
 
 // ── Paths ──────────────────────────────────────────────────
 
@@ -85,6 +103,115 @@ function getPreloadPath(): string {
 
 function getAppIcon(): Electron.NativeImage {
   return nativeImage.createFromPath(getAssetPath("icon.png"));
+}
+
+function normalizePattern(value: string | null | undefined): string | null {
+  const pattern = value?.trim();
+  return pattern && pattern.length > 0 ? pattern : null;
+}
+
+function getSystemLocale(): string {
+  try {
+    const preferred = app.getPreferredSystemLanguages();
+    if (preferred.length > 0 && preferred[0]?.trim()) {
+      return preferred[0];
+    }
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    const locale = app.getLocale();
+    if (locale?.trim()) {
+      return locale;
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return Intl.DateTimeFormat().resolvedOptions().locale || "en-US";
+}
+
+function readWindowsInternationalValues(): Partial<Record<WindowsInternationalValueName, string>> | null {
+  if (process.platform !== "win32") {
+    return null;
+  }
+
+  try {
+    const output = execFileSync("reg.exe", ["query", "HKCU\\Control Panel\\International"], {
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 1500,
+    });
+
+    const values: Partial<Record<WindowsInternationalValueName, string>> = {};
+    for (const rawLine of output.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line) {
+        continue;
+      }
+
+      const match = line.match(/^([^\s]+)\s+REG_\w+\s+(.*)$/);
+      if (!match) {
+        continue;
+      }
+
+      const [, name, value] = match;
+      if (
+        name === "LocaleName"
+        || name === "sShortDate"
+        || name === "sLongDate"
+        || name === "sShortTime"
+        || name === "sTimeFormat"
+        || name === "iTime"
+      ) {
+        values[name] = value.trim();
+      }
+    }
+
+    return values;
+  } catch (error) {
+    console.warn("[Rift] Failed to read Windows international settings:", error);
+    return null;
+  }
+}
+
+function readDesktopDateTimePreferences(): DesktopDateTimePreferences {
+  const locale = getSystemLocale();
+
+  if (process.platform !== "win32") {
+    return {
+      locale,
+      shortDatePattern: null,
+      longDatePattern: null,
+      shortTimePattern: null,
+      uses24HourClock: null,
+    };
+  }
+
+  const values = readWindowsInternationalValues();
+  const shortTimePattern = normalizePattern(values?.sShortTime) ?? normalizePattern(values?.sTimeFormat);
+  const iTimeValue = values?.iTime?.trim();
+
+  return {
+    locale: values?.LocaleName?.trim() || locale,
+    shortDatePattern: normalizePattern(values?.sShortDate),
+    longDatePattern: normalizePattern(values?.sLongDate),
+    shortTimePattern,
+    uses24HourClock: iTimeValue === "1"
+      ? true
+      : iTimeValue === "0"
+        ? false
+        : null,
+  };
+}
+
+function getDesktopDateTimePreferences(): DesktopDateTimePreferences {
+  if (!desktopDateTimePreferencesCache) {
+    desktopDateTimePreferencesCache = readDesktopDateTimePreferences();
+  }
+
+  return desktopDateTimePreferencesCache;
 }
 
 function isTrustedRendererOrigin(rawUrl: string | null | undefined): boolean {
@@ -236,6 +363,44 @@ function clearUpdateStatusResetTimer(): void {
   if (updateStatusResetTimer) {
     clearTimeout(updateStatusResetTimer);
     updateStatusResetTimer = null;
+  }
+}
+
+function buildCacheBustedUrl(rawUrl: string): string {
+  try {
+    const url = new URL(rawUrl);
+    url.searchParams.set("riftappDesktopRefresh", String(Date.now()));
+    return url.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
+async function reloadFrontendIgnoringCache(webContents: Electron.WebContents): Promise<boolean> {
+  const currentUrl = webContents.getURL();
+  if (!isTrustedRendererOrigin(currentUrl)) {
+    return false;
+  }
+
+  try {
+    await webContents.session.clearCache();
+  } catch (error) {
+    console.warn("[Rift] Failed to clear renderer cache before frontend reload:", error);
+  }
+
+  try {
+    await webContents.loadURL(buildCacheBustedUrl(currentUrl), {
+      extraHeaders: "pragma: no-cache\ncache-control: no-cache",
+    });
+    return true;
+  } catch (error) {
+    console.warn("[Rift] Failed to reload frontend after clearing cache:", error);
+    try {
+      webContents.reloadIgnoringCache();
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 
@@ -521,6 +686,7 @@ function registerIpc(): void {
       ? `${os.version()} (${os.release()})`
       : os.release(),
   }));
+  ipcMain.handle("app:get-date-time-preferences", () => getDesktopDateTimePreferences());
   ipcMain.handle("app:get-update-status", () => updateStatus);
   ipcMain.handle("app:is-update-ready", () => updateReady);
   ipcMain.handle("app:check-for-updates", async () => {
@@ -542,6 +708,10 @@ function registerIpc(): void {
 
   ipcMain.on("app:restart-to-update", () => {
     restartToApplyUpdate();
+  });
+
+  ipcMain.handle("app:reload-frontend-ignoring-cache", async (event) => {
+    return reloadFrontendIgnoringCache(event.sender);
   });
 
   ipcMain.handle("desktop:list-display-sources", async (event) => {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { adminApi } from '../../api/adminClient';
 import type { Report } from '../../types';
+import { formatShortDateTime } from '../../utils/dateTime';
 
 const STATUS_COLORS: Record<string, string> = {
   open: 'bg-yellow-500/20 text-yellow-400', reviewing: 'bg-blue-500/20 text-blue-400',
@@ -119,7 +120,7 @@ export default function ReportsPage() {
               <div className="flex items-center gap-3 mb-2">
                 <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${STATUS_COLORS[r.status] || 'bg-gray-500/20 text-gray-400'}`}>{r.status}</span>
                 <span className="text-xs text-[#949ba4] px-2 py-0.5 rounded bg-white/5">{CATEGORY_LABELS[r.category] || r.category}</span>
-                <span className="text-xs text-[#949ba4] ml-auto">{new Date(r.created_at).toLocaleString()}</span>
+                <span className="text-xs text-[#949ba4] ml-auto">{formatShortDateTime(r.created_at)}</span>
               </div>
               <p className="text-sm"><span className="text-[#949ba4]">Reporter:</span> {r.reporter_name || r.reporter_id.slice(0, 8)}
                 {r.reported_name && <> <span className="text-[#949ba4] ml-3">Reported:</span> {r.reported_name}</>}

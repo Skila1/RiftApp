@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { adminApi, type AdminUser } from '../../api/adminClient';
+import { formatShortDate } from '../../utils/dateTime';
 
 export default function UsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -103,7 +104,7 @@ export default function UsersPage() {
                       {u.is_bot && <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase bg-[#5865f2]/20 text-[#5865f2] rounded">BOT</span>}
                       {u.banned_at && <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase bg-[#ed4245]/20 text-[#ed4245] rounded">BANNED</span>}
                     </div>
-                    <p className="text-xs text-[#949ba4]">{u.email || 'No email'} &middot; Joined {new Date(u.created_at).toLocaleDateString()}</p>
+                    <p className="text-xs text-[#949ba4]">{u.email || 'No email'} &middot; Joined {formatShortDate(u.created_at)}</p>
                   </div>
                   <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${u.status > 0 ? 'bg-[#57f287]' : 'bg-[#949ba4]'}`} />
                 </div>

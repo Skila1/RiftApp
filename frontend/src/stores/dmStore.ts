@@ -17,18 +17,23 @@ interface DMState {
   dmMessages: Message[];
   dmMessagesLoading: boolean;
   dmTotalUnread: number;
+  dmPinMutationVersion: number;
 
   loadConversations: () => Promise<void>;
   openDM: (recipientId: string) => Promise<void>;
+  openGroupDM: (memberIds: string[]) => Promise<Conversation>;
   setActiveConversation: (convId: string) => Promise<void>;
   clearActive: () => void;
   loadDMMessages: (convId: string, opts?: { silent?: boolean }) => Promise<void>;
   ensureMessageLoaded: (convId: string, messageId: string) => Promise<boolean>;
   sendDMMessage: (content: string, attachmentIds?: string[], replyToMessageId?: string) => Promise<void>;
   addDMMessage: (message: Message) => void;
+  updateDMMessage: (message: Message) => void;
   removeDMMessage: (messageId: string) => void;
   deleteDMMessage: (messageId: string) => Promise<void>;
   editDMMessage: (messageId: string, content: string) => Promise<void>;
+  pinMessage: (messageId: string) => Promise<Message>;
+  unpinMessage: (messageId: string) => Promise<Message>;
   addConversation: (conv: Conversation) => void;
   ackDM: (convId: string) => Promise<void>;
   readStates: () => Promise<void>;
@@ -44,6 +49,7 @@ export const useDMStore = create<DMState>((set, get) => ({
   dmMessages: [],
   dmMessagesLoading: false,
   dmTotalUnread: 0,
+  dmPinMutationVersion: 0,
 
   loadConversations: async () => {
     try {
@@ -66,10 +72,32 @@ export const useDMStore = create<DMState>((set, get) => ({
     set((s) => {
       const exists = s.conversations.some((c) => c.id === conv.id);
       return {
-        conversations: exists ? s.conversations : [conv, ...s.conversations],
+        conversations: exists
+          ? s.conversations.map((conversation) => (conversation.id === conv.id ? { ...conversation, ...conv } : conversation))
+          : [conv, ...s.conversations],
       };
     });
     await get().setActiveConversation(conv.id);
+  },
+
+  openGroupDM: async (memberIds) => {
+    const conv = normalizeConversation(await api.createOrOpenGroupDM(memberIds));
+    set((s) => {
+      const exists = s.conversations.some((c) => c.id === conv.id);
+      const conversations = exists
+        ? s.conversations.map((conversation) => {
+            if (conversation.id !== conv.id) return conversation;
+            return {
+              ...conversation,
+              ...conv,
+              unread_count: conversation.unread_count ?? conv.unread_count ?? 0,
+            };
+          })
+        : [{ ...conv, unread_count: 0 }, ...s.conversations];
+      return { conversations, dmTotalUnread: sumDmUnreads(conversations) };
+    });
+    await get().setActiveConversation(conv.id);
+    return conv;
   },
 
   setActiveConversation: async (convId) => {
@@ -194,6 +222,19 @@ export const useDMStore = create<DMState>((set, get) => ({
     });
   },
 
+  updateDMMessage: (message) => {
+	  const nextMessage = normalizeMessage(message);
+	  set((s) => ({
+		  dmMessages: s.dmMessages.map((m) => (m.id === nextMessage.id ? nextMessage : m)),
+		  conversations: s.conversations.map((conversation) => {
+			  if (conversation.id !== nextMessage.conversation_id) return conversation;
+			  const currentLastMessage = conversation.last_message;
+			  if (currentLastMessage?.id !== nextMessage.id) return conversation;
+			  return { ...conversation, last_message: nextMessage };
+		  }),
+	  }));
+  },
+
   removeDMMessage: (messageId) => {
     set((s) => ({
       dmMessages: s.dmMessages.filter((m) => m.id !== messageId),
@@ -207,16 +248,37 @@ export const useDMStore = create<DMState>((set, get) => ({
 
   editDMMessage: async (messageId, content) => {
     const msg = normalizeMessage(await api.editMessage(messageId, content));
-    set((s) => ({
-      dmMessages: s.dmMessages.map((m) => (m.id === messageId ? msg : m)),
-    }));
+    get().updateDMMessage(msg);
+  },
+
+  pinMessage: async (messageId) => {
+	  const msg = normalizeMessage(await api.pinMessage(messageId));
+	  set((s) => ({ dmPinMutationVersion: s.dmPinMutationVersion + 1 }));
+	  get().updateDMMessage(msg);
+	  return msg;
+  },
+
+  unpinMessage: async (messageId) => {
+	  const msg = normalizeMessage(await api.unpinMessage(messageId));
+	  set((s) => ({ dmPinMutationVersion: s.dmPinMutationVersion + 1 }));
+	  get().updateDMMessage(msg);
+	  return msg;
   },
 
   addConversation: (conv) => {
     const nextConversation = normalizeConversation(conv);
     set((s) => {
-      if (s.conversations.some((c) => c.id === nextConversation.id)) return s;
-      const conversations = [{ ...nextConversation, unread_count: 0 }, ...s.conversations];
+      const existing = s.conversations.find((conversation) => conversation.id === nextConversation.id);
+      const conversations = existing
+        ? s.conversations.map((conversation) => {
+            if (conversation.id !== nextConversation.id) return conversation;
+            return {
+              ...conversation,
+              ...nextConversation,
+              unread_count: conversation.unread_count ?? nextConversation.unread_count ?? 0,
+            };
+          })
+        : [{ ...nextConversation, unread_count: 0 }, ...s.conversations];
       return { conversations, dmTotalUnread: sumDmUnreads(conversations) };
     });
   },
@@ -254,17 +316,28 @@ export const useDMStore = create<DMState>((set, get) => ({
     const nextUser = normalizeUser(user);
     const patchMessage = (message: Message) => {
       let nextMessage = message;
+      let nextReply = message.reply_to;
+
       if (message.author?.id === nextUser.id) {
         nextMessage = { ...nextMessage, author: { ...message.author, ...nextUser } };
       }
+      if (message.pinned_by?.id === nextUser.id) {
+        nextMessage = { ...nextMessage, pinned_by: { ...message.pinned_by, ...nextUser } };
+      }
       if (message.reply_to?.author?.id === nextUser.id) {
-        nextMessage = {
-          ...nextMessage,
-          reply_to: {
-            ...message.reply_to,
-            author: { ...message.reply_to.author, ...nextUser },
-          },
+        nextReply = {
+          ...message.reply_to,
+          author: { ...message.reply_to.author, ...nextUser },
         };
+      }
+      if (message.reply_to?.pinned_by?.id === nextUser.id) {
+        nextReply = {
+          ...(nextReply ?? message.reply_to),
+          pinned_by: { ...message.reply_to.pinned_by, ...nextUser },
+        };
+      }
+      if (nextReply && nextReply !== message.reply_to) {
+        nextMessage = { ...nextMessage, reply_to: nextReply };
       }
       return nextMessage;
     };
@@ -274,6 +347,7 @@ export const useDMStore = create<DMState>((set, get) => ({
         recipient: conversation.recipient.id === nextUser.id
           ? { ...conversation.recipient, ...nextUser }
           : conversation.recipient,
+        members: conversation.members?.map((member) => (member.id === nextUser.id ? { ...member, ...nextUser } : member)),
         last_message: conversation.last_message ? patchMessage(conversation.last_message) : conversation.last_message,
       })),
       dmMessages: s.dmMessages.map(patchMessage),

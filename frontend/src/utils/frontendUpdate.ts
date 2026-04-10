@@ -1,4 +1,5 @@
 const FRONTEND_UPDATE_SESSION_KEY = 'riftapp:stale-chunk-reload';
+const FRONTEND_UPDATE_QUERY_PARAM = 'riftappFrontendUpdate';
 const FRONTEND_ASSET_RE = /\/assets\/.+\.(?:js|css)(?:$|\?)/;
 
 let frontendAssetAutoReloadSuppressionCount = 0;
@@ -59,6 +60,12 @@ export async function withFrontendAssetAutoReloadSuppressed<T>(load: () => Promi
   }
 }
 
+export function buildFrontendUpdateReloadUrl(currentUrl: string, timestamp = Date.now()) {
+  const url = new URL(currentUrl, window.location.origin);
+  url.searchParams.set(FRONTEND_UPDATE_QUERY_PARAM, String(timestamp));
+  return url.toString();
+}
+
 export function reloadOnceForFrontendUpdate() {
   try {
     const previousReload = sessionStorage.getItem(FRONTEND_UPDATE_SESSION_KEY);
@@ -74,5 +81,10 @@ export function reloadOnceForFrontendUpdate() {
     /* ignore storage failures */
   }
 
-  window.location.reload();
+  try {
+    window.location.replace(buildFrontendUpdateReloadUrl(window.location.href));
+    return;
+  } catch {
+    window.location.reload();
+  }
 }

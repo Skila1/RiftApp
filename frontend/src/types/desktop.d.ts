@@ -6,6 +6,14 @@ export interface DesktopBuildInfo {
   osVersion: string;
 }
 
+export interface DesktopDateTimePreferences {
+  locale: string;
+  shortDatePattern: string | null;
+  longDatePattern: string | null;
+  shortTimePattern: string | null;
+  uses24HourClock: boolean | null;
+}
+
 export interface DesktopUpdateStatus {
   state: 'idle' | 'checking' | 'downloading' | 'ready' | 'up-to-date' | 'error';
   version: string;
@@ -28,8 +36,10 @@ export interface DesktopAPI {
   isMaximized: () => Promise<boolean>;
   getVersion: () => Promise<string>;
   getBuildInfo: () => Promise<DesktopBuildInfo>;
+  getDateTimePreferences: () => Promise<DesktopDateTimePreferences>;
   getUpdateStatus: () => Promise<DesktopUpdateStatus>;
   isUpdateReady: () => Promise<boolean>;
+  reloadFrontendIgnoringCache: () => Promise<boolean>;
   checkForUpdates: () => Promise<DesktopUpdateStatus>;
   listDisplaySources: () => Promise<DesktopDisplaySource[]>;
   selectDisplaySource: (sourceId: string) => Promise<boolean>;

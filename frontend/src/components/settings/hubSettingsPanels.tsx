@@ -11,6 +11,7 @@ import {
 } from './hubSettingsUi';
 import { hsTw } from './hubSettingsTokens';
 import { api } from '../../api/client';
+import { formatShortDate } from '../../utils/dateTime';
 
 const BADGE_ICONS = ['🍃', '⚔️', '❤️', '🔥', '💧', '💀', '🌙', '⚡', '✨', '🍄'];
 const SWORD_COLORS = ['#eb459e', '#fee75c', '#57f287', '#ed4245', '#5865f2', '#99aab5', '#ffffff'];
@@ -644,7 +645,7 @@ export function BansPanel({ hubId }: { hubId?: string }) {
               <div className="flex-1 min-w-0">
                 <p className="text-[14px] text-white font-medium truncate">{b.display_name || b.username || b.user_id.slice(0, 8)}</p>
                 {b.reason && <p className="text-[12px] text-[#949ba4] truncate">{b.reason}</p>}
-                <p className="text-[11px] text-[#949ba4]">{new Date(b.created_at).toLocaleDateString()}</p>
+                <p className="text-[11px] text-[#949ba4]">{formatShortDate(b.created_at)}</p>
               </div>
               <button onClick={() => handleUnban(b.user_id)} className="px-3 py-1.5 text-xs font-medium rounded bg-[#ed4245]/20 text-[#ed4245] hover:bg-[#ed4245]/30 transition-colors">
                 Revoke Ban

@@ -86,6 +86,7 @@ export function normalizeConversation(conversation: Conversation): Conversation 
   return {
     ...conversation,
     recipient: normalizeUser(conversation.recipient),
+    members: conversation.members ? normalizeUsers(conversation.members) : conversation.members,
     last_message: conversation.last_message ? normalizeMessage(conversation.last_message) : conversation.last_message,
   };
 }

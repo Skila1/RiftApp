@@ -1,11 +1,9 @@
 import type { User } from '../../types';
 import { useProfilePopoverStore } from '../../stores/profilePopoverStore';
+import { formatShortTime } from '../../utils/dateTime';
 
 function formatSystemEventTime(timestamp: string) {
-  return new Date(timestamp).toLocaleTimeString([], {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  return formatShortTime(timestamp);
 }
 
 export default function PinSystemMessage({

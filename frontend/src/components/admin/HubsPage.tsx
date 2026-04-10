@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { adminApi, type AdminHub } from '../../api/adminClient';
+import { formatShortDate } from '../../utils/dateTime';
 
 export default function HubsPage() {
   const [hubs, setHubs] = useState<AdminHub[]>([]);
@@ -84,7 +85,7 @@ export default function HubsPage() {
                   <td className="px-5 py-3 font-medium text-white">{h.name}</td>
                   <td className="px-5 py-3 text-[#b5bac1]">{h.owner_name}</td>
                   <td className="px-5 py-3 text-[#b5bac1]">{h.member_count}</td>
-                  <td className="px-5 py-3 text-[#949ba4]">{new Date(h.created_at).toLocaleDateString()}</td>
+                  <td className="px-5 py-3 text-[#949ba4]">{formatShortDate(h.created_at)}</td>
                   <td className="px-5 py-3 text-right">
                     <button onClick={() => handleDelete(h.id)} disabled={deletingId === h.id} className="px-3 py-1 text-xs font-medium rounded bg-[#ed4245]/20 text-[#ed4245] hover:bg-[#ed4245]/30 transition-colors disabled:opacity-50">
                       {deletingId === h.id ? 'Deleting...' : 'Delete'}

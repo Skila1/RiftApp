@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { MenuOverlay } from './MenuOverlay';
 import type { Message } from '../../types';
 import { useMessageStore } from '../../stores/messageStore';
+import { useDMStore } from '../../stores/dmStore';
 import { useReplyDraftStore } from '../../stores/replyDraftStore';
 import { useAppSettingsStore } from '../../stores/appSettingsStore';
 import ReportModal from '../modals/ReportModal';
@@ -179,6 +180,8 @@ export default function MessageContextMenu({
   const toggleReaction = useMessageStore((s) => s.toggleReaction);
   const pinMessage = useMessageStore((s) => s.pinMessage);
   const unpinMessage = useMessageStore((s) => s.unpinMessage);
+  const pinDMMessage = useDMStore((s) => s.pinMessage);
+  const unpinDMMessage = useDMStore((s) => s.unpinMessage);
   const setReplyTo = useReplyDraftStore((s) => s.setReplyTo);
   const developerMode = useAppSettingsStore((s) => s.developerMode);
 
@@ -290,9 +293,17 @@ export default function MessageContextMenu({
   const handleTogglePin = () => {
     if (!canPin) return;
     if (isPinned) {
-      void unpinMessage(message.id);
+      if (isDM) {
+        void unpinDMMessage(message.id);
+      } else {
+        void unpinMessage(message.id);
+      }
     } else {
-      void pinMessage(message.id);
+      if (isDM) {
+        void pinDMMessage(message.id);
+      } else {
+        void pinMessage(message.id);
+      }
     }
     onClose();
   };

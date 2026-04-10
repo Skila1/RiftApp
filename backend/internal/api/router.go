@@ -204,7 +204,9 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 		r.Get("/api/streams/{streamID}/messages", msgH.List)
 		r.Post("/api/streams/{streamID}/messages", msgH.Create)
 		r.Get("/api/streams/{streamID}/pins", msgH.ListPinned)
+		r.Get("/api/dms/{conversationID}/pins", msgH.ListConversationPinned)
 		r.Get("/api/hubs/{hubID}/messages/search", msgH.Search)
+		r.Get("/api/dms/{conversationID}/messages/search", msgH.SearchConversation)
 		r.Patch("/api/messages/{messageID}", msgH.Update)
 		r.Delete("/api/messages/{messageID}", msgH.Delete)
 		r.Post("/api/messages/{messageID}/forward", msgH.Forward)
@@ -244,6 +246,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 
 		r.Get("/api/dms", dmH.List)
 		r.Post("/api/dms", dmH.CreateOrOpen)
+		r.Post("/api/dms/groups", dmH.CreateOrOpenGroup)
 		r.Get("/api/dms/read-states", dmH.DMReadStates)
 		r.Get("/api/dms/{conversationID}/messages", dmH.Messages)
 		r.Post("/api/dms/{conversationID}/messages", dmH.SendMessage)

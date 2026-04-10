@@ -18,7 +18,7 @@ type MessageRepo struct {
 }
 
 const detailedMessageSelect = `m.id, m.stream_id, m.conversation_id, m.author_id, m.content, m.edited_at, m.created_at,
-		m.reply_to_message_id, m.webhook_name, m.webhook_avatar_url,
+		m.reply_to_message_id, m.forwarded_message_id, m.webhook_name, m.webhook_avatar_url,
 		m.pinned_at, m.pinned_by_id,
 		author.id, author.username, author.display_name, author.avatar_url, author.is_bot,
 		pinner.id, pinner.username, pinner.display_name, pinner.avatar_url`
@@ -72,6 +72,7 @@ func scanDetailedMessage(scanner messageScanner) (models.Message, error) {
 		&msg.EditedAt,
 		&msg.CreatedAt,
 		&msg.ReplyToMessageID,
+		&msg.ForwardedMessageID,
 		&msg.WebhookName,
 		&msg.WebhookAvatarURL,
 		&msg.PinnedAt,
@@ -118,9 +119,9 @@ func scanDetailedMessage(scanner messageScanner) (models.Message, error) {
 
 func (r *MessageRepo) Create(ctx context.Context, msg *models.Message) error {
 	_, err := r.db.Exec(ctx,
-		`INSERT INTO messages (id, stream_id, conversation_id, author_id, content, reply_to_message_id, webhook_name, webhook_avatar_url, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		msg.ID, msg.StreamID, msg.ConversationID, msg.AuthorID, msg.Content, msg.ReplyToMessageID, msg.WebhookName, msg.WebhookAvatarURL, msg.CreatedAt)
+		`INSERT INTO messages (id, stream_id, conversation_id, author_id, content, reply_to_message_id, forwarded_message_id, webhook_name, webhook_avatar_url, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		msg.ID, msg.StreamID, msg.ConversationID, msg.AuthorID, msg.Content, msg.ReplyToMessageID, msg.ForwardedMessageID, msg.WebhookName, msg.WebhookAvatarURL, msg.CreatedAt)
 	return err
 }
 
@@ -214,7 +215,7 @@ func (r *MessageRepo) GetByID(ctx context.Context, msgID string) (*models.Messag
 	var msg models.Message
 	err := r.db.QueryRow(ctx,
 		`SELECT id, stream_id, conversation_id, author_id, content, edited_at, created_at,
-		        reply_to_message_id, webhook_name, webhook_avatar_url, pinned_at, pinned_by_id
+		        reply_to_message_id, forwarded_message_id, webhook_name, webhook_avatar_url, pinned_at, pinned_by_id
 		 FROM messages WHERE id = $1`, msgID,
 	).Scan(
 		&msg.ID,
@@ -225,6 +226,7 @@ func (r *MessageRepo) GetByID(ctx context.Context, msgID string) (*models.Messag
 		&msg.EditedAt,
 		&msg.CreatedAt,
 		&msg.ReplyToMessageID,
+		&msg.ForwardedMessageID,
 		&msg.WebhookName,
 		&msg.WebhookAvatarURL,
 		&msg.PinnedAt,
@@ -500,6 +502,37 @@ func (r *MessageRepo) ListPinnedByStream(ctx context.Context, streamID string, l
 	return messages, rows.Err()
 }
 
+func (r *MessageRepo) ListPinnedByConversation(ctx context.Context, conversationID string, limit int) ([]models.Message, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+
+	rows, err := r.db.Query(ctx,
+		`SELECT `+detailedMessageSelect+` `+detailedMessageFrom+`
+		 WHERE m.conversation_id = $1 AND m.pinned_at IS NOT NULL
+		 ORDER BY m.pinned_at DESC, m.created_at DESC
+		 LIMIT `+strconv.Itoa(limit),
+		conversationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var messages []models.Message
+	for rows.Next() {
+		msg, err := scanDetailedMessage(rows)
+		if err != nil {
+			return nil, err
+		}
+		messages = append(messages, msg)
+	}
+	if messages == nil {
+		messages = []models.Message{}
+	}
+	return messages, rows.Err()
+}
+
 func (r *MessageRepo) SearchInHub(ctx context.Context, hubID string, filters MessageSearchFilters) ([]models.Message, error) {
 	limit := filters.Limit
 	if limit <= 0 || limit > 100 {
@@ -583,6 +616,109 @@ func (r *MessageRepo) SearchInHub(ctx context.Context, hubID string, filters Mes
 	query := `SELECT ` + detailedMessageSelect + `
 		FROM messages m
 		JOIN streams s ON s.id = m.stream_id
+		JOIN users author ON m.author_id = author.id
+		LEFT JOIN users pinner ON m.pinned_by_id = pinner.id
+		WHERE ` + strings.Join(clauses, ` AND `) + `
+		ORDER BY m.created_at DESC
+		LIMIT ` + strconv.Itoa(limit)
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var messages []models.Message
+	for rows.Next() {
+		msg, err := scanDetailedMessage(rows)
+		if err != nil {
+			return nil, err
+		}
+		messages = append(messages, msg)
+	}
+	if messages == nil {
+		messages = []models.Message{}
+	}
+	return messages, rows.Err()
+}
+
+func (r *MessageRepo) SearchInConversation(ctx context.Context, conversationID string, filters MessageSearchFilters) ([]models.Message, error) {
+	limit := filters.Limit
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+
+	clauses := []string{"m.conversation_id = $1"}
+	args := []interface{}{conversationID}
+	addArg := func(value interface{}) string {
+		args = append(args, value)
+		return fmt.Sprintf("$%d", len(args))
+	}
+
+	if filters.Query != "" {
+		clauses = append(clauses, "m.content ILIKE "+addArg("%"+filters.Query+"%"))
+	}
+	if filters.AuthorID != nil && *filters.AuthorID != "" {
+		clauses = append(clauses, "m.author_id = "+addArg(*filters.AuthorID))
+	}
+	switch strings.ToLower(strings.TrimSpace(filters.AuthorType)) {
+	case "user":
+		clauses = append(clauses, "m.webhook_name IS NULL", "author.is_bot = false")
+	case "bot":
+		clauses = append(clauses, "m.webhook_name IS NULL", "author.is_bot = true")
+	case "webhook":
+		clauses = append(clauses, "m.webhook_name IS NOT NULL")
+	}
+	if mention := strings.TrimSpace(filters.Mention); mention != "" {
+		clauses = append(clauses, "m.content ILIKE "+addArg("%@"+mention+"%"))
+	}
+	if filters.PinnedOnly {
+		clauses = append(clauses, "m.pinned_at IS NOT NULL")
+	}
+	if filters.LinkOnly {
+		clauses = append(clauses, `m.content ~* '(https?://|www\\.)'`)
+	}
+	if filters.Filename != "" {
+		clauses = append(clauses, `EXISTS (
+			SELECT 1 FROM attachments a
+			WHERE a.message_id = m.id AND a.filename ILIKE `+addArg("%"+filters.Filename+"%")+`
+		)`)
+	}
+	if ext := strings.TrimSpace(strings.TrimPrefix(strings.ToLower(filters.Extension), ".")); ext != "" {
+		clauses = append(clauses, `EXISTS (
+			SELECT 1 FROM attachments a
+			WHERE a.message_id = m.id AND lower(a.filename) LIKE `+addArg("%."+ext)+`
+		)`)
+	}
+
+	switch strings.ToLower(strings.TrimSpace(filters.Has)) {
+	case "file":
+		clauses = append(clauses, `EXISTS (SELECT 1 FROM attachments a WHERE a.message_id = m.id)`)
+	case "image":
+		clauses = append(clauses, `EXISTS (SELECT 1 FROM attachments a WHERE a.message_id = m.id AND a.content_type LIKE 'image/%')`)
+	case "video":
+		clauses = append(clauses, `EXISTS (SELECT 1 FROM attachments a WHERE a.message_id = m.id AND a.content_type LIKE 'video/%')`)
+	case "audio":
+		clauses = append(clauses, `EXISTS (SELECT 1 FROM attachments a WHERE a.message_id = m.id AND a.content_type LIKE 'audio/%')`)
+	case "link", "embed":
+		clauses = append(clauses, `m.content ~* '(https?://|www\\.)'`)
+	}
+
+	if filters.After != nil {
+		clauses = append(clauses, "m.created_at > "+addArg(*filters.After))
+	}
+	if filters.Before != nil {
+		clauses = append(clauses, "m.created_at < "+addArg(*filters.Before))
+	}
+	if filters.StartAt != nil {
+		clauses = append(clauses, "m.created_at >= "+addArg(*filters.StartAt))
+	}
+	if filters.EndAt != nil {
+		clauses = append(clauses, "m.created_at < "+addArg(*filters.EndAt))
+	}
+
+	query := `SELECT ` + detailedMessageSelect + `
+		FROM messages m
 		JOIN users author ON m.author_id = author.id
 		LEFT JOIN users pinner ON m.pinned_by_id = pinner.id
 		WHERE ` + strings.Join(clauses, ` AND `) + `
