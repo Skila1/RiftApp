@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+import { initCapacitor } from './lib/capacitor';
 import { useFrontendUpdateStore } from './stores/frontendUpdateStore';
 import {
   isFrontendAssetFailureEvent,
@@ -146,6 +147,7 @@ function installChunkMismatchRecovery() {
 async function bootstrap() {
   installChunkMismatchRecovery();
   installDeployRefreshMonitor();
+  void initCapacitor();
   await initializeDateTimePreferences();
 
   ReactDOM.createRoot(document.getElementById('root')!).render(

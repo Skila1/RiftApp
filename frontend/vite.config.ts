@@ -11,6 +11,7 @@ const vendorChunks: Record<string, string[]> = {
 };
 
 const electronEmbed = process.env.VITE_ELECTRON_EMBED === '1';
+const capacitorBuild = process.env.VITE_CAPACITOR === '1';
 const deployedAt = new Date().toISOString();
 
 function resolveFrontendCommitSha() {
@@ -37,7 +38,7 @@ function resolveFrontendCommitSha() {
 const frontendCommitSha = resolveFrontendCommitSha();
 
 export default defineConfig({
-  base: electronEmbed ? './' : '/',
+  base: (electronEmbed || capacitorBuild) ? './' : '/',
   define: {
     __RIFT_FRONTEND_COMMIT_SHA__: JSON.stringify(frontendCommitSha),
     __RIFT_FRONTEND_BUILD_ID__: JSON.stringify(deployedAt),
