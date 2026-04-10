@@ -26,6 +26,7 @@ import { api } from '../api/client';
 import { wsSend } from '../hooks/useWebSocket';
 import { useStreamStore } from './streamStore';
 import { useActiveSpeakerStore } from './activeSpeakerStore';
+import { usePresenceStore } from './presenceStore';
 import { publicAssetUrl } from '../utils/publicAssetUrl';
 import { getDesktop } from '../utils/desktop';
 import { resolveVoiceParticipantSpeakingState } from '../utils/voiceSpeakingState';
@@ -40,6 +41,7 @@ export type ScreenShareKind = 'screen' | 'window' | 'tab';
 export type ScreenShareFps = 15 | 30 | 60;
 export type ScreenShareResolution = '480p' | '720p' | '1080p' | '1440p' | 'source';
 export type CameraBackgroundMode = 'none' | 'blur' | 'custom';
+export type VoiceTargetKind = 'stream' | 'conversation';
 export type CameraBackgroundAsset = {
   kind: 'image' | 'gif' | 'video';
   url: string;
@@ -57,6 +59,11 @@ export type ScreenShareNotice = {
 
 type StartScreenShareOptions = {
   surfaceLabel?: string | null;
+};
+
+type VoiceJoinTarget = {
+  kind: VoiceTargetKind;
+  id: string;
 };
 
 type TrackProcessorsModule = typeof import('@livekit/track-processors');
@@ -324,8 +331,14 @@ interface VoiceStore {
   connecting: boolean;
   roomName: string | null;
   connectionEndpoint: string | null;
+  targetKind: VoiceTargetKind | null;
+  targetId: string | null;
   streamId: string | null;
+  conversationId: string | null;
   participants: VoiceParticipant[];
+  conversationVoiceMembers: Record<string, string[]>;
+  conversationVoiceScreenSharers: Record<string, string[]>;
+  conversationVoiceDeafenedUsers: Record<string, string[]>;
   speakingSignals: Record<string, boolean>;
   connectionStats: VoiceConnectionStats;
   isMuted: boolean;
@@ -361,6 +374,7 @@ interface VoiceStore {
   desktopScreenShareSources: DesktopDisplaySource[];
 
   join: (streamId: string) => Promise<void>;
+  joinConversation: (conversationId: string) => Promise<void>;
   leave: () => void;
   toggleMute: () => void;
   toggleDeafen: () => Promise<void>;
@@ -394,12 +408,62 @@ interface VoiceStore {
   setCameraBackgroundAsset: (asset: CameraBackgroundAsset | null) => void;
   toggleNoiseSuppression: () => Promise<void>;
   moveToStream: (streamId: string) => Promise<void>;
+  applyConversationVoiceState: (conversationId: string, userId: string, action: 'join' | 'leave') => void;
+  applyConversationVoiceScreenShare: (conversationId: string, userId: string, sharing: boolean) => void;
+  applyConversationVoiceDeafen: (conversationId: string, userId: string, deafened: boolean) => void;
   applySpeakingSignal: (identity: string, speaking: boolean) => void;
   clearSpeakingSignal: (identity: string) => void;
   triggerSoundboardSpeaking: (identity: string, durationMs: number) => void;
 }
 
 const CONNECT_TIMEOUT_MS = 15_000;
+
+function voiceTargetState(target: VoiceJoinTarget) {
+  return {
+    targetKind: target.kind,
+    targetId: target.id,
+    streamId: target.kind === 'stream' ? target.id : null,
+    conversationId: target.kind === 'conversation' ? target.id : null,
+  };
+}
+
+function voiceTargetPayload(target: VoiceJoinTarget) {
+  return target.kind === 'conversation'
+    ? { conversation_id: target.id }
+    : { stream_id: target.id };
+}
+
+function currentVoiceTargetPayload(state: Pick<VoiceStore, 'targetKind' | 'streamId' | 'conversationId'>) {
+  if (state.targetKind === 'conversation' && state.conversationId) {
+    return { conversation_id: state.conversationId };
+  }
+  if (state.streamId) {
+    return { stream_id: state.streamId };
+  }
+  return {};
+}
+
+function updateTargetUserList(
+  map: Record<string, string[]>,
+  targetId: string,
+  userId: string,
+  present: boolean,
+) {
+  const current = new Set(map[targetId] ?? []);
+  if (present) {
+    current.add(userId);
+  } else {
+    current.delete(userId);
+  }
+
+  const next = { ...map };
+  if (current.size === 0) {
+    delete next[targetId];
+  } else {
+    next[targetId] = [...current];
+  }
+  return next;
+}
 
 function micAudioCaptureOptions(
   state: Pick<VoiceStore, 'inputDeviceId' | 'noiseSuppressionEnabled' | 'echoCancellationEnabled'>,
@@ -562,6 +626,7 @@ let micGateProcessor: MicNoiseGateProcessor | null = null;
 let micLastSpeakingBroadcastAt = 0;
 let connectionStatsTimer: number | null = null;
 let trackProcessorsModulePromise: Promise<TrackProcessorsModule> | null = null;
+let voiceUserHydrationInFlight = new Set<string>();
 
 async function loadTrackProcessorsModule() {
   if (!trackProcessorsModulePromise) {
@@ -882,7 +947,7 @@ function persistVoiceSettingsFromStore(
 
 function broadcastLocalSpeakingState(identity: string, speaking: boolean, force = false) {
   const state = useVoiceStore.getState();
-  const streamId = state.streamId;
+  const targetPayload = currentVoiceTargetPayload(state);
   const now = performance.now();
 
   if (!force && speaking && now - micLastSpeakingBroadcastAt < SPEAKING_BROADCAST_INTERVAL_MS) {
@@ -891,8 +956,8 @@ function broadcastLocalSpeakingState(identity: string, speaking: boolean, force 
   micLastSpeakingBroadcastAt = now;
 
   state.applySpeakingSignal(identity, speaking);
-  if (streamId) {
-    wsSend('voice_speaking_update', { stream_id: streamId, speaking });
+  if (targetPayload.stream_id || targetPayload.conversation_id) {
+    wsSend('voice_speaking_update', { ...targetPayload, speaking });
   }
 }
 
@@ -1278,7 +1343,7 @@ async function requestDesktopScreenSharePicker(kind: ScreenShareKind): Promise<b
 async function startScreenShare(
   room: Room,
   state: Pick<VoiceStore, 'screenShareKind' | 'screenShareFps' | 'screenShareResolution'>,
-  streamId: string | null,
+  targetPayload: { stream_id?: string; conversation_id?: string },
   options?: StartScreenShareOptions,
 ) {
   // Go directly to browser's native picker — no intermediate modal
@@ -1296,7 +1361,9 @@ async function startScreenShare(
       screenShareSurfaceLabel: options?.surfaceLabel ?? inferSurfaceLabel(state.screenShareKind),
       screenShareModalOpen: false,
     });
-    if (streamId) wsSend('voice_screen_share_update', { stream_id: streamId, sharing: true });
+    if (targetPayload.stream_id || targetPayload.conversation_id) {
+      wsSend('voice_screen_share_update', { ...targetPayload, sharing: true });
+    }
   } catch (err) {
     const name = err instanceof DOMException ? err.name : '';
     const message = err instanceof Error ? err.message.toLowerCase() : '';
@@ -1393,11 +1460,35 @@ function getTrackForSource(p: Participant, source: Track.Source): Track | undefi
   return p.getTrackPublication(source)?.track ?? undefined;
 }
 
+function hydrateMissingVoiceUsers(participants: VoiceParticipant[]) {
+  const knownUsers = usePresenceStore.getState().hubMembers;
+  for (const participant of participants) {
+    const userID = participant.identity;
+    if (!userID || knownUsers[userID] || voiceUserHydrationInFlight.has(userID)) {
+      continue;
+    }
+
+    voiceUserHydrationInFlight.add(userID);
+    api.getUser(userID)
+      .then((user) => {
+        usePresenceStore.getState().mergeUser(user);
+      })
+      .catch(() => {
+        /* ignore transient profile hydration failures */
+      })
+      .finally(() => {
+        voiceUserHydrationInFlight.delete(userID);
+      });
+  }
+}
+
 function buildParticipants(room: Room): VoiceParticipant[] {
   if (room.state !== ConnectionState.Connected) return [];
-  const speakingSignals = useVoiceStore.getState().speakingSignals;
-  const streamId = useVoiceStore.getState().streamId;
-  const deafenedUsers = streamId ? (useStreamStore.getState().voiceDeafenedUsers[streamId] ?? []) : [];
+  const voiceState = useVoiceStore.getState();
+  const speakingSignals = voiceState.speakingSignals;
+  const deafenedUsers = voiceState.targetKind === 'conversation'
+    ? (voiceState.conversationId ? (voiceState.conversationVoiceDeafenedUsers[voiceState.conversationId] ?? []) : [])
+    : (voiceState.streamId ? (useStreamStore.getState().voiceDeafenedUsers[voiceState.streamId] ?? []) : []);
   const localIdentity = room.localParticipant.identity;
   const toVP = (p: Participant): VoiceParticipant => {
     const hasExplicitSpeakingSignal = hasOwnKey(speakingSignals, p.identity);
@@ -1435,6 +1526,7 @@ function syncParticipants() {
   if (!roomRef || roomRef.state !== ConnectionState.Connected) return;
   const participants = buildParticipants(roomRef);
   const localSharing = roomRef.localParticipant.isScreenShareEnabled;
+  hydrateMissingVoiceUsers(participants);
   useVoiceStore.setState({
     participants,
     isCameraOn: roomRef.localParticipant.isCameraEnabled,
@@ -1491,7 +1583,10 @@ function resetState() {
     connecting: false,
     roomName: null,
     connectionEndpoint: null,
+    targetKind: null,
+    targetId: null,
     streamId: null,
+    conversationId: null,
     participants: [],
     speakingSignals: {},
     connectionStats: createDefaultConnectionStats(),
@@ -1526,6 +1621,162 @@ async function destroyRoom(room: Room) {
   room.disconnect();
 }
 
+async function joinVoiceTarget(target: VoiceJoinTarget) {
+  if (joiningLock) return;
+  joiningLock = true;
+  joinCancellationRequested = false;
+
+  const previousState = useVoiceStore.getState();
+  const previousTargetPayload = currentVoiceTargetPayload(previousState);
+  useActiveSpeakerStore.getState().clearActiveSpeaker();
+  setScreenShareNotice(null);
+
+  if (roomRef) {
+    const old = roomRef;
+    stopConnectionStatsMonitor();
+    roomRef = null;
+    await destroyRoom(old);
+  }
+
+  useVoiceStore.setState({
+    ...voiceTargetState(target),
+    connecting: true,
+    connectionStats: { ...createDefaultConnectionStats(), state: ConnectionState.Connecting },
+  });
+
+  try {
+    await useVoiceStore.getState().refreshMediaDevices();
+    const { token, url } = target.kind === 'conversation'
+      ? await api.getDMVoiceToken(target.id)
+      : await api.getVoiceToken(target.id);
+    useVoiceStore.setState({ connectionEndpoint: url });
+
+    const voiceState = useVoiceStore.getState();
+    const room = new Room({
+      adaptiveStream: true,
+      dynacast: true,
+      videoCaptureDefaults: cameraCaptureOptions(voiceState),
+      audioCaptureDefaults: micAudioCaptureOptions(voiceState),
+      publishDefaults: {
+        videoEncoding: {
+          maxBitrate: 8_000_000,
+          maxFramerate: 60,
+        },
+        screenShareEncoding: ScreenSharePresets.h1080fps30.encoding,
+        audioPreset: AudioPresets.musicHighQuality,
+        dtx: true,
+        red: true,
+        videoCodec: 'vp9',
+        backupCodec: { codec: 'vp8', encoding: VideoPresets.h720.encoding },
+      },
+    });
+    roomRef = room;
+
+    room.on(RoomEvent.ParticipantConnected, () => { syncParticipants(); playJoinSound(); });
+    room.on(RoomEvent.ParticipantDisconnected, () => { syncParticipants(); playLeaveSound(); });
+    room.on(RoomEvent.TrackSubscribed, syncParticipants);
+    room.on(RoomEvent.TrackUnsubscribed, syncParticipants);
+    room.on(RoomEvent.TrackMuted, syncParticipants);
+    room.on(RoomEvent.TrackUnmuted, syncParticipants);
+    room.on(RoomEvent.ActiveSpeakersChanged, syncParticipants);
+    room.on(RoomEvent.LocalTrackPublished, syncParticipants);
+    room.on(RoomEvent.LocalTrackUnpublished, syncParticipants);
+    room.on(RoomEvent.ConnectionQualityChanged, (_quality, participant) => {
+      if (!participant.isLocal || roomRef !== room) return;
+      syncConnectionStatsState(room);
+    });
+    room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
+      syncConnectionStatsState(room);
+      if (state === ConnectionState.Disconnected && roomRef === room) {
+        const currentTargetPayload = currentVoiceTargetPayload(useVoiceStore.getState());
+        if (currentTargetPayload.stream_id || currentTargetPayload.conversation_id) {
+          wsSend('voice_state_update', { ...currentTargetPayload, action: 'leave' });
+        }
+        stopConnectionStatsMonitor();
+        stopMicProcessing({ broadcast: false, identity: room.localParticipant.identity });
+        roomRef = null;
+        detachAllRoomMedia(room);
+        room.removeAllListeners();
+        resetState();
+        return;
+      }
+      void sampleConnectionStats(room);
+    });
+
+    room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, _pub: RemoteTrackPublication, participant: RemoteParticipant) => {
+      if (track && track.kind === Track.Kind.Audio) {
+        appendRemoteAudioElement(track, participant.identity);
+      }
+    });
+    room.on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
+      if (track) track.detach().forEach((el) => el.remove());
+    });
+
+    await Promise.race([
+      room.connect(url, token),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Connection timed out')), CONNECT_TIMEOUT_MS)),
+    ]);
+
+    if (roomRef !== room) {
+      room.disconnect();
+      return;
+    }
+
+    await applyOutputDevice(room, useVoiceStore.getState().outputDeviceId);
+
+    const startMuted = pttModeRef;
+    let microphoneEnabled = !startMuted;
+    if (!startMuted) {
+      microphoneEnabled = await enableLocalMicrophone(room);
+    }
+
+    await useVoiceStore.getState().refreshMediaDevices();
+
+    const participants = buildParticipants(room);
+    hydrateMissingVoiceUsers(participants);
+    useVoiceStore.setState({
+      ...voiceTargetState(target),
+      connected: true,
+      connecting: false,
+      roomName: room.name,
+      isMuted: startMuted || !microphoneEnabled,
+      isDeafened: false,
+      isCameraOn: false,
+      isScreenSharing: false,
+      participants,
+      participantVolumes: {},
+      voiceOutputMuted: false,
+      streamVolumes: {},
+      streamAudioMuted: {},
+      streamAttenuationEnabled: false,
+      streamAttenuationStrength: 40,
+    });
+    useActiveSpeakerStore.getState().syncFromParticipants(participants);
+    startConnectionStatsMonitor(room);
+    wsSend('voice_state_update', { ...voiceTargetPayload(target), action: 'join' });
+    playJoinSound();
+  } catch (err) {
+    const cancelled = joinCancellationRequested;
+    console.error('Failed to join voice channel:', err);
+    if (roomRef) {
+      roomRef.removeAllListeners();
+      roomRef.disconnect();
+      roomRef = null;
+    }
+    if (previousTargetPayload.stream_id || previousTargetPayload.conversation_id) {
+      wsSend('voice_state_update', { ...previousTargetPayload, action: 'leave' });
+    }
+    resetState();
+    if (!cancelled) {
+      setScreenShareNotice(voiceJoinFailureNotice(err));
+    }
+  } finally {
+    useVoiceStore.setState({ connecting: false });
+    joinCancellationRequested = false;
+    joiningLock = false;
+  }
+}
+
 const initialVoiceSettings = loadVoiceSettings();
 pttModeRef = initialVoiceSettings.pttMode;
 
@@ -1544,8 +1795,14 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   connecting: false,
   roomName: null,
   connectionEndpoint: null,
+  targetKind: null,
+  targetId: null,
   streamId: null,
+  conversationId: null,
   participants: [],
+  conversationVoiceMembers: {},
+  conversationVoiceScreenSharers: {},
+  conversationVoiceDeafenedUsers: {},
   speakingSignals: {},
   connectionStats: createDefaultConnectionStats(),
   isMuted: false,
@@ -1575,142 +1832,13 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   desktopScreenShareSources: [],
 
   join: async (sid) => {
-    if (joiningLock) return;
-    joiningLock = true;
-    joinCancellationRequested = false;
-    const previousStreamId = get().streamId;
-    useActiveSpeakerStore.getState().clearActiveSpeaker();
-    setScreenShareNotice(null);
+    if (get().targetKind === 'stream' && get().streamId === sid && get().connected) return;
+    await joinVoiceTarget({ kind: 'stream', id: sid });
+  },
 
-    if (roomRef) {
-      const old = roomRef;
-      stopConnectionStatsMonitor();
-      roomRef = null;
-      await destroyRoom(old);
-    }
-
-    set({
-      connecting: true,
-      connectionStats: { ...createDefaultConnectionStats(), state: ConnectionState.Connecting },
-    });
-    try {
-      await get().refreshMediaDevices();
-      const { token, url } = await api.getVoiceToken(sid);
-      set({ connectionEndpoint: url });
-
-      const voiceState = useVoiceStore.getState();
-      const room = new Room({
-        adaptiveStream: true,
-        dynacast: true,
-        videoCaptureDefaults: cameraCaptureOptions(voiceState),
-        audioCaptureDefaults: micAudioCaptureOptions(voiceState),
-        publishDefaults: {
-          videoEncoding: {
-            maxBitrate: 8_000_000,
-            maxFramerate: 60,
-          },
-          screenShareEncoding: ScreenSharePresets.h1080fps30.encoding,
-          audioPreset: AudioPresets.musicHighQuality,
-          dtx: true,
-          red: true,
-          videoCodec: 'vp9',
-          backupCodec: { codec: 'vp8', encoding: VideoPresets.h720.encoding },
-        },
-      });
-      roomRef = room;
-
-      room.on(RoomEvent.ParticipantConnected, () => { syncParticipants(); playJoinSound(); });
-      room.on(RoomEvent.ParticipantDisconnected, () => { syncParticipants(); playLeaveSound(); });
-      room.on(RoomEvent.TrackSubscribed, syncParticipants);
-      room.on(RoomEvent.TrackUnsubscribed, syncParticipants);
-      room.on(RoomEvent.TrackMuted, syncParticipants);
-      room.on(RoomEvent.TrackUnmuted, syncParticipants);
-      room.on(RoomEvent.ActiveSpeakersChanged, syncParticipants);
-      room.on(RoomEvent.LocalTrackPublished, syncParticipants);
-      room.on(RoomEvent.LocalTrackUnpublished, syncParticipants);
-      room.on(RoomEvent.ConnectionQualityChanged, (_quality, participant) => {
-        if (!participant.isLocal || roomRef !== room) return;
-        syncConnectionStatsState(room);
-      });
-      room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
-        syncConnectionStatsState(room);
-        if (state === ConnectionState.Disconnected && roomRef === room) {
-          const currentSid = useVoiceStore.getState().streamId;
-          if (currentSid) wsSend('voice_state_update', { stream_id: currentSid, action: 'leave' });
-          stopConnectionStatsMonitor();
-          stopMicProcessing({ broadcast: false, identity: room.localParticipant.identity });
-          roomRef = null;
-          detachAllRoomMedia(room);
-          room.removeAllListeners();
-          resetState();
-          return;
-        }
-        void sampleConnectionStats(room);
-      });
-
-      room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, _pub: RemoteTrackPublication, participant: RemoteParticipant) => {
-        if (track && track.kind === Track.Kind.Audio) {
-          appendRemoteAudioElement(track, participant.identity);
-        }
-      });
-      room.on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack, _pub: RemoteTrackPublication, _participant: RemoteParticipant) => {
-        if (track) track.detach().forEach((el) => el.remove());
-      });
-
-      await Promise.race([
-        room.connect(url, token),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Connection timed out')), CONNECT_TIMEOUT_MS)),
-      ]);
-
-      if (roomRef !== room) { room.disconnect(); return; }
-
-      await applyOutputDevice(room, useVoiceStore.getState().outputDeviceId);
-
-      const startMuted = pttModeRef;
-      let microphoneEnabled = !startMuted;
-      if (!startMuted) {
-        microphoneEnabled = await enableLocalMicrophone(room);
-      }
-
-      await get().refreshMediaDevices();
-
-      set({
-        connected: true,
-        connecting: false,
-        roomName: room.name,
-        streamId: sid,
-        isMuted: startMuted || !microphoneEnabled,
-        isDeafened: false,
-        isCameraOn: false,
-        isScreenSharing: false,
-        participants: buildParticipants(room),
-        participantVolumes: {},
-        voiceOutputMuted: false,
-        streamVolumes: {},
-        streamAudioMuted: {},
-        streamAttenuationEnabled: false,
-        streamAttenuationStrength: 40,
-      });
-      useActiveSpeakerStore.getState().syncFromParticipants(buildParticipants(room));
-      startConnectionStatsMonitor(room);
-      wsSend('voice_state_update', { stream_id: sid, action: 'join' });
-      playJoinSound();
-    } catch (err) {
-      const cancelled = joinCancellationRequested;
-      console.error('Failed to join voice channel:', err);
-      if (roomRef) { roomRef.removeAllListeners(); roomRef.disconnect(); roomRef = null; }
-      if (previousStreamId) {
-        wsSend('voice_state_update', { stream_id: previousStreamId, action: 'leave' });
-      }
-      resetState();
-      if (!cancelled) {
-        setScreenShareNotice(voiceJoinFailureNotice(err));
-      }
-    } finally {
-      set({ connecting: false });
-      joinCancellationRequested = false;
-      joiningLock = false;
-    }
+  joinConversation: async (conversationId) => {
+    if (get().targetKind === 'conversation' && get().conversationId === conversationId && get().connected) return;
+    await joinVoiceTarget({ kind: 'conversation', id: conversationId });
   },
 
   leave: async () => {
@@ -1718,14 +1846,18 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
       joinCancellationRequested = true;
     }
     const room = roomRef;
-    const sid = get().streamId;
+    const targetPayload = currentVoiceTargetPayload(get());
     if (!room) { resetState(); return; }
     stopConnectionStatsMonitor();
     stopMicProcessing({ broadcast: true, identity: room.localParticipant.identity });
     // Notify screen share stop before leaving
-    if (sid && get().isScreenSharing) wsSend('voice_screen_share_update', { stream_id: sid, sharing: false });
+    if ((targetPayload.stream_id || targetPayload.conversation_id) && get().isScreenSharing) {
+      wsSend('voice_screen_share_update', { ...targetPayload, sharing: false });
+    }
     roomRef = null;
-    if (sid) wsSend('voice_state_update', { stream_id: sid, action: 'leave' });
+    if (targetPayload.stream_id || targetPayload.conversation_id) {
+      wsSend('voice_state_update', { ...targetPayload, action: 'leave' });
+    }
     playLeaveSound();
     await destroyRoom(room);
     resetState();
@@ -1769,31 +1901,35 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
 
   toggleScreenShare: async () => {
     if (!roomRef || roomRef.state !== ConnectionState.Connected) return;
-    const streamId = get().streamId;
+    const targetPayload = currentVoiceTargetPayload(get());
     if (roomRef.localParticipant.isScreenShareEnabled) {
       await stopScreenShare(roomRef);
-      if (streamId) wsSend('voice_screen_share_update', { stream_id: streamId, sharing: false });
+      if (targetPayload.stream_id || targetPayload.conversation_id) {
+        wsSend('voice_screen_share_update', { ...targetPayload, sharing: false });
+      }
     } else {
       if (await requestDesktopScreenSharePicker(get().screenShareKind)) {
         return;
       }
-      await startScreenShare(roomRef, get(), streamId);
+      await startScreenShare(roomRef, get(), targetPayload);
     }
     syncParticipants();
   },
 
   changeScreenShare: async () => {
     if (!roomRef || roomRef.state !== ConnectionState.Connected) return;
-    const streamId = get().streamId;
+    const targetPayload = currentVoiceTargetPayload(get());
     if (roomRef.localParticipant.isScreenShareEnabled) {
       await stopScreenShare(roomRef);
-      if (streamId) wsSend('voice_screen_share_update', { stream_id: streamId, sharing: false });
+      if (targetPayload.stream_id || targetPayload.conversation_id) {
+        wsSend('voice_screen_share_update', { ...targetPayload, sharing: false });
+      }
       syncParticipants();
     }
     if (await requestDesktopScreenSharePicker(get().screenShareKind)) {
       return;
     }
-    await startScreenShare(roomRef, get(), streamId);
+    await startScreenShare(roomRef, get(), targetPayload);
     syncParticipants();
   },
 
@@ -1868,7 +2004,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
       return;
     }
 
-    await startScreenShare(roomRef, get(), get().streamId, { surfaceLabel: source.name });
+    await startScreenShare(roomRef, get(), currentVoiceTargetPayload(get()), { surfaceLabel: source.name });
     syncParticipants();
   },
 
@@ -1897,8 +2033,10 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     }
     set({ isDeafened: next });
     if (next) playDeafenSound(); else playUndeafenSound();
-    const sid = get().streamId;
-    if (sid) wsSend('voice_deafen_update', { stream_id: sid, deafened: next });
+    const targetPayload = currentVoiceTargetPayload(get());
+    if (targetPayload.stream_id || targetPayload.conversation_id) {
+      wsSend('voice_deafen_update', { ...targetPayload, deafened: next });
+    }
     syncParticipants();
   },
 
@@ -2197,6 +2335,45 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     if (get().streamId === sid && get().connected) return;
     await get().leave();
     await get().join(sid);
+  },
+
+  applyConversationVoiceState: (conversationId, userId, action) => {
+    set((state) => ({
+      conversationVoiceMembers: updateTargetUserList(
+        state.conversationVoiceMembers,
+        conversationId,
+        userId,
+        action === 'join',
+      ),
+    }));
+  },
+
+  applyConversationVoiceScreenShare: (conversationId, userId, sharing) => {
+    set((state) => ({
+      conversationVoiceScreenSharers: updateTargetUserList(
+        state.conversationVoiceScreenSharers,
+        conversationId,
+        userId,
+        sharing,
+      ),
+    }));
+  },
+
+  applyConversationVoiceDeafen: (conversationId, userId, deafened) => {
+    set((state) => ({
+      conversationVoiceDeafenedUsers: updateTargetUserList(
+        state.conversationVoiceDeafenedUsers,
+        conversationId,
+        userId,
+        deafened,
+      ),
+    }));
+    if (roomRef?.state === ConnectionState.Connected) {
+      const voiceState = useVoiceStore.getState();
+      if (voiceState.targetKind === 'conversation' && voiceState.conversationId === conversationId) {
+        syncParticipants();
+      }
+    }
   },
 
   applySpeakingSignal: (identity, speaking) => {

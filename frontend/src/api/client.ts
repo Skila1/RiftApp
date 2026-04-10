@@ -258,6 +258,24 @@ class ApiClient {
       body: JSON.stringify({ member_ids: memberIds }),
     });
   }
+  patchDMConversation(conversationId: string, body: { name?: string | null; icon_url?: string | null }) {
+    return this.request<Conversation>(`/dms/${conversationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  }
+  addDMConversationMembers(conversationId: string, memberIds: string[]) {
+    return this.request<Conversation>(`/dms/${conversationId}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ member_ids: memberIds }),
+    });
+  }
+  removeDMConversationMember(conversationId: string, userId: string) {
+    return this.request<void>(`/dms/${conversationId}/members/${userId}`, { method: 'DELETE' });
+  }
+  leaveDMConversation(conversationId: string) {
+    return this.request<void>(`/dms/${conversationId}/leave`, { method: 'POST' });
+  }
   getPinnedDMMessages(conversationId: string, limit?: number) {
     const params = new URLSearchParams();
     if (limit != null) params.set('limit', String(limit));
@@ -310,6 +328,7 @@ class ApiClient {
   unblockUser(userId: string) { return this.request(`/blocks/${userId}`, { method: 'DELETE' }); }
   listBlocked() { return this.request<Block[]>('/blocks'); }
   getVoiceToken(streamId: string) { return this.request<{ token: string; url: string; room: string }>(`/voice/token?streamID=${streamId}`); }
+  getDMVoiceToken(conversationId: string) { return this.request<{ token: string; url: string; room: string }>(`/voice/token?conversationID=${conversationId}`); }
   getVoiceStates(hubId: string) { return this.request<Record<string, string[]>>(`/hubs/${hubId}/voice-states`); }
   moveUserToChannel(hubId: string, userId: string, targetStreamId: string) {
     return this.request<{ status: string }>(`/hubs/${hubId}/voice/move`, {

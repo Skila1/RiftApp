@@ -231,6 +231,9 @@ export interface Conversation {
   id: string;
   created_at: string;
   updated_at: string;
+  name?: string | null;
+  icon_url?: string | null;
+  is_group?: boolean;
   recipient: User;
   members?: User[];
   last_message?: Message;

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,6 +31,10 @@ func NewDMService(dmRepo *repository.DMRepo, msgRepo *repository.MessageRepo, no
 
 func (s *DMService) SetModerationService(mod *moderation.Service) {
 	s.modSvc = mod
+}
+
+func (s *DMService) IsMember(ctx context.Context, convID, userID string) (bool, error) {
+	return s.dmRepo.IsMember(ctx, convID, userID)
 }
 
 func (s *DMService) ListConversations(ctx context.Context, userID string) ([]repository.ConvResponse, error) {
@@ -69,6 +74,13 @@ func (s *DMService) CreateOrOpen(ctx context.Context, userID, recipientID string
 
 func (s *DMService) CreateOrOpenGroup(ctx context.Context, userID string, memberIDs []string) (repository.ConvResponse, bool, error) {
 	return s.createOrOpenConversation(ctx, userID, memberIDs, true)
+}
+
+type PatchConversationInput struct {
+	NameSet    bool
+	Name       *string
+	IconURLSet bool
+	IconURL    *string
 }
 
 func (s *DMService) createOrOpenConversation(ctx context.Context, userID string, requestedMemberIDs []string, requireGroup bool) (repository.ConvResponse, bool, error) {
@@ -118,7 +130,7 @@ func (s *DMService) createOrOpenConversation(ctx context.Context, userID string,
 	convID := uuid.New().String()
 	now := time.Now()
 
-	if err := s.dmRepo.CreateConversation(ctx, tx, convID, memberIDs, now); err != nil {
+	if err := s.dmRepo.CreateConversation(ctx, tx, convID, memberIDs, now, requireGroup); err != nil {
 		return repository.ConvResponse{}, false, apperror.Internal("failed to create conversation", err)
 	}
 
@@ -134,27 +146,224 @@ func (s *DMService) createOrOpenConversation(ctx context.Context, userID string,
 		return indexOfMember(memberIDs, members[i].ID) < indexOfMember(memberIDs, members[j].ID)
 	})
 
+	conversation := models.Conversation{
+		ID:        convID,
+		CreatedAt: now,
+		UpdatedAt: now,
+		IsGroup:   requireGroup,
+	}
+
 	for _, memberID := range memberIDs {
 		if memberID == userID {
 			continue
 		}
-		payload := buildConversationPayload(convID, now, members, memberID)
+		payload := buildConversationPayload(conversation, members, memberID)
 		s.hub.SendToUser(memberID, ws.NewEvent(ws.OpDMConversationCreate, payload))
 	}
 
-	return buildConversationPayload(convID, now, members, userID), true, nil
+	return buildConversationPayload(conversation, members, userID), true, nil
 }
 
-func buildConversationPayload(convID string, timestamp time.Time, members []models.User, viewerUserID string) repository.ConvResponse {
+func (s *DMService) PatchConversation(ctx context.Context, userID, convID string, input PatchConversationInput) (repository.ConvResponse, error) {
+	conversation, err := s.dmRepo.GetConversation(ctx, convID)
+	if err != nil {
+		return repository.ConvResponse{}, apperror.NotFound("conversation not found")
+	}
+	isMember, memberErr := s.dmRepo.IsMember(ctx, convID, userID)
+	if memberErr != nil {
+		return repository.ConvResponse{}, apperror.Internal("internal error", memberErr)
+	}
+	if !isMember {
+		return repository.ConvResponse{}, apperror.Forbidden("not a member of this conversation")
+	}
+	if !conversation.IsGroup {
+		return repository.ConvResponse{}, apperror.BadRequest("only group DMs can be updated")
+	}
+	if !input.NameSet && !input.IconURLSet {
+		return repository.ConvResponse{}, apperror.BadRequest("no conversation updates provided")
+	}
+
+	normalizedName, err := normalizeConversationMetadataValue(input.NameSet, input.Name, 100)
+	if err != nil {
+		return repository.ConvResponse{}, err
+	}
+	normalizedIconURL, err := normalizeConversationMetadataValue(input.IconURLSet, input.IconURL, 2048)
+	if err != nil {
+		return repository.ConvResponse{}, err
+	}
+
+	now := time.Now()
+	if err := s.dmRepo.UpdateConversationMetadata(ctx, convID, input.NameSet, normalizedName, input.IconURLSet, normalizedIconURL, now); err != nil {
+		return repository.ConvResponse{}, apperror.Internal("failed to update conversation", err)
+	}
+
+	response, err := s.buildConversationResponse(ctx, convID, userID)
+	if err != nil {
+		return repository.ConvResponse{}, err
+	}
+	if broadcastErr := s.broadcastConversationUpdate(ctx, convID); broadcastErr != nil {
+		return repository.ConvResponse{}, broadcastErr
+	}
+	return response, nil
+}
+
+func (s *DMService) AddMembers(ctx context.Context, userID, convID string, memberIDs []string) (repository.ConvResponse, error) {
+	conversation, err := s.dmRepo.GetConversation(ctx, convID)
+	if err != nil {
+		return repository.ConvResponse{}, apperror.NotFound("conversation not found")
+	}
+	isMember, memberErr := s.dmRepo.IsMember(ctx, convID, userID)
+	if memberErr != nil {
+		return repository.ConvResponse{}, apperror.Internal("internal error", memberErr)
+	}
+	if !isMember {
+		return repository.ConvResponse{}, apperror.Forbidden("not a member of this conversation")
+	}
+	if !conversation.IsGroup {
+		return repository.ConvResponse{}, apperror.BadRequest("only group DMs can add members")
+	}
+
+	existingMembers, err := s.dmRepo.GetAllMembers(ctx, convID)
+	if err != nil {
+		return repository.ConvResponse{}, apperror.Internal("internal error", err)
+	}
+	existingSet := make(map[string]struct{}, len(existingMembers))
+	for _, memberID := range existingMembers {
+		existingSet[memberID] = struct{}{}
+	}
+
+	newMemberIDs := make([]string, 0, len(memberIDs))
+	for _, memberID := range memberIDs {
+		memberID = strings.TrimSpace(memberID)
+		if memberID == "" {
+			continue
+		}
+		if _, exists := existingSet[memberID]; exists {
+			continue
+		}
+		exists, lookupErr := s.dmRepo.UserExists(ctx, memberID)
+		if lookupErr != nil {
+			return repository.ConvResponse{}, apperror.Internal("internal error", lookupErr)
+		}
+		if !exists {
+			return repository.ConvResponse{}, apperror.NotFound("user not found")
+		}
+		existingSet[memberID] = struct{}{}
+		newMemberIDs = append(newMemberIDs, memberID)
+	}
+
+	if len(newMemberIDs) == 0 {
+		return s.buildConversationResponse(ctx, convID, userID)
+	}
+
+	tx, err := s.dmRepo.BeginTx(ctx)
+	if err != nil {
+		return repository.ConvResponse{}, apperror.Internal("internal error", err)
+	}
+	defer tx.Rollback(ctx)
+
+	now := time.Now()
+	if err := s.dmRepo.AddConversationMembers(ctx, tx, convID, newMemberIDs, now); err != nil {
+		return repository.ConvResponse{}, apperror.Internal("failed to add conversation members", err)
+	}
+	if err := s.dmRepo.UpdateConversationTimestamp(ctx, convID, now); err != nil {
+		return repository.ConvResponse{}, apperror.Internal("failed to update conversation", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return repository.ConvResponse{}, apperror.Internal("internal error", err)
+	}
+
+	response, err := s.buildConversationResponse(ctx, convID, userID)
+	if err != nil {
+		return repository.ConvResponse{}, err
+	}
+	if err := s.broadcastConversationMembershipChange(ctx, convID, newMemberIDs); err != nil {
+		return repository.ConvResponse{}, err
+	}
+	return response, nil
+}
+
+func (s *DMService) RemoveMember(ctx context.Context, userID, convID, targetUserID string) error {
+	conversation, err := s.dmRepo.GetConversation(ctx, convID)
+	if err != nil {
+		return apperror.NotFound("conversation not found")
+	}
+	isMember, memberErr := s.dmRepo.IsMember(ctx, convID, userID)
+	if memberErr != nil {
+		return apperror.Internal("internal error", memberErr)
+	}
+	if !isMember {
+		return apperror.Forbidden("not a member of this conversation")
+	}
+	if !conversation.IsGroup {
+		return apperror.BadRequest("only group DMs can remove members")
+	}
+	targetIsMember, targetErr := s.dmRepo.IsMember(ctx, convID, targetUserID)
+	if targetErr != nil {
+		return apperror.Internal("internal error", targetErr)
+	}
+	if !targetIsMember {
+		return apperror.NotFound("conversation member not found")
+	}
+
+	tx, err := s.dmRepo.BeginTx(ctx)
+	if err != nil {
+		return apperror.Internal("internal error", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if err := s.dmRepo.RemoveConversationMember(ctx, tx, convID, targetUserID); err != nil {
+		return apperror.Internal("failed to remove conversation member", err)
+	}
+
+	remainingCount, err := s.dmRepo.CountConversationMembers(ctx, tx, convID)
+	if err != nil {
+		return apperror.Internal("internal error", err)
+	}
+
+	remainingMembers, err := s.dmRepo.GetAllMembers(ctx, convID)
+	if err != nil {
+		return apperror.Internal("internal error", err)
+	}
+
+	if remainingCount < 2 {
+		if err := s.dmRepo.DeleteConversation(ctx, tx, convID); err != nil {
+			return apperror.Internal("failed to delete conversation", err)
+		}
+	} else {
+		if err := s.dmRepo.UpdateConversationTimestamp(ctx, convID, time.Now()); err != nil {
+			return apperror.Internal("failed to update conversation", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return apperror.Internal("internal error", err)
+	}
+
+	s.hub.SendToUser(targetUserID, ws.NewEvent(ws.OpDMConversationDelete, ws.DMConversationDeleteData{ConversationID: convID}))
+	if remainingCount < 2 {
+		for _, remainingMemberID := range remainingMembers {
+			s.hub.SendToUser(remainingMemberID, ws.NewEvent(ws.OpDMConversationDelete, ws.DMConversationDeleteData{ConversationID: convID}))
+		}
+		return nil
+	}
+
+	if err := s.broadcastConversationUpdate(ctx, convID); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *DMService) LeaveConversation(ctx context.Context, userID, convID string) error {
+	return s.RemoveMember(ctx, userID, convID, userID)
+}
+
+func buildConversationPayload(conversation models.Conversation, members []models.User, viewerUserID string) repository.ConvResponse {
 	memberCopy := append([]models.User(nil), members...)
+	conversation.Members = memberCopy
 	return repository.ConvResponse{
-		Conversation: models.Conversation{
-			ID:        convID,
-			CreatedAt: timestamp,
-			UpdatedAt: timestamp,
-			Members:   memberCopy,
-		},
-		Recipient: pickConversationRecipient(memberCopy, viewerUserID),
+		Conversation: conversation,
+		Recipient:    pickConversationRecipient(memberCopy, viewerUserID),
 	}
 }
 
@@ -211,10 +420,64 @@ func (s *DMService) buildConversationResponse(ctx context.Context, convID, viewe
 		return repository.ConvResponse{}, apperror.Internal("internal error", err)
 	}
 	conversation.Members = members
-	return repository.ConvResponse{
-		Conversation: *conversation,
-		Recipient:    pickConversationRecipient(members, viewerUserID),
-	}, nil
+	return buildConversationPayload(*conversation, members, viewerUserID), nil
+}
+
+func normalizeConversationMetadataValue(set bool, value *string, maxLen int) (*string, error) {
+	if !set {
+		return nil, nil
+	}
+	if value == nil {
+		return nil, nil
+	}
+	trimmed := strings.TrimSpace(*value)
+	if trimmed == "" {
+		return nil, nil
+	}
+	if len(trimmed) > maxLen {
+		return nil, apperror.BadRequest("conversation value is too long")
+	}
+	return &trimmed, nil
+}
+
+func (s *DMService) broadcastConversationUpdate(ctx context.Context, convID string) error {
+	conversation, err := s.dmRepo.GetConversation(ctx, convID)
+	if err != nil {
+		return apperror.Internal("internal error", err)
+	}
+	members, err := s.dmRepo.GetConversationMembersDetailed(ctx, convID)
+	if err != nil {
+		return apperror.Internal("internal error", err)
+	}
+	for _, member := range members {
+		payload := buildConversationPayload(*conversation, members, member.ID)
+		s.hub.SendToUser(member.ID, ws.NewEvent(ws.OpDMConversationUpdate, payload))
+	}
+	return nil
+}
+
+func (s *DMService) broadcastConversationMembershipChange(ctx context.Context, convID string, newMemberIDs []string) error {
+	conversation, err := s.dmRepo.GetConversation(ctx, convID)
+	if err != nil {
+		return apperror.Internal("internal error", err)
+	}
+	members, err := s.dmRepo.GetConversationMembersDetailed(ctx, convID)
+	if err != nil {
+		return apperror.Internal("internal error", err)
+	}
+	newMemberSet := make(map[string]struct{}, len(newMemberIDs))
+	for _, memberID := range newMemberIDs {
+		newMemberSet[memberID] = struct{}{}
+	}
+	for _, member := range members {
+		payload := buildConversationPayload(*conversation, members, member.ID)
+		if _, isNewMember := newMemberSet[member.ID]; isNewMember {
+			s.hub.SendToUser(member.ID, ws.NewEvent(ws.OpDMConversationCreate, payload))
+			continue
+		}
+		s.hub.SendToUser(member.ID, ws.NewEvent(ws.OpDMConversationUpdate, payload))
+	}
+	return nil
 }
 
 func (s *DMService) ListMessages(ctx context.Context, convID, userID string, before *string, limit int) ([]models.Message, error) {

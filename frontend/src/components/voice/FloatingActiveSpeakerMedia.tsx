@@ -97,7 +97,8 @@ export default function FloatingActiveSpeakerMedia() {
   const persistedPosition = useActiveSpeakerStore((state) => state.overlayPosition);
   const setOverlayPosition = useActiveSpeakerStore((state) => state.setOverlayPosition);
   const resetOverlayPosition = useActiveSpeakerStore((state) => state.resetOverlayPosition);
-  const streamId = useVoiceStore((state) => state.streamId);
+  const voiceTargetId = useVoiceStore((state) => state.targetId);
+  const voiceTargetKind = useVoiceStore((state) => state.targetKind);
   const voiceOutputMuted = useVoiceStore((state) => state.voiceOutputMuted);
   const toggleVoiceOutputMute = useVoiceStore((state) => state.toggleVoiceOutputMute);
   const openVoiceView = useVoiceChannelUiStore((state) => state.openVoiceView);
@@ -240,8 +241,8 @@ export default function FloatingActiveSpeakerMedia() {
 
     setOverlayPosition(position);
 
-    if (!dragState.moved && streamId) {
-      openVoiceView(streamId);
+    if (!dragState.moved && voiceTargetId) {
+      openVoiceView(voiceTargetId, voiceTargetKind ?? 'stream');
     }
   };
 
@@ -355,10 +356,10 @@ export default function FloatingActiveSpeakerMedia() {
 
           <div className="absolute right-3 top-3 flex items-center gap-1.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
             <OverlayActionButton
-              label={streamId ? 'Open voice view' : 'Voice view unavailable'}
+              label={voiceTargetId ? 'Open voice view' : 'Voice view unavailable'}
               onClick={() => {
-                if (streamId) {
-                  openVoiceView(streamId);
+                if (voiceTargetId) {
+                  openVoiceView(voiceTargetId, voiceTargetKind ?? 'stream');
                 }
               }}
             >

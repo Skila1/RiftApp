@@ -21,6 +21,7 @@ type VoiceHandler struct {
 	cfg        *config.Config
 	hubSvc     *service.HubService
 	streamSvc  *service.StreamService
+	dmSvc      *service.DMService
 	hub        *ws.Hub
 	customRepo *repository.HubCustomizationRepo
 	// Per-user soundboard rate limiter: userID -> last play timestamps
@@ -34,11 +35,12 @@ const (
 	moderatorMoveGrantTTL = 30 * time.Second
 )
 
-func NewVoiceHandler(cfg *config.Config, hubSvc *service.HubService, streamSvc *service.StreamService, hub *ws.Hub, customRepo *repository.HubCustomizationRepo) *VoiceHandler {
+func NewVoiceHandler(cfg *config.Config, hubSvc *service.HubService, streamSvc *service.StreamService, dmSvc *service.DMService, hub *ws.Hub, customRepo *repository.HubCustomizationRepo) *VoiceHandler {
 	return &VoiceHandler{
 		cfg:        cfg,
 		hubSvc:     hubSvc,
 		streamSvc:  streamSvc,
+		dmSvc:      dmSvc,
 		hub:        hub,
 		customRepo: customRepo,
 		sbLastPlay: make(map[string][]time.Time),
@@ -57,30 +59,55 @@ type disconnectVoiceUserInput struct {
 func (h *VoiceHandler) Token(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	streamID := r.URL.Query().Get("streamID")
+	conversationID := r.URL.Query().Get("conversationID")
 	if streamID == "" {
 		streamID = chi.URLParam(r, "streamID")
 	}
-	if streamID == "" {
-		writeError(w, http.StatusBadRequest, "streamID is required")
+	if conversationID == "" {
+		conversationID = chi.URLParam(r, "conversationID")
+	}
+	if streamID != "" && conversationID != "" {
+		writeError(w, http.StatusBadRequest, "streamID and conversationID are mutually exclusive")
+		return
+	}
+	if streamID == "" && conversationID == "" {
+		writeError(w, http.StatusBadRequest, "streamID or conversationID is required")
 		return
 	}
 
-	stream, err := h.hubSvc.GetStreamForMember(r.Context(), streamID, userID)
-	if err != nil {
-		writeError(w, http.StatusForbidden, "stream not found or access denied")
-		return
+	roomName := ""
+	if conversationID != "" {
+		if h.dmSvc == nil {
+			writeError(w, http.StatusInternalServerError, "DM voice is not configured")
+			return
+		}
+		isMember, err := h.dmSvc.IsMember(r.Context(), conversationID, userID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to validate conversation access")
+			return
+		}
+		if !isMember {
+			writeError(w, http.StatusForbidden, "conversation not found or access denied")
+			return
+		}
+		roomName = "conversation:" + conversationID
+	} else {
+		stream, err := h.hubSvc.GetStreamForMember(r.Context(), streamID, userID)
+		if err != nil {
+			writeError(w, http.StatusForbidden, "stream not found or access denied")
+			return
+		}
+		if stream.Type != 1 {
+			writeError(w, http.StatusBadRequest, "stream is not a voice channel")
+			return
+		}
+		hasModeratorMoveGrant := h.hub != nil && h.hub.HasVoiceJoinGrant(userID, streamID)
+		if !h.hubSvc.HasStreamPermission(r.Context(), streamID, userID, models.PermConnectVoice) && !hasModeratorMoveGrant {
+			writeError(w, http.StatusForbidden, "you do not have permission to connect to voice")
+			return
+		}
+		roomName = "stream:" + streamID
 	}
-	if stream.Type != 1 {
-		writeError(w, http.StatusBadRequest, "stream is not a voice channel")
-		return
-	}
-	hasModeratorMoveGrant := h.hub != nil && h.hub.HasVoiceJoinGrant(userID, streamID)
-	if !h.hubSvc.HasStreamPermission(r.Context(), streamID, userID, models.PermConnectVoice) && !hasModeratorMoveGrant {
-		writeError(w, http.StatusForbidden, "you do not have permission to connect to voice")
-		return
-	}
-
-	roomName := "stream:" + streamID
 
 	at := auth.NewAccessToken(h.cfg.LiveKitKey, h.cfg.LiveKitSecret)
 	grant := &auth.VideoGrant{

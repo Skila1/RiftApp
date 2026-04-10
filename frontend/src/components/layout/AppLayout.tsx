@@ -77,24 +77,26 @@ export default function AppLayout() {
 
   const activeHubId = useHubStore((s) => s.activeHubId);
   const streams = useStreamStore((s) => s.streams);
-  const voiceStreamId = useVoiceStore((s) => s.streamId);
+  const voiceTargetId = useVoiceStore((s) => s.targetId);
   const voiceConnecting = useVoiceStore((s) => s.connecting);
   const voiceUiOpen = useVoiceChannelUiStore((s) => s.isOpen);
   const activeVoiceChannelId = useVoiceChannelUiStore((s) => s.activeChannelId);
+  const activeVoiceChannelKind = useVoiceChannelUiStore((s) => s.activeChannelKind);
   const resetVoiceView = useVoiceChannelUiStore((s) => s.resetVoiceView);
 
   useEffect(() => {
-    if (!voiceConnecting && !voiceStreamId) {
+    if (!voiceConnecting && !voiceTargetId) {
       resetVoiceView();
     }
-  }, [resetVoiceView, voiceConnecting, voiceStreamId]);
+  }, [resetVoiceView, voiceConnecting, voiceTargetId]);
 
   useEffect(() => {
+    if (activeVoiceChannelKind !== 'stream') return;
     if (!activeVoiceChannelId) return;
     if (!streams.some((stream) => stream.id === activeVoiceChannelId)) {
       resetVoiceView();
     }
-  }, [activeVoiceChannelId, resetVoiceView, streams]);
+  }, [activeVoiceChannelId, activeVoiceChannelKind, resetVoiceView, streams]);
 
   useEffect(() => {
     if (!activeHubId || activeConversationId || voiceUiOpen) {

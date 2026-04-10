@@ -24,10 +24,13 @@ export function getConversationOtherMembers(conversation?: Conversation | null, 
 }
 
 export function isGroupConversation(conversation?: Conversation | null, viewerUserId?: string | null): boolean {
-  return getConversationOtherMembers(conversation, viewerUserId).length > 1;
+  return Boolean(conversation?.is_group) || getConversationOtherMembers(conversation, viewerUserId).length > 1;
 }
 
 export function getConversationTitle(conversation?: Conversation | null, viewerUserId?: string | null): string {
+  const customName = conversation?.name?.trim();
+  if (customName) return customName;
+
   const others = getConversationOtherMembers(conversation, viewerUserId);
   if (others.length === 0) return 'Direct Message';
   if (others.length === 1) return getUserLabel(others[0]);
@@ -42,6 +45,14 @@ export function getConversationTitle(conversation?: Conversation | null, viewerU
 export function getConversationSubtitle(conversation?: Conversation | null, viewerUserId?: string | null): string {
   const others = getConversationOtherMembers(conversation, viewerUserId);
   if (others.length === 0) return 'No members';
+
+  if (isGroupConversation(conversation, viewerUserId)) {
+    const labels = others.map(getUserLabel);
+    if (labels.length <= 3) {
+      return labels.join(', ');
+    }
+    return `${labels.slice(0, 2).join(', ')} +${labels.length - 2}`;
+  }
 
   const usernames = others
     .map((member) => member.username?.trim())
@@ -62,4 +73,9 @@ export function getConversationAvatarUsers(
   limit = 2,
 ): User[] {
   return getConversationOtherMembers(conversation, viewerUserId).slice(0, limit);
+}
+
+export function getConversationIconUrl(conversation?: Conversation | null): string | undefined {
+  const iconUrl = conversation?.icon_url?.trim();
+  return iconUrl ? iconUrl : undefined;
 }

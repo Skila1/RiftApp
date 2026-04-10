@@ -15,10 +15,12 @@ import { usePresenceStore } from '../../stores/presenceStore';
 import { useSelfProfileStore } from '../../stores/selfProfileStore';
 import { useAppSettingsStore } from '../../stores/appSettingsStore';
 import { useHubStore } from '../../stores/hubStore';
+import { useDMStore } from '../../stores/dmStore';
 import { useStreamStore } from '../../stores/streamStore';
 import { useVoiceChannelUiStore } from '../../stores/voiceChannelUiStore';
 import type { User } from '../../types';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
+import { getConversationTitle } from '../../utils/conversations';
 import StatusDot, { statusLabel } from '../shared/StatusDot';
 import SoundboardPanel from './SoundboardPanel';
 import {
@@ -538,6 +540,7 @@ function VoiceControlsRow({
   screenSharing,
   screenShareRequesting,
   soundboardOpen,
+  showSoundboard,
   disabled,
   soundboardTriggerRef,
   onToggleCamera,
@@ -548,6 +551,7 @@ function VoiceControlsRow({
   screenSharing: boolean;
   screenShareRequesting: boolean;
   soundboardOpen: boolean;
+  showSoundboard: boolean;
   disabled: boolean;
   soundboardTriggerRef: RefObject<HTMLButtonElement>;
   onToggleCamera: () => void;
@@ -555,7 +559,7 @@ function VoiceControlsRow({
   onToggleSoundboard: () => void;
 }) {
   return (
-    <div className="grid grid-cols-4 gap-[6px] px-3 pb-3">
+    <div className={`grid gap-[6px] px-3 pb-3 ${showSoundboard ? 'grid-cols-4' : 'grid-cols-3'}`}>
       <VoiceSquareButton
         title={cameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
         onClick={onToggleCamera}
@@ -582,15 +586,17 @@ function VoiceControlsRow({
         <ActivitiesIcon size={18} />
       </VoiceSquareButton>
 
-      <VoiceSquareButton
-        title="Soundboard"
-        onClick={onToggleSoundboard}
-        disabled={disabled}
-        active={soundboardOpen}
-        buttonRef={soundboardTriggerRef}
-      >
-        <SoundboardControlIcon size={18} />
-      </VoiceSquareButton>
+      {showSoundboard ? (
+        <VoiceSquareButton
+          title="Soundboard"
+          onClick={onToggleSoundboard}
+          disabled={disabled}
+          active={soundboardOpen}
+          buttonRef={soundboardTriggerRef}
+        >
+          <SoundboardControlIcon size={18} />
+        </VoiceSquareButton>
+      ) : null}
     </div>
   );
 }
@@ -683,7 +689,9 @@ export default function VoiceBottomBar() {
   const voiceToggleCamera = useVoiceStore((s) => s.toggleCamera);
   const voiceToggleScreenShare = useVoiceStore((s) => s.toggleScreenShare);
   const voiceLeave = useVoiceStore((s) => s.leave);
+  const voiceTargetKind = useVoiceStore((s) => s.targetKind);
   const voiceStreamId = useVoiceStore((s) => s.streamId);
+  const voiceConversationId = useVoiceStore((s) => s.conversationId);
   const voiceScreenShareRequesting = useVoiceStore((s) => s.screenShareRequesting);
   const voiceScreenShareNotice = useVoiceStore((s) => s.screenShareNotice);
   const voiceDismissScreenShareNotice = useVoiceStore((s) => s.dismissScreenShareNotice);
@@ -695,10 +703,10 @@ export default function VoiceBottomBar() {
   const connectionEndpoint = useVoiceStore((s) => s.connectionEndpoint);
 
   const hubs = useHubStore((s) => s.hubs);
+  const conversations = useDMStore((s) => s.conversations);
   const streams = useStreamStore((s) => s.streams);
   const streamHubMap = useStreamStore((s) => s.streamHubMap);
   const hubLayoutCache = useStreamStore((s) => s.hubLayoutCache);
-  const activeVoiceChannelId = useVoiceChannelUiStore((s) => s.activeChannelId);
   const closeVoiceView = useVoiceChannelUiStore((s) => s.closeVoiceView);
 
   const liveStatus = usePresenceStore((s) => (user ? s.presence[user.id] : undefined));
@@ -713,7 +721,7 @@ export default function VoiceBottomBar() {
   const soundboardTriggerRef = useRef<HTMLButtonElement>(null);
   const soundboardPopoverRef = useRef<HTMLDivElement>(null);
 
-  const connectedVoiceStreamId = voiceStreamId ?? activeVoiceChannelId;
+  const connectedVoiceStreamId = voiceTargetKind === 'stream' ? voiceStreamId : null;
   const voiceStream = useMemo(() => {
     if (!connectedVoiceStreamId) {
       return null;
@@ -733,6 +741,12 @@ export default function VoiceBottomBar() {
 
     return null;
   }, [connectedVoiceStreamId, hubLayoutCache, streams]);
+  const voiceConversation = useMemo(() => {
+    if (voiceTargetKind !== 'conversation' || !voiceConversationId) {
+      return null;
+    }
+    return conversations.find((conversation) => conversation.id === voiceConversationId) ?? null;
+  }, [conversations, voiceConversationId, voiceTargetKind]);
   const voiceHubId = voiceStream?.hub_id ?? (connectedVoiceStreamId ? streamHubMap[connectedVoiceStreamId] ?? null : null);
   const voiceHub = hubs.find((hub) => hub.id === voiceHubId) ?? null;
   const inVoice = voiceConnected || voiceConnecting;
@@ -802,7 +816,7 @@ export default function VoiceBottomBar() {
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [inVoice, voiceStreamId]);
+  }, [inVoice, voiceConversationId, voiceStreamId, voiceTargetKind]);
 
   const handleLeave = useCallback(() => {
     closeVoiceView();
@@ -829,9 +843,10 @@ export default function VoiceBottomBar() {
   }, []);
 
   const handleToggleSoundboard = useCallback(() => {
+    if (!voiceHubId) return;
     setConnectionPopoverOpen(false);
     setSoundboardOpen((current) => !current);
-  }, []);
+  }, [voiceHubId]);
 
   const voiceStatus = useMemo(() => {
     if (voiceConnecting || connectionState === ConnectionState.Connecting) {
@@ -853,9 +868,11 @@ export default function VoiceBottomBar() {
   }
 
   const currentStatusText = statusLabel(liveStatus ?? user.status);
-  const channelLabel = voiceStream
+  const channelLabel = voiceConversation
+    ? getConversationTitle(voiceConversation, user.id)
+    : voiceStream
     ? `${voiceStream.name}${voiceHub ? ` / ${voiceHub.name}` : ''}`
-    : 'Voice Channel';
+    : 'Voice Call';
 
   return (
     <div className="relative flex-shrink-0 border-t border-riftapp-border/60 bg-riftapp-chrome">
@@ -886,6 +903,7 @@ export default function VoiceBottomBar() {
             screenSharing={voiceIsScreenSharing}
             screenShareRequesting={voiceScreenShareRequesting}
             soundboardOpen={soundboardOpen}
+            showSoundboard={Boolean(voiceHubId)}
             disabled={controlsDisabled}
             soundboardTriggerRef={soundboardTriggerRef}
             onToggleCamera={voiceToggleCamera}

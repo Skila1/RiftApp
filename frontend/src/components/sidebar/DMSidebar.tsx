@@ -8,6 +8,7 @@ import type { Conversation, User } from '../../types';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { normalizeUser } from '../../utils/entityAssets';
 import {
+  getConversationIconUrl,
   getConversationOtherMembers,
   getConversationTitle,
   isGroupConversation,
@@ -52,7 +53,18 @@ function ConversationAvatar({
   viewerUserId?: string | null;
   fallbackStatus?: number;
 }) {
+  const conversationIconUrl = getConversationIconUrl(conversation);
   const otherMembers = getConversationOtherMembers(conversation, viewerUserId);
+
+  if (conversationIconUrl) {
+    return (
+      <img
+        src={publicAssetUrl(conversationIconUrl)}
+        alt=""
+        className="h-8 w-8 flex-shrink-0 rounded-full object-cover"
+      />
+    );
+  }
 
   if (otherMembers.length <= 1) {
     const member = otherMembers[0] ?? conversation.recipient;

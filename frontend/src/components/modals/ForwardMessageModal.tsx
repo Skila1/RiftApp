@@ -8,6 +8,7 @@ import type { Message, Stream, User } from '../../types';
 import { normalizeConversation, normalizeUser } from '../../utils/entityAssets';
 import {
   getConversationAvatarUsers,
+  getConversationIconUrl,
   getConversationOtherMembers,
   getConversationSubtitle,
   getConversationTitle,
@@ -208,7 +209,7 @@ export default function ForwardMessageModal({ message, onClose }: Props) {
       id: conversation.id,
       title: getConversationTitle(conversation, currentUserId),
       subtitle: getConversationSubtitle(conversation, currentUserId),
-      avatarUrl: getConversationAvatarUsers(conversation, currentUserId, 1)[0]?.avatar_url,
+      avatarUrl: getConversationIconUrl(conversation) ?? getConversationAvatarUsers(conversation, currentUserId, 1)[0]?.avatar_url,
       initial: (getConversationTitle(conversation, currentUserId) || '?')[0]?.toUpperCase() ?? '?',
     }));
   }, [conversations, currentUserId]);
@@ -423,7 +424,7 @@ export default function ForwardMessageModal({ message, onClose }: Props) {
                         <div className="h-14 animate-pulse rounded-xl bg-[#17181c]" />
                       ) : existingConversationForSearch ? (
                         <div className="rounded-xl border border-dashed border-white/8 bg-[#0f1012] px-3 py-4 text-sm text-[#949ba4]">
-                          An existing DM with {existingConversationForSearch.recipient.display_name || existingConversationForSearch.recipient.username} already exists above.
+                          An existing conversation with {getConversationTitle(existingConversationForSearch, currentUserId)} already exists above.
                         </div>
                       ) : (
                         <div className="rounded-xl border border-dashed border-white/8 bg-[#0f1012] px-3 py-4 text-sm text-[#949ba4]">

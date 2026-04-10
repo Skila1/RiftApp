@@ -83,8 +83,10 @@ export function normalizeMessages(messages: Message[]): Message[] {
 }
 
 export function normalizeConversation(conversation: Conversation): Conversation {
+  const version = conversation.updated_at || conversation.created_at;
   return {
     ...conversation,
+    icon_url: withAssetVersion(conversation.icon_url, version),
     recipient: normalizeUser(conversation.recipient),
     members: conversation.members ? normalizeUsers(conversation.members) : conversation.members,
     last_message: conversation.last_message ? normalizeMessage(conversation.last_message) : conversation.last_message,
