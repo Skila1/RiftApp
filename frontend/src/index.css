@@ -248,13 +248,17 @@
   }
 
   .rift-message-layout {
+    --rift-message-avatar-size: 40px;
+    --rift-message-leading-gap: 12px;
     display: grid;
-    grid-template-columns: 40px minmax(0, 1fr);
-    column-gap: 12px;
+    grid-template-columns: var(--rift-message-avatar-size) minmax(0, 1fr);
+    column-gap: var(--rift-message-leading-gap);
   }
 
   .rift-message-followup {
-    padding-left: 52px;
+    --rift-message-avatar-size: 40px;
+    --rift-message-leading-gap: 12px;
+    padding-left: calc(var(--rift-message-avatar-size) + var(--rift-message-leading-gap));
   }
 
   .rift-reply-preview {
@@ -270,9 +274,9 @@
   .rift-reply-preview::before {
     content: '';
     position: absolute;
-    left: -32px;
+    left: calc(-1 * (var(--rift-message-leading-gap, 12px) - 2px));
     top: 7px;
-    width: 33px;
+    width: calc(var(--rift-message-leading-gap, 12px) - 1px);
     height: 20px;
     border-left: 2px solid #4e5058;
     border-top: 2px solid #4e5058;
