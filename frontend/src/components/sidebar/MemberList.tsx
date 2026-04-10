@@ -6,10 +6,7 @@ import StatusDot, { statusLabel } from '../shared/StatusDot';
 import BotBadge from '../shared/BotBadge';
 import type { User } from '../../types';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
-import {
-  dispatchChatSearchRequest,
-  type ChatSearchFocusFilter,
-} from '../../utils/chatSearchBridge';
+import { dispatchChatSearchRequest } from '../../utils/chatSearchBridge';
 
 function SearchIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -17,127 +14,6 @@ function SearchIcon(props: React.SVGProps<SVGSVGElement>) {
       <circle cx="11" cy="11" r="8" />
       <path d="m21 21-4.3-4.3" />
     </svg>
-  );
-}
-
-function FilterIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-    </svg>
-  );
-}
-
-function UserIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M20 21a8 8 0 0 0-16 0" />
-      <circle cx="12" cy="8" r="4" />
-    </svg>
-  );
-}
-
-function HashIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M5 9h14" />
-      <path d="M3 15h14" />
-      <path d="M11 3 8 21" />
-      <path d="M16 3 13 21" />
-    </svg>
-  );
-}
-
-function MentionIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <circle cx="12" cy="12" r="4" />
-      <path d="M16 12v1a4 4 0 1 0 4-4" />
-      <path d="M12 4a8 8 0 1 0 8 8" />
-    </svg>
-  );
-}
-
-function SlidersIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <line x1="4" x2="20" y1="6" y2="6" />
-      <line x1="4" x2="20" y1="12" y2="12" />
-      <line x1="4" x2="20" y1="18" y2="18" />
-      <circle cx="9" cy="6" r="2" />
-      <circle cx="15" cy="12" r="2" />
-      <circle cx="11" cy="18" r="2" />
-    </svg>
-  );
-}
-
-type SearchShortcut = {
-  key: ChatSearchFocusFilter | 'more';
-  title: string;
-  chipLabel: string;
-  fullWidth?: boolean;
-  Icon: (props: React.SVGProps<SVGSVGElement>) => React.ReactNode;
-};
-
-const SEARCH_SHORTCUTS: ReadonlyArray<SearchShortcut> = [
-  {
-    key: 'author_id',
-    title: 'Filter by author',
-    chipLabel: 'From',
-    Icon: UserIcon,
-  },
-  {
-    key: 'stream_id',
-    title: 'Filter by channel',
-    chipLabel: 'In',
-    Icon: HashIcon,
-  },
-  {
-    key: 'has',
-    title: 'Filter by attachments and embeds',
-    chipLabel: 'Has',
-    Icon: FilterIcon,
-  },
-  {
-    key: 'mentions',
-    title: 'Filter by mentions',
-    chipLabel: 'Mentions',
-    Icon: MentionIcon,
-  },
-  {
-    key: 'more',
-    title: 'Open advanced filters',
-    chipLabel: 'More filters',
-    fullWidth: true,
-    Icon: SlidersIcon,
-  },
-];
-
-function SearchShortcutChip({
-  title,
-  chipLabel,
-  Icon,
-  fullWidth,
-  onClick,
-}: {
-  title: string;
-  chipLabel: string;
-  Icon: (props: React.SVGProps<SVGSVGElement>) => React.ReactNode;
-  fullWidth?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      className={`inline-flex h-7 min-w-0 items-center gap-1.5 rounded-[6px] border border-[#2d3138] bg-[#202225] px-2 text-left text-[11px] font-medium text-[#b5bac1] transition-colors hover:border-[#3b4048] hover:bg-[#262930] hover:text-[#f2f3f5] ${fullWidth ? 'col-span-2' : ''}`}
-    >
-      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-current">
-        <Icon className="h-3.5 w-3.5" />
-      </span>
-      <span className="truncate leading-none">{chipLabel}</span>
-    </button>
   );
 }
 
@@ -213,26 +89,27 @@ export default function MemberList() {
     return { online: onlineList, offline: offlineList };
   }, [hubMembers, presence]);
 
-  const runMessageSearch = useCallback(() => {
-    dispatchChatSearchRequest({ query: messageSearch, run: true, clearFiltersOnRun: true });
+  const openMessageSearch = useCallback(() => {
+    const query = messageSearch.trim();
+    dispatchChatSearchRequest({ query: query || undefined });
   }, [messageSearch]);
 
-  const openAdvancedSearch = useCallback((focusFilter?: ChatSearchFocusFilter) => {
-    dispatchChatSearchRequest({ query: messageSearch, focusFilter });
-  }, [messageSearch]);
+  const runMessageSearch = useCallback(() => {
+    const query = messageSearch.trim();
+    if (!query) {
+      openMessageSearch();
+      return;
+    }
+    dispatchChatSearchRequest({ query, run: true, clearFiltersOnRun: true });
+  }, [messageSearch, openMessageSearch]);
 
   if (Object.keys(hubMembers).length === 0) return null;
 
   return (
     <div className="relative w-60 border-l border-riftapp-border/60 bg-riftapp-content flex flex-col overflow-visible flex-shrink-0">
-      <div className="relative z-20 border-b border-riftapp-border/50 bg-riftapp-content px-3 py-3">
-        <div className="space-y-2.5">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Message search</p>
-            <p className="mt-1 text-[12px] leading-4 text-[#72767d]">Search this server or jump straight into a filter.</p>
-          </div>
-
-          <div className="flex h-8 min-w-0 items-center gap-1 rounded-[6px] bg-[#24272d] px-2 text-[#b5bac1] shadow-[0_1px_0_rgba(0,0,0,0.32)] transition-colors hover:bg-[#262930] focus-within:bg-[#262930]">
+      <div className="relative z-20 h-12 border-b border-riftapp-border/50 bg-riftapp-content px-3">
+        <div className="flex h-full items-center">
+          <div className="flex h-[28px] w-full min-w-0 items-center gap-1 rounded-[4px] bg-[#24272d] px-2 text-[#b5bac1] shadow-[0_1px_0_rgba(0,0,0,0.32)] transition-colors hover:bg-[#262930] focus-within:bg-[#262930]">
             <SearchIcon className="h-[13px] w-[13px] shrink-0 text-[#72767d]" />
             <input
               type="text"
@@ -254,29 +131,10 @@ export default function MemberList() {
               type="button"
               onClick={runMessageSearch}
               className="inline-flex h-5 w-6 shrink-0 items-center justify-center rounded-[3px] bg-[#2d3138] text-[#8f949c] transition-colors hover:bg-[#363a43] hover:text-[#dcddde]"
-              aria-label="Run message search"
+              aria-label={messageSearch.trim() ? 'Run message search' : 'Open message search'}
             >
               <SearchIcon className="h-[13px] w-[13px]" />
             </button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-1.5">
-            {SEARCH_SHORTCUTS.map((shortcut) => (
-              <SearchShortcutChip
-                key={shortcut.key}
-                title={shortcut.title}
-                chipLabel={shortcut.chipLabel}
-                Icon={shortcut.Icon}
-                fullWidth={shortcut.fullWidth}
-                onClick={() => {
-                  if (shortcut.key === 'more') {
-                    openAdvancedSearch();
-                    return;
-                  }
-                  openAdvancedSearch(shortcut.key);
-                }}
-              />
-            ))}
           </div>
         </div>
       </div>
