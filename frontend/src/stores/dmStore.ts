@@ -7,6 +7,7 @@ import { useHubStore } from './hubStore';
 import { useMessageStore } from './messageStore';
 import { useStreamStore } from './streamStore';
 import { useVoiceChannelUiStore } from './voiceChannelUiStore';
+import { useVoiceStore } from './voiceStore';
 
 const sumDmUnreads = (conversations: Conversation[]) =>
   conversations.reduce((acc, c) => acc + (c.unread_count ?? 0), 0);
@@ -320,6 +321,7 @@ export const useDMStore = create<DMState>((set, get) => ({
 
   removeConversation: (conversationId) => {
     useVoiceChannelUiStore.getState().closeVoiceView();
+    useVoiceStore.getState().clearConversationCallState(conversationId);
     set((s) => {
       const conversations = s.conversations.filter((conversation) => conversation.id !== conversationId);
       return {

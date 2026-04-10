@@ -483,6 +483,26 @@ function HeaderIconButton({
   );
 }
 
+function HeaderStatusPill({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: 'success' | 'warning';
+}) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-[3px] text-[10px] font-semibold uppercase tracking-[0.16em] ${
+        tone === 'warning'
+          ? 'bg-[#f0b232]/14 text-[#ffd27a]'
+          : 'bg-[#23a55a]/14 text-[#77e0a2]'
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
 function FloatingPanel({
   title,
   subtitle,
@@ -808,7 +828,11 @@ export default function ChatPanel({
   const voiceTargetKind = useVoiceStore((s) => s.targetKind);
   const voiceConversationId = useVoiceStore((s) => s.conversationId);
   const voiceIsCameraOn = useVoiceStore((s) => s.isCameraOn);
+  const conversationVoiceMembers = useVoiceStore((s) => s.conversationVoiceMembers);
+  const conversationCallRings = useVoiceStore((s) => s.conversationCallRings);
   const joinConversationVoice = useVoiceStore((s) => s.joinConversation);
+  const startConversationCallRing = useVoiceStore((s) => s.startConversationCallRing);
+  const cancelConversationCallRing = useVoiceStore((s) => s.cancelConversationCallRing);
   const toggleVoiceCamera = useVoiceStore((s) => s.toggleCamera);
   const openVoiceView = useVoiceChannelUiStore((s) => s.openVoiceView);
 
@@ -828,12 +852,54 @@ export default function ChatPanel({
     () => getConversationTitle(activeConversation, user?.id),
     [activeConversation, user?.id],
   );
+  const activeConversationVoiceMembers = activeConversationId
+    ? conversationVoiceMembers[activeConversationId] ?? []
+    : [];
+  const activeConversationCallRing = activeConversationId
+    ? conversationCallRings[activeConversationId] ?? null
+    : null;
   const isCurrentConversationCall = Boolean(
     activeConversationId
     && voiceTargetKind === 'conversation'
     && voiceConversationId === activeConversationId
     && (voiceConnected || voiceConnecting),
   );
+  const activeConversationCallStatus = useMemo(() => {
+    if (activeConversationCallRing) {
+      return {
+        tone: 'warning' as const,
+        label:
+          activeConversationCallRing.initiator_id === user?.id
+            ? activeConversationCallRing.mode === 'video'
+              ? 'Ringing Video Call'
+              : 'Ringing Voice Call'
+            : activeConversationCallRing.mode === 'video'
+              ? 'Incoming Video Call'
+              : 'Incoming Voice Call',
+      };
+    }
+
+    if (activeConversationVoiceMembers.length > 0) {
+      return {
+        tone: 'success' as const,
+        label: activeConversationVoiceMembers.length === 1 ? 'In Call' : `${activeConversationVoiceMembers.length} In Call`,
+      };
+    }
+
+    return null;
+  }, [activeConversationCallRing, activeConversationVoiceMembers.length, user?.id]);
+  const dmVoiceButtonLabel = activeConversationCallRing && activeConversationCallRing.initiator_id !== user?.id
+    ? 'Join voice call'
+    : activeConversationVoiceMembers.length > 0 && !isCurrentConversationCall
+      ? 'Join voice call'
+      : 'Start voice call';
+  const dmVideoButtonLabel = isCurrentConversationCall && voiceIsCameraOn
+    ? 'Toggle video off'
+    : activeConversationCallRing && activeConversationCallRing.initiator_id !== user?.id
+      ? 'Join with video'
+      : activeConversationVoiceMembers.length > 0 && !isCurrentConversationCall
+        ? 'Join with video'
+        : 'Start video call';
 
   const streamMap = useMemo(
     () => new Map(streams.map((stream) => [stream.id, stream])),
@@ -1544,6 +1610,7 @@ export default function ChatPanel({
 
   const handleDMCall = useCallback(async (mode: 'audio' | 'video') => {
     if (!activeConversation) return;
+    const currentUserId = user?.id ?? null;
 
     if (isCurrentConversationCall) {
       openVoiceView(activeConversation.id, 'conversation');
@@ -1553,12 +1620,32 @@ export default function ChatPanel({
       return;
     }
 
+    const voiceState = useVoiceStore.getState();
+    const existingRing = voiceState.conversationCallRings[activeConversation.id];
+    const activeMembers = voiceState.conversationVoiceMembers[activeConversation.id] ?? [];
+    const hasOtherParticipants = activeMembers.some((memberId) => memberId !== currentUserId);
+    const shouldStartRing = Boolean(currentUserId && !hasOtherParticipants && !existingRing);
+    let startedRing = false;
+
+    if (shouldStartRing) {
+      await startConversationCallRing(activeConversation.id, mode);
+      startedRing = true;
+    }
+
     openVoiceView(activeConversation.id, 'conversation');
     await joinConversationVoice(activeConversation.id);
+    const joinedState = useVoiceStore.getState();
+    const joinedConversationCall = joinedState.targetKind === 'conversation'
+      && joinedState.conversationId === activeConversation.id
+      && joinedState.connected;
+    if (startedRing && !joinedConversationCall) {
+      await cancelConversationCallRing(activeConversation.id);
+      return;
+    }
     if (mode === 'video' && !useVoiceStore.getState().isCameraOn) {
       await useVoiceStore.getState().toggleCamera();
     }
-  }, [activeConversation, isCurrentConversationCall, joinConversationVoice, openVoiceView, toggleVoiceCamera, voiceConnected]);
+  }, [activeConversation, cancelConversationCallRing, isCurrentConversationCall, joinConversationVoice, openVoiceView, startConversationCallRing, toggleVoiceCamera, user?.id, voiceConnected]);
 
   return (
     <div className={`flex-1 min-h-0 flex flex-col bg-riftapp-content min-w-0 relative ${searchSidebarOpen ? 'pr-[320px]' : ''}`}>
@@ -1576,6 +1663,11 @@ export default function ChatPanel({
                   <h3 className="truncate text-[15px] font-semibold text-[#f2f3f5]">
 					  {activeConversationLabel}
                   </h3>
+                  {activeConversationCallStatus ? (
+                    <div className="mt-1 flex items-center gap-2">
+                      <HeaderStatusPill label={activeConversationCallStatus.label} tone={activeConversationCallStatus.tone} />
+                    </div>
+                  ) : null}
                 </div>
               </>
             ) : (
@@ -1641,14 +1733,14 @@ export default function ChatPanel({
         {isDMMode && activeConversation ? (
           <>
             <HeaderIconButton
-              label="Start voice call"
+              label={dmVoiceButtonLabel}
               active={isCurrentConversationCall}
               onClick={() => void handleDMCall('audio')}
             >
               <IconPhone className="h-4 w-4" />
             </HeaderIconButton>
             <HeaderIconButton
-              label={isCurrentConversationCall && voiceIsCameraOn ? 'Toggle video off' : 'Start video call'}
+              label={dmVideoButtonLabel}
               active={isCurrentConversationCall && voiceIsCameraOn}
               onClick={() => void handleDMCall('video')}
             >

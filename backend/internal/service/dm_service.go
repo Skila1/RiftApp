@@ -37,6 +37,59 @@ func (s *DMService) IsMember(ctx context.Context, convID, userID string) (bool, 
 	return s.dmRepo.IsMember(ctx, convID, userID)
 }
 
+func (s *DMService) StartConversationCallRing(ctx context.Context, userID, convID, mode string) (ws.DMConversationCallStateData, error) {
+	if s.hub == nil {
+		return ws.DMConversationCallStateData{}, apperror.Internal("DM call state unavailable", fmt.Errorf("websocket hub unavailable"))
+	}
+
+	normalizedMode := strings.ToLower(strings.TrimSpace(mode))
+	if normalizedMode != "audio" && normalizedMode != "video" {
+		return ws.DMConversationCallStateData{}, apperror.BadRequest("mode must be audio or video")
+	}
+
+	isMember, err := s.dmRepo.IsMember(ctx, convID, userID)
+	if err != nil {
+		return ws.DMConversationCallStateData{}, apperror.Internal("internal error", err)
+	}
+	if !isMember {
+		return ws.DMConversationCallStateData{}, apperror.Forbidden("not a member of this conversation")
+	}
+
+	return s.hub.StartConversationCallRing(convID, userID, normalizedMode), nil
+}
+
+func (s *DMService) CancelConversationCallRing(ctx context.Context, userID, convID string) error {
+	if s.hub == nil {
+		return apperror.Internal("DM call state unavailable", fmt.Errorf("websocket hub unavailable"))
+	}
+
+	isMember, err := s.dmRepo.IsMember(ctx, convID, userID)
+	if err != nil {
+		return apperror.Internal("internal error", err)
+	}
+	if !isMember {
+		return apperror.Forbidden("not a member of this conversation")
+	}
+
+	s.hub.CancelConversationCallRing(convID, userID, "cancelled")
+	return nil
+}
+
+func (s *DMService) ListConversationCallStates(ctx context.Context, userID string) ([]ws.DMConversationCallStateData, error) {
+	if s.hub == nil {
+		return []ws.DMConversationCallStateData{}, nil
+	}
+
+	states, err := s.hub.GetConversationCallStatesForUser(ctx, userID)
+	if err != nil {
+		return nil, apperror.Internal("failed to load DM call states", err)
+	}
+	if states == nil {
+		states = []ws.DMConversationCallStateData{}
+	}
+	return states, nil
+}
+
 func (s *DMService) ListConversations(ctx context.Context, userID string) ([]repository.ConvResponse, error) {
 	convos, err := s.dmRepo.ListConversations(ctx, userID)
 	if err != nil {

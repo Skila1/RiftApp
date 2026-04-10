@@ -22,8 +22,10 @@ import type {
   SwitchBackgroundProcessorOptions,
 } from '@livekit/track-processors';
 import type { DesktopDisplaySource } from '../types/desktop';
+import type { DMCallMode, DMCallRing, DMConversationCallState } from '../types';
 import { api } from '../api/client';
 import { wsSend } from '../hooks/useWebSocket';
+import { useAuthStore } from './auth';
 import { useStreamStore } from './streamStore';
 import { useActiveSpeakerStore } from './activeSpeakerStore';
 import { usePresenceStore } from './presenceStore';
@@ -337,6 +339,8 @@ interface VoiceStore {
   conversationId: string | null;
   participants: VoiceParticipant[];
   conversationVoiceMembers: Record<string, string[]>;
+  conversationCallRings: Record<string, DMCallRing>;
+  dismissedConversationCallRings: Record<string, string>;
   conversationVoiceScreenSharers: Record<string, string[]>;
   conversationVoiceDeafenedUsers: Record<string, string[]>;
   speakingSignals: Record<string, boolean>;
@@ -375,6 +379,9 @@ interface VoiceStore {
 
   join: (streamId: string) => Promise<void>;
   joinConversation: (conversationId: string) => Promise<void>;
+  loadConversationCallStates: () => Promise<void>;
+  startConversationCallRing: (conversationId: string, mode: DMCallMode) => Promise<void>;
+  cancelConversationCallRing: (conversationId: string) => Promise<void>;
   leave: () => void;
   toggleMute: () => void;
   toggleDeafen: () => Promise<void>;
@@ -411,6 +418,10 @@ interface VoiceStore {
   applyConversationVoiceState: (conversationId: string, userId: string, action: 'join' | 'leave') => void;
   applyConversationVoiceScreenShare: (conversationId: string, userId: string, sharing: boolean) => void;
   applyConversationVoiceDeafen: (conversationId: string, userId: string, deafened: boolean) => void;
+  setConversationCallRing: (ring: DMCallRing) => void;
+  clearConversationCallRing: (conversationId: string) => void;
+  dismissConversationCallRing: (conversationId: string) => void;
+  clearConversationCallState: (conversationId: string) => void;
   applySpeakingSignal: (identity: string, speaking: boolean) => void;
   clearSpeakingSignal: (identity: string) => void;
   triggerSoundboardSpeaking: (identity: string, durationMs: number) => void;
@@ -463,6 +474,22 @@ function updateTargetUserList(
     next[targetId] = [...current];
   }
   return next;
+}
+
+function normalizeConversationCallStates(states: DMConversationCallState[]) {
+  const members: Record<string, string[]> = {};
+  const rings: Record<string, DMCallRing> = {};
+
+  for (const state of states) {
+    if (Array.isArray(state.member_ids) && state.member_ids.length > 0) {
+      members[state.conversation_id] = [...new Set(state.member_ids)];
+    }
+    if (state.ring) {
+      rings[state.conversation_id] = state.ring;
+    }
+  }
+
+  return { members, rings };
 }
 
 function micAudioCaptureOptions(
@@ -1801,6 +1828,8 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   conversationId: null,
   participants: [],
   conversationVoiceMembers: {},
+  conversationCallRings: {},
+  dismissedConversationCallRings: {},
   conversationVoiceScreenSharers: {},
   conversationVoiceDeafenedUsers: {},
   speakingSignals: {},
@@ -1841,10 +1870,70 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     await joinVoiceTarget({ kind: 'conversation', id: conversationId });
   },
 
+  loadConversationCallStates: async () => {
+    try {
+      const states = await api.getDMCallStates();
+      const normalized = normalizeConversationCallStates(states);
+      set((state) => ({
+        conversationVoiceMembers: normalized.members,
+        conversationCallRings: normalized.rings,
+        dismissedConversationCallRings: Object.fromEntries(
+          Object.entries(state.dismissedConversationCallRings).filter(
+            ([conversationId, startedAt]) => normalized.rings[conversationId]?.started_at === startedAt,
+          ),
+        ),
+      }));
+    } catch {
+      /* ignore transient DM call-state load failures */
+    }
+  },
+
+  startConversationCallRing: async (conversationId, mode) => {
+    const state = await api.startDMCallRing(conversationId, mode);
+    const normalized = normalizeConversationCallStates([state]);
+    set((current) => {
+      const nextMembers = { ...current.conversationVoiceMembers };
+      if (normalized.members[conversationId]) nextMembers[conversationId] = normalized.members[conversationId];
+      else delete nextMembers[conversationId];
+
+      const nextRings = { ...current.conversationCallRings };
+      if (normalized.rings[conversationId]) nextRings[conversationId] = normalized.rings[conversationId];
+      else delete nextRings[conversationId];
+
+      const nextDismissed = { ...current.dismissedConversationCallRings };
+      delete nextDismissed[conversationId];
+
+      return {
+        conversationVoiceMembers: nextMembers,
+        conversationCallRings: nextRings,
+        dismissedConversationCallRings: nextDismissed,
+      };
+    });
+  },
+
+  cancelConversationCallRing: async (conversationId) => {
+    try {
+      await api.cancelDMCallRing(conversationId);
+    } catch {
+      /* ignore transient cancellation failures */
+    }
+    get().clearConversationCallRing(conversationId);
+  },
+
   leave: async () => {
     if (get().connecting) {
       joinCancellationRequested = true;
     }
+    const voiceState = get();
+    const currentUserId = useAuthStore.getState().user?.id ?? null;
+    const outgoingConversationId = voiceState.targetKind === 'conversation' ? voiceState.conversationId : null;
+    const outgoingRing = outgoingConversationId ? voiceState.conversationCallRings[outgoingConversationId] : undefined;
+    const shouldCancelOutgoingRing = Boolean(
+      outgoingConversationId
+      && currentUserId
+      && outgoingRing?.initiator_id === currentUserId
+      && !(voiceState.conversationVoiceMembers[outgoingConversationId] ?? []).some((memberId) => memberId !== currentUserId),
+    );
     const room = roomRef;
     const targetPayload = currentVoiceTargetPayload(get());
     if (!room) { resetState(); return; }
@@ -1861,6 +1950,9 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     playLeaveSound();
     await destroyRoom(room);
     resetState();
+    if (shouldCancelOutgoingRing && outgoingConversationId) {
+      void api.cancelDMCallRing(outgoingConversationId).catch(() => {});
+    }
   },
 
   toggleMute: async () => {
@@ -2374,6 +2466,80 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
         syncParticipants();
       }
     }
+  },
+
+  setConversationCallRing: (ring) => {
+    set((state) => {
+      const nextDismissed = { ...state.dismissedConversationCallRings };
+      if (nextDismissed[ring.conversation_id] && nextDismissed[ring.conversation_id] !== ring.started_at) {
+        delete nextDismissed[ring.conversation_id];
+      }
+      return {
+        conversationCallRings: {
+          ...state.conversationCallRings,
+          [ring.conversation_id]: ring,
+        },
+        dismissedConversationCallRings: nextDismissed,
+      };
+    });
+  },
+
+  clearConversationCallRing: (conversationId) => {
+    set((state) => {
+      if (!state.conversationCallRings[conversationId] && !state.dismissedConversationCallRings[conversationId]) {
+        return state;
+      }
+      const nextRings = { ...state.conversationCallRings };
+      delete nextRings[conversationId];
+      const nextDismissed = { ...state.dismissedConversationCallRings };
+      delete nextDismissed[conversationId];
+      return {
+        conversationCallRings: nextRings,
+        dismissedConversationCallRings: nextDismissed,
+      };
+    });
+  },
+
+  dismissConversationCallRing: (conversationId) => {
+    set((state) => {
+      const ring = state.conversationCallRings[conversationId];
+      if (!ring) {
+        return state;
+      }
+      return {
+        dismissedConversationCallRings: {
+          ...state.dismissedConversationCallRings,
+          [conversationId]: ring.started_at,
+        },
+      };
+    });
+  },
+
+  clearConversationCallState: (conversationId) => {
+    set((state) => {
+      const nextMembers = { ...state.conversationVoiceMembers };
+      delete nextMembers[conversationId];
+
+      const nextRings = { ...state.conversationCallRings };
+      delete nextRings[conversationId];
+
+      const nextDismissed = { ...state.dismissedConversationCallRings };
+      delete nextDismissed[conversationId];
+
+      const nextScreenSharers = { ...state.conversationVoiceScreenSharers };
+      delete nextScreenSharers[conversationId];
+
+      const nextDeafened = { ...state.conversationVoiceDeafenedUsers };
+      delete nextDeafened[conversationId];
+
+      return {
+        conversationVoiceMembers: nextMembers,
+        conversationCallRings: nextRings,
+        dismissedConversationCallRings: nextDismissed,
+        conversationVoiceScreenSharers: nextScreenSharers,
+        conversationVoiceDeafenedUsers: nextDeafened,
+      };
+    });
   },
 
   applySpeakingSignal: (identity, speaking) => {

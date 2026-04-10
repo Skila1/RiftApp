@@ -240,6 +240,21 @@ export interface Conversation {
   unread_count?: number;
 }
 
+export type DMCallMode = 'audio' | 'video';
+
+export interface DMCallRing {
+  conversation_id: string;
+  initiator_id: string;
+  mode: DMCallMode;
+  started_at: string;
+}
+
+export interface DMConversationCallState {
+  conversation_id: string;
+  member_ids: string[];
+  ring?: DMCallRing | null;
+}
+
 export interface AuthResponse {
   access_token: string;
   refresh_token: string;

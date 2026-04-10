@@ -49,6 +49,7 @@ type RouterDeps struct {
 	ModerationService       *moderation.Service
 	ReportService           *service.ReportService
 	HubModerationRepo       *repository.HubModerationRepo
+	DeviceTokenRepo         *repository.DeviceTokenRepo
 	DB                      interface{}
 	AdminService            *admin.Service
 	SMTPService             *smtp.Service
@@ -96,6 +97,11 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 	var hubModH *HubModerationHandler
 	if deps.HubModerationRepo != nil && deps.HubService != nil && deps.HubRepo != nil {
 		hubModH = NewHubModerationHandler(deps.HubModerationRepo, deps.HubService, deps.HubRepo)
+	}
+
+	var deviceTokenH *DeviceTokenHandler
+	if deps.DeviceTokenRepo != nil {
+		deviceTokenH = NewDeviceTokenHandler(deps.DeviceTokenRepo)
 	}
 
 	r.Get("/ws", wsH.Handle)
@@ -241,11 +247,14 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 		r.Get("/api/dms", dmH.List)
 		r.Post("/api/dms", dmH.CreateOrOpen)
 		r.Post("/api/dms/groups", dmH.CreateOrOpenGroup)
+		r.Get("/api/dms/call-states", dmH.ListCallStates)
 		r.Get("/api/dms/read-states", dmH.DMReadStates)
 		r.Patch("/api/dms/{conversationID}", dmH.PatchConversation)
 		r.Post("/api/dms/{conversationID}/members", dmH.AddMembers)
 		r.Delete("/api/dms/{conversationID}/members/{userID}", dmH.RemoveMember)
 		r.Post("/api/dms/{conversationID}/leave", dmH.LeaveConversation)
+		r.Post("/api/dms/{conversationID}/call/ring", dmH.StartCallRing)
+		r.Post("/api/dms/{conversationID}/call/ring/cancel", dmH.CancelCallRing)
 		r.Get("/api/dms/{conversationID}/messages", dmH.Messages)
 		r.Post("/api/dms/{conversationID}/messages", dmH.SendMessage)
 		r.Put("/api/dms/{conversationID}/ack", dmH.AckDM)
@@ -289,6 +298,11 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 			r.Get("/api/hubs/{hubID}/bans", hubModH.ListBans)
 			r.Post("/api/hubs/{hubID}/bans/{userID}", hubModH.BanMember)
 			r.Delete("/api/hubs/{hubID}/bans/{userID}", hubModH.UnbanMember)
+		}
+
+		if deviceTokenH != nil {
+			r.Post("/api/device-tokens", deviceTokenH.Register)
+			r.Delete("/api/device-tokens", deviceTokenH.Unregister)
 		}
 	})
 

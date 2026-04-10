@@ -13,6 +13,7 @@ import SelfProfilePopover from '../shared/SelfProfilePopover';
 import UserContextMenu from '../shared/UserContextMenu';
 import DesktopScreenSharePickerModal from '../voice/DesktopScreenSharePickerModal';
 import ScreenShareModal from '../voice/ScreenShareModal';
+import IncomingDMCallPrompt from '../voice/IncomingDMCallPrompt';
 import VoiceBottomBar from '../voice/VoiceBottomBar';
 import FloatingActiveSpeakerMedia from '../voice/FloatingActiveSpeakerMedia';
 import { useWebSocket } from '../../hooks/useWebSocket';
@@ -30,13 +31,15 @@ export default function AppLayout() {
   const [searchSidebarOpen, setSearchSidebarOpen] = useState(false);
   const loadHubs = useHubStore((s) => s.loadHubs);
   const loadNotifications = useNotificationStore((s) => s.loadNotifications);
+  const loadConversationCallStates = useVoiceStore((s) => s.loadConversationCallStates);
   const activeConversationId = useDMStore((s) => s.activeConversationId);
   const params = useParams<{ hubId?: string; streamId?: string; conversationId?: string }>();
 
   useEffect(() => {
     loadHubs();
     loadNotifications();
-  }, [loadHubs, loadNotifications]);
+    void loadConversationCallStates();
+  }, [loadConversationCallStates, loadHubs, loadNotifications]);
 
   // Keep DM list, friend requests, and notifications fresh when returning to the tab.
   useEffect(() => {
@@ -48,6 +51,7 @@ export default function AppLayout() {
         useDMStore.getState().loadConversations();
         useFriendStore.getState().loadPendingCount();
         useNotificationStore.getState().loadNotifications();
+        void useVoiceStore.getState().loadConversationCallStates();
       }, 250);
     };
     window.addEventListener('focus', refresh);
@@ -132,6 +136,7 @@ export default function AppLayout() {
       <UserContextMenu />
       <DesktopScreenSharePickerModal />
       <ScreenShareModal />
+      <IncomingDMCallPrompt />
       <FloatingActiveSpeakerMedia />
     </div>
   );

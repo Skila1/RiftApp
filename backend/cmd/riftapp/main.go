@@ -17,6 +17,7 @@ import (
 	"github.com/riftapp-cloud/riftapp/internal/database"
 	"github.com/riftapp-cloud/riftapp/internal/moderation"
 	"github.com/riftapp-cloud/riftapp/internal/pubsub"
+	"github.com/riftapp-cloud/riftapp/internal/push"
 	"github.com/riftapp-cloud/riftapp/internal/repository"
 	"github.com/riftapp-cloud/riftapp/internal/service"
 	"github.com/riftapp-cloud/riftapp/internal/smtp"
@@ -114,6 +115,18 @@ func main() {
 	reportSvc := service.NewReportService(reportRepo, modSvc, msgRepo, userRepo, notifSvc)
 	hubModRepo := repository.NewHubModerationRepo(db)
 
+	// Device token repo for push notifications
+	deviceTokenRepo := repository.NewDeviceTokenRepo(db)
+
+	// Push notification service (Firebase Cloud Messaging)
+	pushSvc, err := push.NewService(deviceTokenRepo)
+	if err != nil {
+		log.Printf("warning: push notifications disabled: %v", err)
+	} else {
+		notifSvc.SetPushSender(pushSvc)
+		log.Println("push notifications enabled (FCM)")
+	}
+
 	// Upload handler (S3-compatible storage, e.g. Cloudflare R2)
 	uploadH, err := api.NewUploadHandler(cfg, db)
 	if err != nil {
@@ -175,6 +188,7 @@ func main() {
 		ModerationService:       modSvc,
 		ReportService:           reportSvc,
 		HubModerationRepo:       hubModRepo,
+		DeviceTokenRepo:         deviceTokenRepo,
 		DB:                      db,
 		AdminService:            adminSvc,
 		SMTPService:             smtpSvc,

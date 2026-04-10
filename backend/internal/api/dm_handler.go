@@ -189,3 +189,41 @@ func (h *DMHandler) DMReadStates(w http.ResponseWriter, r *http.Request) {
 	}
 	writeData(w, http.StatusOK, states)
 }
+
+func (h *DMHandler) ListCallStates(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	states, err := h.svc.ListConversationCallStates(r.Context(), userID)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, states)
+}
+
+func (h *DMHandler) StartCallRing(w http.ResponseWriter, r *http.Request) {
+	conversationID := chi.URLParam(r, "conversationID")
+	userID := middleware.GetUserID(r.Context())
+	var body struct {
+		Mode string `json:"mode"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	state, err := h.svc.StartConversationCallRing(r.Context(), userID, conversationID, body.Mode)
+	if err != nil {
+		writeAppError(w, err)
+		return
+	}
+	writeData(w, http.StatusOK, state)
+}
+
+func (h *DMHandler) CancelCallRing(w http.ResponseWriter, r *http.Request) {
+	conversationID := chi.URLParam(r, "conversationID")
+	userID := middleware.GetUserID(r.Context())
+	if err := h.svc.CancelConversationCallRing(r.Context(), userID, conversationID); err != nil {
+		writeAppError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

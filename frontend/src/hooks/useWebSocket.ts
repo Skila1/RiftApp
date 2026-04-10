@@ -9,7 +9,7 @@ import { useFriendStore } from '../stores/friendStore';
 import { useHubStore } from '../stores/hubStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useVoiceChannelUiStore } from '../stores/voiceChannelUiStore';
-import type { Message, Notification, Conversation, Hub, User, WSEvent } from '../types';
+import type { Message, Notification, Conversation, Hub, User, WSEvent, DMCallRing } from '../types';
 import { publicAssetUrl } from '../utils/publicAssetUrl';
 import { api } from '../api/client';
 
@@ -208,6 +208,15 @@ export function useWebSocket() {
           case 'dm_conversation_delete': {
             const { conversation_id } = evt.d as { conversation_id: string };
             useDMStore.getState().removeConversation(conversation_id);
+            break;
+          }
+          case 'dm_call_ring': {
+            useVoiceStore.getState().setConversationCallRing(evt.d as DMCallRing);
+            break;
+          }
+          case 'dm_call_ring_end': {
+            const { conversation_id } = evt.d as { conversation_id: string };
+            useVoiceStore.getState().clearConversationCallRing(conversation_id);
             break;
           }
           case 'reaction_add': {

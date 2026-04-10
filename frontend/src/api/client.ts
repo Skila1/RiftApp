@@ -1,4 +1,4 @@
-import type { AuthResponse, Hub, HubInvite, HubNotificationSettings, Stream, Category, Message, User, Attachment, Notification, Conversation, Friendship, Block, RelationshipType, HubEmoji, HubSticker, HubSound, HubRole, HubPermissions, MessageSearchFilters, StreamNotificationSettings, DiscordTemplatePreview, StreamPermissionOverwrite, Report, HubAutoModSettings, HubBan } from '../types';
+import type { AuthResponse, Hub, HubInvite, HubNotificationSettings, Stream, Category, Message, User, Attachment, Notification, Conversation, Friendship, Block, RelationshipType, HubEmoji, HubSticker, HubSound, HubRole, HubPermissions, MessageSearchFilters, StreamNotificationSettings, DiscordTemplatePreview, StreamPermissionOverwrite, Report, HubAutoModSettings, HubBan, DMCallMode, DMConversationCallState } from '../types';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -308,6 +308,16 @@ class ApiClient {
   sendDMMessage(conversationId: string, content: string, attachmentIds?: string[], replyToMessageId?: string) { return this.request<Message>(`/dms/${conversationId}/messages`, { method: 'POST', body: JSON.stringify({ content, attachment_ids: attachmentIds, reply_to_message_id: replyToMessageId }) }); }
   ackDM(conversationId: string, messageId: string) { return this.request(`/dms/${conversationId}/ack`, { method: 'PUT', body: JSON.stringify({ message_id: messageId }) }); }
   getDMReadStates() { return this.request<import('../types').DMReadState[]>('/dms/read-states'); }
+  getDMCallStates() { return this.request<DMConversationCallState[]>('/dms/call-states'); }
+  startDMCallRing(conversationId: string, mode: DMCallMode) {
+    return this.request<DMConversationCallState>(`/dms/${conversationId}/call/ring`, {
+      method: 'POST',
+      body: JSON.stringify({ mode }),
+    });
+  }
+  cancelDMCallRing(conversationId: string) {
+    return this.request<void>(`/dms/${conversationId}/call/ring/cancel`, { method: 'POST' });
+  }
 
   searchUser(username: string) { return this.request<User>(`/users/search?q=${encodeURIComponent(username)}`); }
 

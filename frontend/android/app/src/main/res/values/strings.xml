@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">RiftApp</string>
+    <string name="title_activity_main">RiftApp</string>
+    <string name="package_name">io.riftapp.app</string>
+    <string name="custom_url_scheme">riftapp</string>
+</resources>
