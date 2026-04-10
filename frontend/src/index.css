@@ -251,6 +251,7 @@
     --rift-message-avatar-size: 40px;
     --rift-message-leading-gap: 12px;
     --rift-reply-connector-stroke: 2px;
+    --rift-reply-connector-drop: calc(var(--rift-message-avatar-size) * 0.25);
     display: grid;
     grid-template-columns: var(--rift-message-avatar-size) minmax(0, 1fr);
     column-gap: var(--rift-message-leading-gap);
@@ -260,6 +261,7 @@
     --rift-message-avatar-size: 40px;
     --rift-message-leading-gap: 12px;
     --rift-reply-connector-stroke: 2px;
+    --rift-reply-connector-drop: calc(var(--rift-message-avatar-size) * 0.25);
     padding-left: calc(var(--rift-message-avatar-size) + var(--rift-message-leading-gap));
   }
 
@@ -278,9 +280,9 @@
     content: '';
     position: absolute;
     left: calc(-1 * ((var(--rift-message-avatar-size, 40px) / 2) + var(--rift-message-leading-gap, 12px)));
-    top: 7px;
+    top: calc(50% - (var(--rift-reply-connector-stroke, 2px) / 2));
     width: calc((var(--rift-message-avatar-size, 40px) / 2) + var(--rift-message-leading-gap, 12px));
-    height: 20px;
+    height: var(--rift-reply-connector-drop, 10px);
     border-left: var(--rift-reply-connector-stroke, 2px) solid #4e5058;
     border-top: var(--rift-reply-connector-stroke, 2px) solid #4e5058;
     border-top-left-radius: 6px;
