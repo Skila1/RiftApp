@@ -9,6 +9,7 @@ import type { Conversation, User } from '../../types';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { normalizeUser } from '../../utils/entityAssets';
 import {
+  getConversationMembers,
   getConversationIconUrl,
   getConversationOtherMembers,
   getConversationTitle,
@@ -291,10 +292,12 @@ export default function DMSidebar() {
             {conversations.map((conv) => {
               const isActive = conv.id === activeConversationId;
               const otherMembers = getConversationOtherMembers(conv, currentUserId);
+            const allMembers = getConversationMembers(conv);
               const primaryMember = otherMembers[0] ?? conv.recipient;
               const recipientStatus = primaryMember ? (presence[primaryMember.id] ?? primaryMember.status) : undefined;
               const conversationTitle = getConversationTitle(conv, currentUserId);
               const isGroupDm = isGroupConversation(conv, currentUserId);
+            const groupMemberCountLabel = `${allMembers.length} Member${allMembers.length === 1 ? '' : 's'}`;
               const activeVoiceMembers = conversationVoiceMembers[conv.id] ?? [];
               const activeRing = conversationCallRings[conv.id];
               const callStatus = getConversationCallStatus({
@@ -334,7 +337,7 @@ export default function DMSidebar() {
                 >
                   <ConversationAvatar conversation={conv} viewerUserId={currentUserId} fallbackStatus={recipientStatus} />
 
-                  {/* Name + last message */}
+                  {/* Name + subtitle */}
                   <div className="flex-1 min-w-0 text-left">
                     <div className="text-sm font-medium truncate flex items-center gap-1.5">
                       <span className="truncate">{conversationTitle}</span>
@@ -348,6 +351,10 @@ export default function DMSidebar() {
                     {callStatus ? (
                       <div className={`truncate text-[11px] font-medium ${callStatusClass}`}>
                         {callStatus.label}
+                      </div>
+                    ) : isGroupDm ? (
+                      <div className="text-xs text-riftapp-text-dim truncate">
+                      {groupMemberCountLabel}
                       </div>
                     ) : conv.last_message ? (
                       <div className="text-xs text-riftapp-text-dim truncate">
