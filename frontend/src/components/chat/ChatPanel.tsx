@@ -223,7 +223,7 @@ function getUserInitial(user?: User): string {
 }
 
 function getMessagePreview(message: Message): string {
-  const systemPreview = getConversationCallSystemMessagePreview(message.system_type);
+  const systemPreview = getConversationCallSystemMessagePreview(message.system_type, message.content);
   if (systemPreview) return systemPreview;
   const content = message.content.trim();
   if (content) return content;

@@ -302,7 +302,7 @@ export default function DMSidebar() {
               const activeVoiceMembers = conversationVoiceMembers[conv.id] ?? [];
               const activeRing = conversationCallRings[conv.id];
               const lastMessagePreview = conv.last_message
-                ? getConversationCallSystemMessagePreview(conv.last_message.system_type) ?? conv.last_message.content
+                ? getConversationCallSystemMessagePreview(conv.last_message.system_type, conv.last_message.content) ?? conv.last_message.content
                 : null;
               const callStatus = getConversationCallStatus({
                 conversation: conv,

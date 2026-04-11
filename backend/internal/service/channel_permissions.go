@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"sort"
 
 	"github.com/riftapp-cloud/riftapp/internal/apperror"
 	"github.com/riftapp-cloud/riftapp/internal/models"
@@ -191,6 +192,12 @@ func mergeStreamPermissionOverwrites(parent []models.StreamPermissionOverwrite, 
 		}
 		result = append(result, overwrite)
 	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].TargetType == result[j].TargetType {
+			return result[i].TargetID < result[j].TargetID
+		}
+		return result[i].TargetType < result[j].TargetType
+	})
 	return result
 }
 
@@ -213,6 +220,12 @@ func normalizeStreamPermissionOverwrites(overwrites []models.StreamPermissionOve
 		}
 		result = append(result, overwrite)
 	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].TargetType == result[j].TargetType {
+			return result[i].TargetID < result[j].TargetID
+		}
+		return result[i].TargetType < result[j].TargetType
+	})
 	return result
 }
 

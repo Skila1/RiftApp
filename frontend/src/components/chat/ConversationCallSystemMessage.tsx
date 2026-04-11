@@ -54,8 +54,8 @@ export default function ConversationCallSystemMessage({
   const openProfile = useProfilePopoverStore((state) => state.open);
   const author = message.author;
   const authorLabel = getUserLabel(author);
-  const preview = getConversationCallSystemMessagePreview(message.system_type);
-  const suffix = getConversationCallSystemMessageSuffix(message.system_type);
+  const preview = getConversationCallSystemMessagePreview(message.system_type, message.content);
+  const suffix = getConversationCallSystemMessageSuffix(message.system_type, message.content);
   const showAuthor = shouldShowConversationCallSystemMessageAuthor(message.system_type) && Boolean(author);
 
   if (!preview) {
@@ -81,7 +81,7 @@ export default function ConversationCallSystemMessage({
               <span className="text-riftapp-text-dim/70"> {suffix}</span>
             </>
           ) : (
-            <span className="inline-block max-w-[220px] truncate align-baseline font-medium text-riftapp-text-dim/90">
+            <span className="inline-block max-w-[320px] truncate align-baseline font-medium text-riftapp-text-dim/90">
               {preview}
             </span>
           )}

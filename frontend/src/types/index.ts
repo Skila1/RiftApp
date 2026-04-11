@@ -117,6 +117,8 @@ export interface Message {
     | 'conversation_video_call_started'
     | 'conversation_call_missed'
     | 'conversation_video_call_missed'
+    | 'conversation_call_declined'
+    | 'conversation_video_call_declined'
     | 'conversation_call_ended'
     | 'conversation_video_call_ended';
   content: string;

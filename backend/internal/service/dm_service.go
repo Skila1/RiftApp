@@ -168,6 +168,13 @@ func conversationCallMissedSystemType(mode string) string {
 	return models.MessageSystemTypeConversationCallMissed
 }
 
+func conversationCallDeclinedSystemType(mode string) string {
+	if strings.EqualFold(mode, "video") {
+		return models.MessageSystemTypeConversationVideoCallDeclined
+	}
+	return models.MessageSystemTypeConversationCallDeclined
+}
+
 func conversationCallEndedSystemType(mode string) string {
 	if strings.EqualFold(mode, "video") {
 		return models.MessageSystemTypeConversationVideoCallEnded
@@ -185,6 +192,10 @@ func conversationCallSystemMessageContent(systemType string) string {
 		return "Missed a video call"
 	case models.MessageSystemTypeConversationCallMissed:
 		return "Missed a call"
+	case models.MessageSystemTypeConversationVideoCallDeclined:
+		return "Video call declined"
+	case models.MessageSystemTypeConversationCallDeclined:
+		return "Call declined"
 	case models.MessageSystemTypeConversationVideoCallEnded:
 		return "Video call ended"
 	case models.MessageSystemTypeConversationCallEnded:
@@ -194,13 +205,59 @@ func conversationCallSystemMessageContent(systemType string) string {
 	}
 }
 
-func (s *DMService) createConversationCallSystemMessage(ctx context.Context, convID, userID, systemType string) error {
+func formatConversationCallDurationLabel(startedAt *time.Time, endedAt time.Time) string {
+	if startedAt == nil || startedAt.IsZero() || endedAt.IsZero() {
+		return ""
+	}
+	duration := endedAt.Sub(*startedAt)
+	if duration < 0 {
+		duration = 0
+	}
+	secondsTotal := int(duration.Round(time.Second).Seconds())
+	if secondsTotal < 1 {
+		secondsTotal = 1
+	}
+	hours := secondsTotal / 3600
+	minutes := (secondsTotal % 3600) / 60
+	seconds := secondsTotal % 60
+
+	if hours > 0 {
+		if minutes > 0 {
+			return fmt.Sprintf("%dh %02dm", hours, minutes)
+		}
+		return fmt.Sprintf("%dh", hours)
+	}
+	if minutes > 0 {
+		if seconds > 0 {
+			return fmt.Sprintf("%dm %02ds", minutes, seconds)
+		}
+		return fmt.Sprintf("%dm", minutes)
+	}
+	return fmt.Sprintf("%ds", seconds)
+}
+
+func conversationCallEndedMessageContent(mode string, startedAt *time.Time, endedAt time.Time) string {
+	prefix := "Call ended"
+	if strings.EqualFold(mode, "video") {
+		prefix = "Video call ended"
+	}
+	if durationLabel := formatConversationCallDurationLabel(startedAt, endedAt); durationLabel != "" {
+		return prefix + " after " + durationLabel
+	}
+	return prefix
+}
+
+func (s *DMService) createConversationCallSystemMessage(ctx context.Context, convID, userID, systemType, content string) error {
+	trimmedContent := strings.TrimSpace(content)
+	if trimmedContent == "" {
+		trimmedContent = conversationCallSystemMessageContent(systemType)
+	}
 	msg := &models.Message{
 		ID:             uuid.New().String(),
 		ConversationID: &convID,
 		AuthorID:       userID,
 		SystemType:     &systemType,
-		Content:        conversationCallSystemMessageContent(systemType),
+		Content:        trimmedContent,
 		CreatedAt:      time.Now(),
 	}
 
@@ -226,14 +283,28 @@ func (s *DMService) createConversationCallSystemMessage(ctx context.Context, con
 }
 
 func (s *DMService) createConversationCallStartedMessage(ctx context.Context, convID, userID, mode string) error {
-	return s.createConversationCallSystemMessage(ctx, convID, userID, conversationCallStartedSystemType(mode))
+	return s.createConversationCallSystemMessage(ctx, convID, userID, conversationCallStartedSystemType(mode), "")
 }
 
 func (s *DMService) RecordConversationCallRingEnd(data ws.DMCallRingEndData) {
-	if data.Reason != "timeout" || strings.TrimSpace(data.ConversationID) == "" {
+	if strings.TrimSpace(data.ConversationID) == "" {
 		return
 	}
+
+	var systemType string
 	authorID := strings.TrimSpace(data.InitiatorID)
+	switch data.Reason {
+	case "timeout":
+		systemType = conversationCallMissedSystemType(data.Mode)
+	case "declined":
+		systemType = conversationCallDeclinedSystemType(data.Mode)
+		if endedBy := strings.TrimSpace(data.EndedByUserID); endedBy != "" {
+			authorID = endedBy
+		}
+	default:
+		return
+	}
+
 	if authorID == "" {
 		return
 	}
@@ -241,8 +312,8 @@ func (s *DMService) RecordConversationCallRingEnd(data ws.DMCallRingEndData) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := s.createConversationCallSystemMessage(ctx, data.ConversationID, authorID, conversationCallMissedSystemType(data.Mode)); err != nil {
-		log.Printf("dm: failed to create missed-call system message for conversation %s: %v", data.ConversationID, err)
+	if err := s.createConversationCallSystemMessage(ctx, data.ConversationID, authorID, systemType, ""); err != nil {
+		log.Printf("dm: failed to create %s system message for conversation %s: %v", data.Reason, data.ConversationID, err)
 	}
 }
 
@@ -258,7 +329,8 @@ func (s *DMService) RecordConversationCallEnded(data ws.DMConversationCallEndedD
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := s.createConversationCallSystemMessage(ctx, data.ConversationID, authorID, conversationCallEndedSystemType(data.Mode)); err != nil {
+	content := conversationCallEndedMessageContent(data.Mode, data.StartedAt, data.EndedAt)
+	if err := s.createConversationCallSystemMessage(ctx, data.ConversationID, authorID, conversationCallEndedSystemType(data.Mode), content); err != nil {
 		log.Printf("dm: failed to create call-ended system message for conversation %s: %v", data.ConversationID, err)
 	}
 }

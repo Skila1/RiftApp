@@ -109,12 +109,14 @@ type Message struct {
 }
 
 const (
-	MessageSystemTypeConversationCallStarted      = "conversation_call_started"
-	MessageSystemTypeConversationVideoCallStarted = "conversation_video_call_started"
-	MessageSystemTypeConversationCallMissed       = "conversation_call_missed"
-	MessageSystemTypeConversationVideoCallMissed  = "conversation_video_call_missed"
-	MessageSystemTypeConversationCallEnded        = "conversation_call_ended"
-	MessageSystemTypeConversationVideoCallEnded   = "conversation_video_call_ended"
+	MessageSystemTypeConversationCallStarted       = "conversation_call_started"
+	MessageSystemTypeConversationVideoCallStarted  = "conversation_video_call_started"
+	MessageSystemTypeConversationCallMissed        = "conversation_call_missed"
+	MessageSystemTypeConversationVideoCallMissed   = "conversation_video_call_missed"
+	MessageSystemTypeConversationCallDeclined      = "conversation_call_declined"
+	MessageSystemTypeConversationVideoCallDeclined = "conversation_video_call_declined"
+	MessageSystemTypeConversationCallEnded         = "conversation_call_ended"
+	MessageSystemTypeConversationVideoCallEnded    = "conversation_video_call_ended"
 )
 
 type Attachment struct {
