@@ -147,20 +147,23 @@ func callPushBody(conversation *models.Conversation, mode string) string {
 
 func (s *DMService) pushConversationCallStart(convID, userID string, ring ws.DMCallRingData) {
 	go func() {
-		pushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
+		lookupCtx, cancelLookup := context.WithTimeout(context.Background(), 5*time.Second)
 
-		caller, err := s.dmRepo.GetUserInfo(pushCtx, userID)
+		caller, err := s.dmRepo.GetUserInfo(lookupCtx, userID)
 		if err != nil {
 			caller = nil
 		}
-		conversation, err := s.dmRepo.GetConversation(pushCtx, convID)
+		conversation, err := s.dmRepo.GetConversation(lookupCtx, convID)
 		if err != nil {
 			conversation = nil
 		}
+		cancelLookup()
 
 		title := displayUserLabel(caller) + " is calling"
 		body := callPushBody(conversation, ring.Mode)
+		pushCtx, cancelPush := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancelPush()
+
 		if err := s.notifSvc.PushUsers(pushCtx, ring.TargetUserIDs, PushPayload{
 			Title: title,
 			Body:  body,
