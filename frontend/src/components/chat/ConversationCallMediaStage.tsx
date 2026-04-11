@@ -217,18 +217,11 @@ function PendingMemberPill({ member }: { member: ConversationCallStageMember }) 
 
 function RingingStage({
   participants,
-  status,
 }: {
   participants: ConversationCallStageMember[];
-  status?: ConversationCallStatus | null;
 }) {
   return (
     <div className="flex min-h-[260px] flex-col items-center justify-center gap-6 rounded-2xl border border-white/10 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),rgba(0,0,0,0)_55%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01))] px-6 py-8 transition-all duration-300">
-      {status ? (
-        <div className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${statusToneClasses(status.tone)}`}>
-          {status.label}
-        </div>
-      ) : null}
       <div className="flex flex-wrap items-center justify-center gap-8">
         {participants.map((member) => (
           <RingingAvatar key={member.id} member={member} />
@@ -280,7 +273,7 @@ export default function ConversationCallMediaStage({
 
   if (showRingingStage) {
     const ringingStageParticipants = participants.filter((member) => member.isCurrentUser || member.isRinging || member.isInVoice);
-    return <RingingStage participants={ringingStageParticipants} status={status} />;
+    return <RingingStage participants={ringingStageParticipants} />;
   }
 
   return (

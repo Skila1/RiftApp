@@ -607,32 +607,6 @@ function ConversationCallStage({
     });
   }, [conversation.members, conversationVoiceMembers, currentUser, currentUserId, hubMembers, liveParticipantsById, ringingTargetIds, stageMemberIds]);
 
-  const inVoiceParticipantCount = useMemo(
-    () => stageParticipants.filter((participant) => participant.isInVoice).length,
-    [stageParticipants],
-  );
-  const pendingParticipantCount = stageParticipants.length - inVoiceParticipantCount;
-
-  const isInitiator = Boolean(currentUserId && conversationCallRing?.initiator_id === currentUserId);
-  const headline = conversationCallRing
-    ? (isInitiator ? 'Calling...' : 'Incoming call')
-    : callStatus?.indicator === 'ended'
-      ? (callStatus.tone === 'danger' ? 'Call unanswered' : 'Call ended')
-      : 'Call in progress';
-  const subline = callStatus?.label
-    ?? (inVoiceParticipantCount > 0
-      ? `${inVoiceParticipantCount} participant${inVoiceParticipantCount === 1 ? '' : 's'} in call`
-      : pendingParticipantCount > 0
-        ? `Ringing ${pendingParticipantCount} participant${pendingParticipantCount === 1 ? '' : 's'}`
-      : 'Waiting for someone to join');
-  const accentClasses = callStatus?.tone === 'warning'
-    ? 'bg-[#f0b232]/14 text-[#ffd27a]'
-    : callStatus?.tone === 'danger'
-      ? 'bg-[#f87171]/14 text-[#fca5a5]'
-      : callStatus?.tone === 'muted'
-        ? 'bg-white/[0.08] text-[#d2d5db]'
-      : 'bg-[#23a55a]/14 text-[#77e0a2]';
-
   const handleJoin = async (mode: 'audio' | 'video') => {
     setPendingAction(mode === 'video' ? 'join-video' : 'join-audio');
     try {
@@ -672,23 +646,6 @@ function ConversationCallStage({
   return (
     <div className="border-b border-riftapp-border/50 bg-[#111214] px-4 py-3">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-start">
-        <div className="flex min-w-0 items-center gap-3 xl:w-[240px] xl:flex-shrink-0">
-          <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${accentClasses}`}>
-            {conversationCallRing?.mode === 'video' || isCameraOn ? (
-              <IconVideo className="h-4 w-4" />
-            ) : (
-              <IconPhone className="h-4 w-4" />
-            )}
-          </div>
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8e9297]">
-              {conversationCallRing?.mode === 'video' ? 'Video call' : 'Call'}
-            </p>
-            <p className="mt-1 truncate text-sm font-semibold text-[#f2f3f5]">{headline}</p>
-            <p className="truncate text-xs text-[#b5bac1]">{subline}</p>
-          </div>
-        </div>
-
         <ConversationCallMediaStage participants={stageParticipants} status={callStatus} />
 
         <div className="flex flex-wrap items-center gap-2 xl:flex-shrink-0">
@@ -1934,7 +1891,7 @@ export default function ChatPanel({
                   <h3 className="truncate text-[15px] font-semibold text-[#f2f3f5]">
 					  {activeConversationLabel}
                   </h3>
-                  {activeConversationCallStatus ? (
+                  {activeConversationCallStatus && !showConversationCallStage ? (
                     <div className="mt-1 flex items-center gap-2">
                       <HeaderStatusPill label={activeConversationCallStatus.label} tone={activeConversationCallStatus.tone} />
                     </div>
