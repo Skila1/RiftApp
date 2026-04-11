@@ -342,11 +342,6 @@ export default function DMSidebar() {
                     <div className="text-sm font-medium truncate flex items-center gap-1.5">
                       <span className="truncate">{conversationTitle}</span>
                       {!isGroupDm && primaryMember?.is_bot && <BotBadge />}
-                      {isGroupDm ? (
-                        <span className="rounded-full bg-riftapp-content-elevated px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-riftapp-text-dim">
-                          Group
-                        </span>
-                      ) : null}
                     </div>
                     {callStatus ? (
                       <div className={`truncate text-[11px] font-medium ${callStatusClass}`}>
