@@ -152,6 +152,28 @@ export function getConversationCallStatus({
   const isInitiator = Boolean(currentUserId && outcome?.initiator_id === currentUserId);
 
   switch (outcome?.reason) {
+    case 'answered': {
+      const answeredByUserId = outcome?.answered_by_user_id;
+      if (isInitiator && answeredByUserId) {
+        return {
+          label: `${participantLabel(conversation, answeredByUserId) ?? modeLabel} answered`,
+          tone: 'success',
+          indicator: 'active',
+        };
+      }
+      if (currentUserId && answeredByUserId === currentUserId) {
+        return {
+          label: `Joining ${modeLabel} Call`,
+          tone: 'success',
+          indicator: 'active',
+        };
+      }
+      return {
+        label: `${modeLabel} Call answered`,
+        tone: 'success',
+        indicator: 'active',
+      };
+    }
     case 'timeout':
       if (currentUserId && missedUserIds.includes(currentUserId)) {
         return {

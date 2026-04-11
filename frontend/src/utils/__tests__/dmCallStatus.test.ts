@@ -73,6 +73,20 @@ describe('dmCallStatus', () => {
     });
   });
 
+  it('shows an active state when voice members are already in the conversation call', () => {
+    const status = getConversationCallStatus({
+      conversation: createConversation(),
+      currentUserId: 'user-1',
+      voiceMemberIds: ['user-1', 'user-2'],
+    });
+
+    expect(status).toEqual({
+      label: '2 In Call',
+      tone: 'success',
+      indicator: 'active',
+    });
+  });
+
   it('shows a declined state for the initiator when the group declines', () => {
     const status = getConversationCallStatus({
       conversation: createConversation(),
@@ -88,6 +102,25 @@ describe('dmCallStatus', () => {
       label: '2 declined',
       tone: 'muted',
       indicator: 'ended',
+    });
+  });
+
+  it('shows an active answered state before voice membership hydrates', () => {
+    const status = getConversationCallStatus({
+      conversation: createConversation(),
+      currentUserId: 'user-1',
+      outcome: createOutcome({
+        reason: 'answered',
+        mode: 'video',
+        answered_by_user_id: 'user-2',
+      }),
+      now: Date.parse('2026-04-08T12:06:00.000Z'),
+    });
+
+    expect(status).toEqual({
+      label: 'Bravo answered',
+      tone: 'success',
+      indicator: 'active',
     });
   });
 });

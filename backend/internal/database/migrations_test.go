@@ -3,6 +3,7 @@ package database
 import (
 	"io/fs"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -13,7 +14,7 @@ func TestEmbeddedMigrationsHaveUniqueVersions(t *testing.T) {
 		t.Fatalf("glob embedded migrations: %v", err)
 	}
 
-	seen := make(map[string]string, len(entries))
+	seen := make(map[int]string, len(entries))
 	for _, entry := range entries {
 		name := filepath.Base(entry)
 		parts := strings.SplitN(name, "_", 2)
@@ -21,9 +22,14 @@ func TestEmbeddedMigrationsHaveUniqueVersions(t *testing.T) {
 			t.Fatalf("migration %q does not use the expected NNN_description.sql naming", name)
 		}
 
-		if previous, ok := seen[parts[0]]; ok {
-			t.Fatalf("duplicate migration version %s: %s and %s", parts[0], previous, name)
+		version, err := strconv.Atoi(parts[0])
+		if err != nil {
+			t.Fatalf("migration %q has non-numeric version prefix %q: %v", name, parts[0], err)
 		}
-		seen[parts[0]] = name
+
+		if previous, ok := seen[version]; ok {
+			t.Fatalf("duplicate migration version %d: %s and %s", version, previous, name)
+		}
+		seen[version] = name
 	}
 }

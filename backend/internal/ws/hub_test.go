@@ -420,7 +420,18 @@ func TestHub_DeclineConversationCallRingEndsWhenAllTargetsDecline(t *testing.T) 
 	drainEvent(t, recipientOne, time.Second)
 	drainEvent(t, recipientTwo, time.Second)
 
-	hub.DeclineConversationCallRing("conv-1", "user-3")
+	hub.mu.Lock()
+	hub.conversationVoiceState["conv-1"] = map[string]bool{"user-1": true}
+	hub.mu.Unlock()
+
+	state := hub.DeclineConversationCallRing("conv-1", "user-3")
+	if !reflect.DeepEqual(state.MemberIDs, []string{"user-1"}) {
+		t.Fatalf("unexpected conversation member IDs after final decline: %#v", state.MemberIDs)
+	}
+	if state.Ring != nil {
+		t.Fatalf("expected ring to be cleared after final decline, got %#v", state.Ring)
+	}
+
 	evt := drainEvent(t, initiator, time.Second)
 	if evt.Op != OpDMCallRingEnd {
 		t.Fatalf("expected %s event, got %s", OpDMCallRingEnd, evt.Op)

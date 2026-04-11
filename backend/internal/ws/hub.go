@@ -1401,9 +1401,13 @@ func (h *Hub) DeclineConversationCallRing(conversationID, userID string) DMConve
 	if len(h.pendingConversationCallTargetsLocked(ring)) == 0 {
 		delete(h.conversationCallRings, conversationID)
 		endData := h.buildConversationCallRingEndDataLocked(ring, "declined", userID, "", time.Now().UTC())
+		state, ok := h.buildConversationCallStateLocked(conversationID)
+		if !ok {
+			state = DMConversationCallStateData{ConversationID: conversationID}
+		}
 		h.mu.Unlock()
 		h.broadcastConversationCallRingEnd(endData)
-		return DMConversationCallStateData{ConversationID: conversationID}
+		return state
 	}
 
 	h.conversationCallRings[conversationID] = ring

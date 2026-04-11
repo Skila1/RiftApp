@@ -85,13 +85,25 @@ export async function initPushNotifications(
     }
   });
 
-  await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+  await PushNotifications.addListener('pushNotificationActionPerformed', async (action) => {
     const data = action.notification.data;
     if (!data) return;
 
     const { hub_id, stream_id, type, conversation_id } = data as Record<string, string>;
 
-    if ((type === 'dm' || type === 'dm_call' || type === 'dm_call_missed') && conversation_id) {
+    if ((type === 'dm_call' || type === 'dm_call_missed') && conversation_id) {
+      try {
+        await useDMStore.getState().loadConversations();
+        await useVoiceStore.getState().loadConversationCallStates();
+      } catch (error) {
+        console.warn('Failed to hydrate DM call state from push action.', error);
+      }
+
+	  navigate(`/app/dms/${conversation_id}`);
+	  return;
+	}
+
+	if ((type === 'dm' || type === 'dm_call' || type === 'dm_call_missed') && conversation_id) {
       navigate(`/app/dms/${conversation_id}`);
     } else if (hub_id && stream_id) {
       navigate(`/app/hubs/${hub_id}/${stream_id}`);
