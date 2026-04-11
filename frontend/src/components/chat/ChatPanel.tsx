@@ -607,6 +607,8 @@ function ConversationCallStage({
     });
   }, [conversation.members, conversationVoiceMembers, currentUser, currentUserId, hubMembers, liveParticipantsById, ringingTargetIds, stageMemberIds]);
 
+  const isInitiator = Boolean(currentUserId && conversationCallRing?.initiator_id === currentUserId);
+
   const handleJoin = async (mode: 'audio' | 'video') => {
     setPendingAction(mode === 'video' ? 'join-video' : 'join-audio');
     try {
