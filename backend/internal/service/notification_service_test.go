@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -67,12 +68,12 @@ func TestNotificationServicePushUsersDispatchesAsync(t *testing.T) {
 	}
 	svc.SetPushSender(sender)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+	ctx := context.Background()
 
 	done := make(chan struct{})
+	errCh := make(chan error, 1)
 	go func() {
-		svc.PushUsers(ctx, []string{"user-1"}, PushPayload{
+		errCh <- svc.PushUsers(ctx, []string{"user-1"}, PushPayload{
 			Title: "Hello",
 			Data:  map[string]string{"conversation_id": "conv-1"},
 		})
@@ -83,6 +84,14 @@ func TestNotificationServicePushUsersDispatchesAsync(t *testing.T) {
 	case <-done:
 	case <-time.After(200 * time.Millisecond):
 		t.Fatal("expected PushUsers to return without waiting for push delivery")
+	}
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("expected enqueue to succeed, got %v", err)
+		}
+	default:
 	}
 
 	select {
@@ -101,4 +110,22 @@ func TestNotificationServicePushUsersDispatchesAsync(t *testing.T) {
 	}
 
 	close(sender.release)
+}
+
+func TestNotificationServicePushUsersReturnsContextErrorWhenQueueIsBlocked(t *testing.T) {
+	svc := NewNotificationService(nil, nil)
+	svc.pushSvc = &recordingPushSender{}
+	svc.pushQueue = make(chan pushSendTask)
+	svc.pushOnce.Do(func() {})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+
+	err := svc.PushUsers(ctx, []string{"user-1"}, PushPayload{Title: "Hello"})
+	if err == nil {
+		t.Fatal("expected PushUsers to report enqueue failure when the queue blocks")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context deadline exceeded, got %v", err)
+	}
 }

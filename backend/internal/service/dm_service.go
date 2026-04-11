@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -160,7 +161,7 @@ func (s *DMService) pushConversationCallStart(convID, userID string, ring ws.DMC
 
 		title := displayUserLabel(caller) + " is calling"
 		body := callPushBody(conversation, ring.Mode)
-		s.notifSvc.PushUsers(pushCtx, ring.TargetUserIDs, PushPayload{
+		if err := s.notifSvc.PushUsers(pushCtx, ring.TargetUserIDs, PushPayload{
 			Title: title,
 			Body:  body,
 			Data: map[string]string{
@@ -170,7 +171,9 @@ func (s *DMService) pushConversationCallStart(convID, userID string, ring ws.DMC
 				"mode":            ring.Mode,
 			},
 			CollapseKey: "dm_call_" + convID,
-		})
+		}); err != nil {
+			log.Printf("push: enqueue dm call notifications failed for conversation %s: %v", convID, err)
+		}
 	}()
 }
 

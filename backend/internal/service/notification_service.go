@@ -128,17 +128,24 @@ func buildPushData(ntype string, referenceID, hubID, streamID *string, pushDataC
 	return data
 }
 
-func (s *NotificationService) dispatchPushAsync(userID string, payload PushPayload) {
+func (s *NotificationService) dispatchPushAsync(ctx context.Context, userID string, payload PushPayload) error {
 	if s.pushSvc == nil || userID == "" {
-		return
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	s.initPushDispatcher()
 	task := pushSendTask{userID: userID, payload: clonePushPayload(payload)}
 	select {
 	case s.pushQueue <- task:
-	default:
-		log.Printf("push: queue full, dropping notification for user %s", userID)
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
@@ -229,23 +236,33 @@ func (s *NotificationService) CreateWithPushData(ctx context.Context, userID, nt
 			pushBody = *body
 		}
 		data := buildPushData(ntype, referenceID, hubID, streamID, pushDataCopy)
-		s.dispatchPushAsync(userID, PushPayload{
-			Title:       title,
-			Body:        pushBody,
-			Data:        data,
-			CollapseKey: ntype,
-		})
+		go func() {
+			pushCtx, cancel := context.WithTimeout(context.Background(), pushSendTimeout)
+			defer cancel()
+
+			if err := s.dispatchPushAsync(pushCtx, userID, PushPayload{
+				Title:       title,
+				Body:        pushBody,
+				Data:        data,
+				CollapseKey: ntype,
+			}); err != nil {
+				log.Printf("push: enqueue for user %s failed: %v", userID, err)
+			}
+		}()
 	}
 }
 
-func (s *NotificationService) PushUsers(ctx context.Context, userIDs []string, p PushPayload) {
+func (s *NotificationService) PushUsers(ctx context.Context, userIDs []string, p PushPayload) error {
 	if s.pushSvc == nil || len(userIDs) == 0 {
-		return
+		return nil
 	}
 	for _, userID := range userIDs {
 		if userID == "" {
 			continue
 		}
-		s.dispatchPushAsync(userID, p)
+		if err := s.dispatchPushAsync(ctx, userID, p); err != nil {
+			return err
+		}
 	}
+	return nil
 }
