@@ -71,6 +71,7 @@ export default function AuthPage() {
                 required
                 minLength={2}
                 maxLength={32}
+                autoComplete="username"
                 autoFocus
               />
             </div>
@@ -86,6 +87,7 @@ export default function AuthPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   className="settings-input"
                   placeholder="Enter email"
+                  autoComplete="email"
                 />
               </div>
             )}
@@ -102,6 +104,7 @@ export default function AuthPage() {
                 placeholder="Enter password"
                 required
                 minLength={8}
+                autoComplete={isLogin ? 'current-password' : 'new-password'}
               />
             </div>
           </div>
