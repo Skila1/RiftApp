@@ -3,8 +3,10 @@ import { useProfilePopoverStore } from '../../stores/profilePopoverStore';
 import { formatShortTime } from '../../utils/dateTime';
 import { getUserLabel } from '../../utils/conversations';
 import {
+  getConversationCallSystemMessagePreview,
   getConversationCallSystemMessageSuffix,
-  MESSAGE_SYSTEM_TYPE_CONVERSATION_VIDEO_CALL_STARTED,
+  isConversationVideoCallSystemType,
+  shouldShowConversationCallSystemMessageAuthor,
 } from '../../utils/messageSystem';
 
 function CallIcon({ video = false }: { video?: boolean }) {
@@ -52,9 +54,11 @@ export default function ConversationCallSystemMessage({
   const openProfile = useProfilePopoverStore((state) => state.open);
   const author = message.author;
   const authorLabel = getUserLabel(author);
+  const preview = getConversationCallSystemMessagePreview(message.system_type);
   const suffix = getConversationCallSystemMessageSuffix(message.system_type);
+  const showAuthor = shouldShowConversationCallSystemMessageAuthor(message.system_type) && Boolean(author);
 
-  if (!suffix) {
+  if (!preview) {
     return null;
   }
 
@@ -62,23 +66,25 @@ export default function ConversationCallSystemMessage({
     <div className="-mx-4 px-4 py-0.5">
       <div className="flex min-w-0 items-center gap-2 pl-[52px] text-[12px] leading-4 text-riftapp-text-dim/70">
         <span className="shrink-0 text-riftapp-text-dim/55">
-          <CallIcon video={message.system_type === MESSAGE_SYSTEM_TYPE_CONVERSATION_VIDEO_CALL_STARTED} />
+          <CallIcon video={isConversationVideoCallSystemType(message.system_type)} />
         </span>
         <div className="min-w-0 overflow-hidden whitespace-nowrap">
-          {author ? (
-            <button
-              type="button"
-              onClick={(event) => openProfile(author, (event.currentTarget as HTMLElement).getBoundingClientRect())}
-              className="inline-block max-w-[180px] truncate align-baseline font-medium text-riftapp-text-dim/90 transition-colors hover:text-riftapp-text hover:underline"
-            >
-              {authorLabel}
-            </button>
+          {showAuthor && suffix ? (
+            <>
+              <button
+                type="button"
+                onClick={(event) => openProfile(author as NonNullable<typeof author>, (event.currentTarget as HTMLElement).getBoundingClientRect())}
+                className="inline-block max-w-[180px] truncate align-baseline font-medium text-riftapp-text-dim/90 transition-colors hover:text-riftapp-text hover:underline"
+              >
+                {authorLabel}
+              </button>
+              <span className="text-riftapp-text-dim/70"> {suffix}</span>
+            </>
           ) : (
-            <span className="inline-block max-w-[180px] truncate align-baseline font-medium text-riftapp-text-dim/90">
-              {authorLabel}
+            <span className="inline-block max-w-[220px] truncate align-baseline font-medium text-riftapp-text-dim/90">
+              {preview}
             </span>
           )}
-          <span className="text-riftapp-text-dim/70"> {suffix}</span>
         </div>
         <span className="shrink-0 text-[11px] text-riftapp-text-dim/50">{formatShortTime(message.created_at)}</span>
       </div>

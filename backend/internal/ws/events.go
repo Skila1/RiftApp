@@ -162,6 +162,14 @@ type DMCallRingEndData struct {
 	MissedUserIDs    []string   `json:"missed_user_ids,omitempty"`
 }
 
+type DMConversationCallEndedData struct {
+	ConversationID string     `json:"conversation_id"`
+	Mode           string     `json:"mode,omitempty"`
+	StartedAt      *time.Time `json:"started_at,omitempty"`
+	EndedAt        time.Time  `json:"ended_at"`
+	EndedByUserID  string     `json:"ended_by_user_id,omitempty"`
+}
+
 type DMConversationCallStateData struct {
 	ConversationID string          `json:"conversation_id"`
 	MemberIDs      []string        `json:"member_ids,omitempty"`

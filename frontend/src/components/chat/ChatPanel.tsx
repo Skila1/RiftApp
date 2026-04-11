@@ -23,6 +23,7 @@ import { useWsSend } from '../../hooks/useWebSocket';
 import MessageInput from './MessageInput';
 import MessageItem from './MessageItem';
 import PinSystemMessage from './PinSystemMessage';
+import ConversationCallMediaStage, { type ConversationCallStageMember } from './ConversationCallMediaStage';
 import ConversationCallSystemMessage from './ConversationCallSystemMessage';
 import TypingIndicator from './TypingIndicator';
 import UpdateActionButton from '../shared/UpdateActionButton';
@@ -518,42 +519,6 @@ function HeaderStatusPill({
   );
 }
 
-type ConversationCallStageParticipant = {
-  id: string;
-  user?: User;
-  isInVoice: boolean;
-  isMuted: boolean;
-  isCameraOn: boolean;
-  isSpeaking: boolean;
-  isCurrentUser: boolean;
-};
-
-function ConversationCallStageParticipantChip({
-  participant,
-}: {
-  participant: ConversationCallStageParticipant;
-}) {
-  const label = participant.isCurrentUser ? 'You' : getUserLabel(participant.user);
-
-  return (
-    <div
-      className={`flex items-center gap-2 rounded-full border px-2.5 py-1.5 ${
-        participant.isInVoice
-          ? 'border-[#23a55a]/25 bg-[#132018]'
-          : 'border-white/8 bg-white/[0.04]'
-      }`}
-    >
-      <UserAvatar user={participant.user} sizeClass="w-7 h-7" textClass="text-[10px]" />
-      <span className="max-w-[120px] truncate text-[12px] font-medium text-[#f2f3f5]">{label}</span>
-      <div className="flex items-center gap-1 text-[#949ba4]">
-        {participant.isSpeaking ? <span className="h-2 w-2 rounded-full bg-[#23a55a]" /> : null}
-        {participant.isMuted ? <VoiceMicIcon muted size={12} /> : null}
-        {participant.isCameraOn ? <IconVideo className="h-3.5 w-3.5" /> : null}
-      </div>
-    </div>
-  );
-}
-
 function ConversationCallStage({
   conversation,
   currentUser,
@@ -615,13 +580,14 @@ function ConversationCallStage({
     return ids;
   }, [conversationCallRing, conversationVoiceMembers, currentUserId, isCurrentConversationCall]);
 
-  const stageParticipants = useMemo<ConversationCallStageParticipant[]>(() => {
+  const stageParticipants = useMemo<ConversationCallStageMember[]>(() => {
     return stageMemberIds.map((memberId) => {
       const liveParticipant = liveParticipantsById.get(memberId);
       const conversationMember = conversation.members?.find((member) => member.id === memberId);
 
       return {
         id: memberId,
+        liveParticipant,
         user: memberId === currentUserId
           ? (currentUser ?? conversationMember ?? hubMembers[memberId])
           : (conversationMember ?? hubMembers[memberId]),
@@ -634,13 +600,21 @@ function ConversationCallStage({
     });
   }, [conversation.members, conversationVoiceMembers, currentUser, currentUserId, hubMembers, liveParticipantsById, stageMemberIds]);
 
+  const inVoiceParticipantCount = useMemo(
+    () => stageParticipants.filter((participant) => participant.isInVoice).length,
+    [stageParticipants],
+  );
+  const pendingParticipantCount = stageParticipants.length - inVoiceParticipantCount;
+
   const isInitiator = Boolean(currentUserId && conversationCallRing?.initiator_id === currentUserId);
   const headline = conversationCallRing
     ? (isInitiator ? 'Calling...' : 'Incoming call')
     : 'Call in progress';
   const subline = callStatus?.label
-    ?? (stageParticipants.length > 0
-      ? `${stageParticipants.length} participant${stageParticipants.length === 1 ? '' : 's'}`
+    ?? (inVoiceParticipantCount > 0
+      ? `${inVoiceParticipantCount} participant${inVoiceParticipantCount === 1 ? '' : 's'} in call`
+      : pendingParticipantCount > 0
+        ? `Ringing ${pendingParticipantCount} participant${pendingParticipantCount === 1 ? '' : 's'}`
       : 'Waiting for someone to join');
   const accentClasses = callStatus?.tone === 'warning'
     ? 'bg-[#f0b232]/14 text-[#ffd27a]'
@@ -686,7 +660,7 @@ function ConversationCallStage({
 
   return (
     <div className="border-b border-riftapp-border/50 bg-[#111214] px-4 py-3">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-start">
         <div className="flex min-w-0 items-center gap-3 xl:w-[240px] xl:flex-shrink-0">
           <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${accentClasses}`}>
             {conversationCallRing?.mode === 'video' || isCameraOn ? (
@@ -704,15 +678,7 @@ function ConversationCallStage({
           </div>
         </div>
 
-        <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1 xl:pb-0">
-          {stageParticipants.length > 0 ? (
-            stageParticipants.map((participant) => (
-              <ConversationCallStageParticipantChip key={participant.id} participant={participant} />
-            ))
-          ) : (
-            <span className="flex items-center text-xs text-[#8e9297]">Waiting for someone to join.</span>
-          )}
-        </div>
+        <ConversationCallMediaStage participants={stageParticipants} />
 
         <div className="flex flex-wrap items-center gap-2 xl:flex-shrink-0">
           {isCurrentConversationCall ? (

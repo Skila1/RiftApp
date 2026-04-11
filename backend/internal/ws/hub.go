@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,6 +25,16 @@ type streamSubscription struct {
 }
 
 const conversationCallRingTTL = 45 * time.Second
+
+type conversationActiveCallState struct {
+	Mode      string
+	StartedAt time.Time
+}
+
+type ConversationCallHistoryRecorder interface {
+	RecordConversationCallRingEnd(data DMCallRingEndData)
+	RecordConversationCallEnded(data DMConversationCallEndedData)
+}
 
 func cloneStringSlice(values []string) []string {
 	if len(values) == 0 {
@@ -60,6 +71,13 @@ func timePointer(value time.Time) *time.Time {
 	return &timestamp
 }
 
+func normalizeConversationCallMode(mode string) string {
+	if strings.EqualFold(mode, "video") {
+		return "video"
+	}
+	return "audio"
+}
+
 type Hub struct {
 	clients                   map[string]map[string]*Client             // userID -> sessionID -> client
 	streamSubs                map[string]map[string]*streamSubscription // streamID -> sessionKey -> subscription
@@ -69,6 +87,7 @@ type Hub struct {
 	conversationVoiceState    map[string]map[string]bool                // conversationID -> set of userIDs in voice
 	conversationVoiceDeafened map[string]map[string]bool                // conversationID -> set of deafened userIDs
 	conversationCallRings     map[string]DMCallRingData                 // conversationID -> active DM call ring state
+	conversationActiveCalls   map[string]conversationActiveCallState    // conversationID -> active call metadata after a call is answered/joined
 	voiceJoinGrants           map[string]map[string]time.Time           // userID -> streamID -> expiry
 	register                  chan *Client
 	unregister                chan *Client
@@ -76,6 +95,7 @@ type Hub struct {
 	mu                        sync.RWMutex
 	db                        *pgxpool.Pool
 	permChecker               StreamPermissionChecker
+	conversationCallRecorder  ConversationCallHistoryRecorder
 	missingPermCheckerOnce    sync.Once
 }
 
@@ -95,6 +115,7 @@ func NewHub(db *pgxpool.Pool) *Hub {
 		conversationVoiceState:    make(map[string]map[string]bool),
 		conversationVoiceDeafened: make(map[string]map[string]bool),
 		conversationCallRings:     make(map[string]DMCallRingData),
+		conversationActiveCalls:   make(map[string]conversationActiveCallState),
 		voiceJoinGrants:           make(map[string]map[string]time.Time),
 		register:                  make(chan *Client),
 		unregister:                make(chan *Client),
@@ -105,6 +126,10 @@ func NewHub(db *pgxpool.Pool) *Hub {
 
 func (h *Hub) SetPermissionChecker(checker StreamPermissionChecker) {
 	h.permChecker = checker
+}
+
+func (h *Hub) SetConversationCallHistoryRecorder(recorder ConversationCallHistoryRecorder) {
+	h.conversationCallRecorder = recorder
 }
 
 func GenerateSessionID() string {
@@ -483,7 +508,7 @@ func (h *Hub) canJoinVoiceConversation(conversationID, userID string) bool {
 	return err == nil && allowed
 }
 
-func (h *Hub) removeUserFromOtherVoiceLocked(userID, keepStreamID, keepConversationID string) ([]string, []string) {
+func (h *Hub) removeUserFromOtherVoiceLocked(userID, keepStreamID, keepConversationID string, removedAt time.Time) ([]string, []string, []DMConversationCallEndedData) {
 	removedStreams := make([]string, 0)
 	for streamID, users := range h.voiceState {
 		if keepStreamID != "" && streamID == keepStreamID {
@@ -509,6 +534,7 @@ func (h *Hub) removeUserFromOtherVoiceLocked(userID, keepStreamID, keepConversat
 	}
 
 	removedConversations := make([]string, 0)
+	endedCalls := make([]DMConversationCallEndedData, 0)
 	for conversationID, users := range h.conversationVoiceState {
 		if keepConversationID != "" && conversationID == keepConversationID {
 			continue
@@ -520,6 +546,10 @@ func (h *Hub) removeUserFromOtherVoiceLocked(userID, keepStreamID, keepConversat
 		removedConversations = append(removedConversations, conversationID)
 		if len(users) == 0 {
 			delete(h.conversationVoiceState, conversationID)
+			if activeCall, ok := h.conversationActiveCalls[conversationID]; ok {
+				endedCalls = append(endedCalls, h.buildConversationCallEndedDataLocked(conversationID, activeCall, userID, removedAt))
+				delete(h.conversationActiveCalls, conversationID)
+			}
 		}
 	}
 	for conversationID, deafened := range h.conversationVoiceDeafened {
@@ -532,7 +562,7 @@ func (h *Hub) removeUserFromOtherVoiceLocked(userID, keepStreamID, keepConversat
 		}
 	}
 
-	return removedStreams, removedConversations
+	return removedStreams, removedConversations, endedCalls
 }
 
 func (h *Hub) BroadcastToStream(streamID string, data []byte, excludeUserID string) {
@@ -796,7 +826,8 @@ func (h *Hub) handleStreamVoiceState(userID, streamID, action string) {
 	h.mu.Lock()
 	switch action {
 	case "join":
-		removedStreams, removedConversations := h.removeUserFromOtherVoiceLocked(userID, streamID, "")
+		now := time.Now().UTC()
+		removedStreams, removedConversations, endedCalls := h.removeUserFromOtherVoiceLocked(userID, streamID, "", now)
 		if h.voiceState[streamID] == nil {
 			h.voiceState[streamID] = make(map[string]bool)
 		}
@@ -808,6 +839,9 @@ func (h *Hub) handleStreamVoiceState(userID, streamID, action string) {
 		}
 		for _, removedConversationID := range removedConversations {
 			h.broadcastConversationVoiceState(removedConversationID, userID, "leave")
+		}
+		for _, endedCall := range endedCalls {
+			h.recordConversationCallEnded(endedCall)
 		}
 		h.broadcastVoiceState(streamID, userID, "join")
 	case "leave":
@@ -848,17 +882,21 @@ func (h *Hub) handleConversationVoiceState(userID, conversationID, action string
 	h.mu.Lock()
 	switch action {
 	case "join":
-		removedStreams, removedConversations := h.removeUserFromOtherVoiceLocked(userID, "", conversationID)
+		joinedAt := time.Now().UTC()
+		removedStreams, removedConversations, endedCalls := h.removeUserFromOtherVoiceLocked(userID, "", conversationID, joinedAt)
 		var answeredRingEnd *DMCallRingEndData
+		answeredMode := "audio"
 		if ring, ok := h.conversationCallRings[conversationID]; ok && ring.InitiatorID != userID {
 			delete(h.conversationCallRings, conversationID)
-			endData := h.buildConversationCallRingEndDataLocked(ring, "answered", "", userID, time.Now().UTC())
+			answeredMode = ring.Mode
+			endData := h.buildConversationCallRingEndDataLocked(ring, "answered", "", userID, joinedAt)
 			answeredRingEnd = &endData
 		}
 		if h.conversationVoiceState[conversationID] == nil {
 			h.conversationVoiceState[conversationID] = make(map[string]bool)
 		}
 		h.conversationVoiceState[conversationID][userID] = true
+		h.ensureConversationActiveCallLocked(conversationID, answeredMode, joinedAt)
 		h.mu.Unlock()
 		for _, removedStreamID := range removedStreams {
 			h.broadcastVoiceState(removedStreamID, userID, "leave")
@@ -870,12 +908,22 @@ func (h *Hub) handleConversationVoiceState(userID, conversationID, action string
 		if answeredRingEnd != nil {
 			h.broadcastConversationCallRingEnd(*answeredRingEnd)
 		}
+		for _, endedCall := range endedCalls {
+			h.recordConversationCallEnded(endedCall)
+		}
 		h.broadcastConversationVoiceState(conversationID, userID, "join")
 	case "leave":
+		leftAt := time.Now().UTC()
+		var endedCall *DMConversationCallEndedData
 		if users, ok := h.conversationVoiceState[conversationID]; ok {
 			delete(users, userID)
 			if len(users) == 0 {
 				delete(h.conversationVoiceState, conversationID)
+				if activeCall, ok := h.conversationActiveCalls[conversationID]; ok {
+					endData := h.buildConversationCallEndedDataLocked(conversationID, activeCall, userID, leftAt)
+					endedCall = &endData
+					delete(h.conversationActiveCalls, conversationID)
+				}
 			}
 		}
 		if deafened, ok := h.conversationVoiceDeafened[conversationID]; ok {
@@ -887,7 +935,7 @@ func (h *Hub) handleConversationVoiceState(userID, conversationID, action string
 		var cancelledRingEnd *DMCallRingEndData
 		if ring, ok := h.conversationCallRings[conversationID]; ok && ring.InitiatorID == userID {
 			delete(h.conversationCallRings, conversationID)
-			endData := h.buildConversationCallRingEndDataLocked(ring, "cancelled", userID, "", time.Now().UTC())
+			endData := h.buildConversationCallRingEndDataLocked(ring, "cancelled", userID, "", leftAt)
 			cancelledRingEnd = &endData
 		}
 		h.mu.Unlock()
@@ -895,6 +943,9 @@ func (h *Hub) handleConversationVoiceState(userID, conversationID, action string
 			h.broadcastConversationCallRingEnd(*cancelledRingEnd)
 		}
 		h.broadcastConversationVoiceState(conversationID, userID, "leave")
+		if endedCall != nil {
+			h.recordConversationCallEnded(*endedCall)
+		}
 	default:
 		h.mu.Unlock()
 	}
@@ -922,6 +973,15 @@ func (h *Hub) broadcastConversationCallRing(ring DMCallRingData) {
 
 func (h *Hub) broadcastConversationCallRingEnd(data DMCallRingEndData) {
 	h.broadcastToConversationMembers(data.ConversationID, NewEvent(OpDMCallRingEnd, data))
+	if h.conversationCallRecorder != nil {
+		h.conversationCallRecorder.RecordConversationCallRingEnd(data)
+	}
+}
+
+func (h *Hub) recordConversationCallEnded(data DMConversationCallEndedData) {
+	if h.conversationCallRecorder != nil {
+		h.conversationCallRecorder.RecordConversationCallEnded(data)
+	}
 }
 
 func (h *Hub) getHubMemberIDsForStream(streamID string) []string {
@@ -1198,8 +1258,9 @@ func (h *Hub) handleConversationVoiceDeafen(userID, conversationID string, deafe
 
 // removeUserFromAllVoice removes a user from all voice channels on disconnect
 func (h *Hub) removeUserFromAllVoice(userID string) {
+	now := time.Now().UTC()
 	h.mu.Lock()
-	affectedStreams, affectedConversations := h.removeUserFromOtherVoiceLocked(userID, "", "")
+	affectedStreams, affectedConversations, endedCalls := h.removeUserFromOtherVoiceLocked(userID, "", "", now)
 	delete(h.voiceJoinGrants, userID)
 	h.mu.Unlock()
 
@@ -1209,6 +1270,9 @@ func (h *Hub) removeUserFromAllVoice(userID string) {
 	for _, conversationID := range affectedConversations {
 		h.broadcastConversationVoiceState(conversationID, userID, "leave")
 		h.cancelConversationCallRingIfInitiator(conversationID, userID, "cancelled")
+	}
+	for _, endedCall := range endedCalls {
+		h.recordConversationCallEnded(endedCall)
 	}
 }
 
@@ -1270,6 +1334,38 @@ func (h *Hub) buildConversationCallRingEndDataLocked(ring DMCallRingData, reason
 		TargetUserIDs:    cloneStringSlice(ring.TargetUserIDs),
 		DeclinedUserIDs:  cloneStringSlice(ring.DeclinedUserIDs),
 		MissedUserIDs:    missedUserIDs,
+	}
+}
+
+func (h *Hub) buildConversationCallEndedDataLocked(conversationID string, activeCall conversationActiveCallState, endedByUserID string, endedAt time.Time) DMConversationCallEndedData {
+	return DMConversationCallEndedData{
+		ConversationID: conversationID,
+		Mode:           normalizeConversationCallMode(activeCall.Mode),
+		StartedAt:      timePointer(activeCall.StartedAt),
+		EndedAt:        endedAt,
+		EndedByUserID:  endedByUserID,
+	}
+}
+
+func (h *Hub) ensureConversationActiveCallLocked(conversationID, mode string, startedAt time.Time) {
+	users := h.conversationVoiceState[conversationID]
+	if len(users) < 2 {
+		return
+	}
+
+	normalizedMode := normalizeConversationCallMode(mode)
+	activeCall, ok := h.conversationActiveCalls[conversationID]
+	if !ok {
+		h.conversationActiveCalls[conversationID] = conversationActiveCallState{
+			Mode:      normalizedMode,
+			StartedAt: startedAt,
+		}
+		return
+	}
+
+	if normalizedMode == "video" && activeCall.Mode != "video" {
+		activeCall.Mode = normalizedMode
+		h.conversationActiveCalls[conversationID] = activeCall
 	}
 }
 
@@ -1524,6 +1620,7 @@ func (h *Hub) GetUserVoiceStreamID(userID string) string {
 // MoveUserToVoiceStream moves a user between voice channels and broadcasts the leave/join updates.
 func (h *Hub) MoveUserToVoiceStream(userID, targetStreamID string) (string, bool) {
 	h.clearVoiceJoinGrants(userID)
+	now := time.Now().UTC()
 	h.mu.Lock()
 	currentStreamID := ""
 	for streamID, users := range h.voiceState {
@@ -1533,15 +1630,18 @@ func (h *Hub) MoveUserToVoiceStream(userID, targetStreamID string) (string, bool
 		}
 	}
 	if currentStreamID == targetStreamID && targetStreamID != "" {
-		_, removedConversations := h.removeUserFromOtherVoiceLocked(userID, targetStreamID, "")
+		_, removedConversations, endedCalls := h.removeUserFromOtherVoiceLocked(userID, targetStreamID, "", now)
 		h.mu.Unlock()
 		for _, conversationID := range removedConversations {
 			h.broadcastConversationVoiceState(conversationID, userID, "leave")
 			h.cancelConversationCallRingIfInitiator(conversationID, userID, "cancelled")
 		}
+		for _, endedCall := range endedCalls {
+			h.recordConversationCallEnded(endedCall)
+		}
 		return currentStreamID, len(removedConversations) > 0
 	}
-	removedStreams, removedConversations := h.removeUserFromOtherVoiceLocked(userID, targetStreamID, "")
+	removedStreams, removedConversations, endedCalls := h.removeUserFromOtherVoiceLocked(userID, targetStreamID, "", now)
 	if targetStreamID != "" {
 		if h.voiceState[targetStreamID] == nil {
 			h.voiceState[targetStreamID] = make(map[string]bool)
@@ -1556,6 +1656,9 @@ func (h *Hub) MoveUserToVoiceStream(userID, targetStreamID string) (string, bool
 	for _, conversationID := range removedConversations {
 		h.broadcastConversationVoiceState(conversationID, userID, "leave")
 		h.cancelConversationCallRingIfInitiator(conversationID, userID, "cancelled")
+	}
+	for _, endedCall := range endedCalls {
+		h.recordConversationCallEnded(endedCall)
 	}
 	if targetStreamID != "" {
 		h.broadcastVoiceState(targetStreamID, userID, "join")

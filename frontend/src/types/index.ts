@@ -112,7 +112,13 @@ export interface Message {
   conversation_id?: string;
   author_id: string;
   author_type?: 'user' | 'bot' | 'webhook';
-  system_type?: 'conversation_call_started' | 'conversation_video_call_started';
+  system_type?:
+    | 'conversation_call_started'
+    | 'conversation_video_call_started'
+    | 'conversation_call_missed'
+    | 'conversation_video_call_missed'
+    | 'conversation_call_ended'
+    | 'conversation_video_call_ended';
   content: string;
   edited_at?: string;
   created_at: string;

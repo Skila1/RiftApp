@@ -27,7 +27,11 @@ type DMService struct {
 }
 
 func NewDMService(dmRepo *repository.DMRepo, msgRepo *repository.MessageRepo, notifSvc *NotificationService, hub *ws.Hub) *DMService {
-	return &DMService{dmRepo: dmRepo, msgRepo: msgRepo, notifSvc: notifSvc, hub: hub}
+	svc := &DMService{dmRepo: dmRepo, msgRepo: msgRepo, notifSvc: notifSvc, hub: hub}
+	if hub != nil {
+		hub.SetConversationCallHistoryRecorder(svc)
+	}
+	return svc
 }
 
 func (s *DMService) SetModerationService(mod *moderation.Service) {
@@ -157,21 +161,46 @@ func conversationCallStartedSystemType(mode string) string {
 	return models.MessageSystemTypeConversationCallStarted
 }
 
-func conversationCallStartedMessageContent(systemType string) string {
-	if systemType == models.MessageSystemTypeConversationVideoCallStarted {
-		return "Started a video call"
+func conversationCallMissedSystemType(mode string) string {
+	if strings.EqualFold(mode, "video") {
+		return models.MessageSystemTypeConversationVideoCallMissed
 	}
-	return "Started a call"
+	return models.MessageSystemTypeConversationCallMissed
 }
 
-func (s *DMService) createConversationCallStartedMessage(ctx context.Context, convID, userID, mode string) error {
-	systemType := conversationCallStartedSystemType(mode)
+func conversationCallEndedSystemType(mode string) string {
+	if strings.EqualFold(mode, "video") {
+		return models.MessageSystemTypeConversationVideoCallEnded
+	}
+	return models.MessageSystemTypeConversationCallEnded
+}
+
+func conversationCallSystemMessageContent(systemType string) string {
+	switch systemType {
+	case models.MessageSystemTypeConversationVideoCallStarted:
+		return "Started a video call"
+	case models.MessageSystemTypeConversationCallStarted:
+		return "Started a call"
+	case models.MessageSystemTypeConversationVideoCallMissed:
+		return "Missed a video call"
+	case models.MessageSystemTypeConversationCallMissed:
+		return "Missed a call"
+	case models.MessageSystemTypeConversationVideoCallEnded:
+		return "Video call ended"
+	case models.MessageSystemTypeConversationCallEnded:
+		return "Call ended"
+	default:
+		return "Call updated"
+	}
+}
+
+func (s *DMService) createConversationCallSystemMessage(ctx context.Context, convID, userID, systemType string) error {
 	msg := &models.Message{
 		ID:             uuid.New().String(),
 		ConversationID: &convID,
 		AuthorID:       userID,
 		SystemType:     &systemType,
-		Content:        conversationCallStartedMessageContent(systemType),
+		Content:        conversationCallSystemMessageContent(systemType),
 		CreatedAt:      time.Now(),
 	}
 
@@ -194,6 +223,44 @@ func (s *DMService) createConversationCallStartedMessage(ctx context.Context, co
 	}
 
 	return nil
+}
+
+func (s *DMService) createConversationCallStartedMessage(ctx context.Context, convID, userID, mode string) error {
+	return s.createConversationCallSystemMessage(ctx, convID, userID, conversationCallStartedSystemType(mode))
+}
+
+func (s *DMService) RecordConversationCallRingEnd(data ws.DMCallRingEndData) {
+	if data.Reason != "timeout" || strings.TrimSpace(data.ConversationID) == "" {
+		return
+	}
+	authorID := strings.TrimSpace(data.InitiatorID)
+	if authorID == "" {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := s.createConversationCallSystemMessage(ctx, data.ConversationID, authorID, conversationCallMissedSystemType(data.Mode)); err != nil {
+		log.Printf("dm: failed to create missed-call system message for conversation %s: %v", data.ConversationID, err)
+	}
+}
+
+func (s *DMService) RecordConversationCallEnded(data ws.DMConversationCallEndedData) {
+	if strings.TrimSpace(data.ConversationID) == "" {
+		return
+	}
+	authorID := strings.TrimSpace(data.EndedByUserID)
+	if authorID == "" {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := s.createConversationCallSystemMessage(ctx, data.ConversationID, authorID, conversationCallEndedSystemType(data.Mode)); err != nil {
+		log.Printf("dm: failed to create call-ended system message for conversation %s: %v", data.ConversationID, err)
+	}
 }
 
 func (s *DMService) pushConversationCallStart(convID, userID string, ring ws.DMCallRingData) {

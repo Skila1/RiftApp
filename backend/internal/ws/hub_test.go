@@ -24,12 +24,32 @@ func newTestHub() *Hub {
 		conversationVoiceState:    make(map[string]map[string]bool),
 		conversationVoiceDeafened: make(map[string]map[string]bool),
 		conversationCallRings:     make(map[string]DMCallRingData),
+		conversationActiveCalls:   make(map[string]conversationActiveCallState),
 		voiceJoinGrants:           make(map[string]map[string]time.Time),
 		register:                  make(chan *Client),
 		unregister:                make(chan *Client),
 		broadcast:                 make(chan *BroadcastMessage, 256),
 		db:                        nil,
 	}
+}
+
+type testConversationCallRecorder struct {
+	ringEnds chan DMCallRingEndData
+	callEnds chan DMConversationCallEndedData
+}
+
+func (r *testConversationCallRecorder) RecordConversationCallRingEnd(data DMCallRingEndData) {
+	if r == nil || r.ringEnds == nil {
+		return
+	}
+	r.ringEnds <- data
+}
+
+func (r *testConversationCallRecorder) RecordConversationCallEnded(data DMConversationCallEndedData) {
+	if r == nil || r.callEnds == nil {
+		return
+	}
+	r.callEnds <- data
 }
 
 func newTestClient(hub *Hub, userID, sessionID string) *Client {
@@ -465,5 +485,60 @@ func TestHub_BuildConversationCallRingEndDataLockedMarksMissedUsers(t *testing.T
 
 	if !reflect.DeepEqual(end.MissedUserIDs, []string{"user-2"}) {
 		t.Fatalf("unexpected missed user IDs: %#v", end.MissedUserIDs)
+	}
+}
+
+func TestHub_BroadcastConversationCallRingEndRecordsHistory(t *testing.T) {
+	hub := newTestHub()
+	recorder := &testConversationCallRecorder{ringEnds: make(chan DMCallRingEndData, 1)}
+	hub.SetConversationCallHistoryRecorder(recorder)
+
+	hub.broadcastConversationCallRingEnd(DMCallRingEndData{
+		ConversationID: "conv-1",
+		Reason:         "timeout",
+		InitiatorID:    "user-1",
+		Mode:           "video",
+		EndedAt:        time.Now().UTC(),
+	})
+
+	select {
+	case record := <-recorder.ringEnds:
+		if record.Reason != "timeout" {
+			t.Fatalf("expected timeout record, got %s", record.Reason)
+		}
+		if record.Mode != "video" {
+			t.Fatalf("expected video mode, got %s", record.Mode)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected ring-end history record")
+	}
+}
+
+func TestHub_ConversationCallEndsWhenLastParticipantLeaves(t *testing.T) {
+	hub := newTestHub()
+	recorder := &testConversationCallRecorder{callEnds: make(chan DMConversationCallEndedData, 1)}
+	hub.SetConversationCallHistoryRecorder(recorder)
+	hub.SetConversationMembers("conv-1", []string{"user-1"})
+	hub.conversationVoiceState["conv-1"] = map[string]bool{"user-1": true}
+	hub.conversationActiveCalls["conv-1"] = conversationActiveCallState{
+		Mode:      "video",
+		StartedAt: time.Now().Add(-time.Minute).UTC(),
+	}
+
+	hub.handleConversationVoiceState("user-1", "conv-1", "leave")
+
+	select {
+	case record := <-recorder.callEnds:
+		if record.ConversationID != "conv-1" {
+			t.Fatalf("unexpected conversation ID: %s", record.ConversationID)
+		}
+		if record.Mode != "video" {
+			t.Fatalf("expected video mode, got %s", record.Mode)
+		}
+		if record.EndedByUserID != "user-1" {
+			t.Fatalf("unexpected ended-by user: %s", record.EndedByUserID)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected conversation call-ended record")
 	}
 }
