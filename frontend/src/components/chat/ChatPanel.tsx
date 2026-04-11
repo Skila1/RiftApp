@@ -557,6 +557,10 @@ function ConversationCallStage({
     }
     return new Map(voiceParticipants.map((participant) => [participant.identity, participant]));
   }, [isViewingCurrentConversation, voiceParticipants]);
+  const ringingTargetIds = useMemo(
+    () => new Set(conversationCallRing?.target_user_ids ?? []),
+    [conversationCallRing],
+  );
 
   const stageMemberIds = useMemo(() => {
     const ids: string[] = [];
@@ -592,13 +596,16 @@ function ConversationCallStage({
           ? (currentUser ?? conversationMember ?? hubMembers[memberId])
           : (conversationMember ?? hubMembers[memberId]),
         isInVoice: conversationVoiceMembers.includes(memberId) || liveParticipant != null,
+        isRinging: ringingTargetIds.has(memberId)
+          && !conversationVoiceMembers.includes(memberId)
+          && liveParticipant == null,
         isMuted: liveParticipant?.isMuted ?? false,
         isCameraOn: liveParticipant?.isCameraOn ?? false,
         isSpeaking: liveParticipant?.isSpeaking ?? false,
         isCurrentUser: memberId === currentUserId,
       };
     });
-  }, [conversation.members, conversationVoiceMembers, currentUser, currentUserId, hubMembers, liveParticipantsById, stageMemberIds]);
+  }, [conversation.members, conversationVoiceMembers, currentUser, currentUserId, hubMembers, liveParticipantsById, ringingTargetIds, stageMemberIds]);
 
   const inVoiceParticipantCount = useMemo(
     () => stageParticipants.filter((participant) => participant.isInVoice).length,
@@ -609,7 +616,9 @@ function ConversationCallStage({
   const isInitiator = Boolean(currentUserId && conversationCallRing?.initiator_id === currentUserId);
   const headline = conversationCallRing
     ? (isInitiator ? 'Calling...' : 'Incoming call')
-    : 'Call in progress';
+    : callStatus?.indicator === 'ended'
+      ? (callStatus.tone === 'danger' ? 'Call unanswered' : 'Call ended')
+      : 'Call in progress';
   const subline = callStatus?.label
     ?? (inVoiceParticipantCount > 0
       ? `${inVoiceParticipantCount} participant${inVoiceParticipantCount === 1 ? '' : 's'} in call`
@@ -620,6 +629,8 @@ function ConversationCallStage({
     ? 'bg-[#f0b232]/14 text-[#ffd27a]'
     : callStatus?.tone === 'danger'
       ? 'bg-[#f87171]/14 text-[#fca5a5]'
+      : callStatus?.tone === 'muted'
+        ? 'bg-white/[0.08] text-[#d2d5db]'
       : 'bg-[#23a55a]/14 text-[#77e0a2]';
 
   const handleJoin = async (mode: 'audio' | 'video') => {
@@ -678,7 +689,7 @@ function ConversationCallStage({
           </div>
         </div>
 
-        <ConversationCallMediaStage participants={stageParticipants} />
+        <ConversationCallMediaStage participants={stageParticipants} status={callStatus} />
 
         <div className="flex flex-wrap items-center gap-2 xl:flex-shrink-0">
           {isCurrentConversationCall ? (

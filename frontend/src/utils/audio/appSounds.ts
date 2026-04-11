@@ -16,6 +16,7 @@ type SoundSegment = ToneSegment | SilenceSegment;
 
 let notificationAudio: HTMLAudioElement | null = null;
 let incomingCallAudio: HTMLAudioElement | null = null;
+let outgoingCallAudio: HTMLAudioElement | null = null;
 
 function segmentSampleCount(durationMs: number) {
   return Math.max(1, Math.round((durationMs / 1000) * SAMPLE_RATE));
@@ -132,6 +133,18 @@ function getIncomingCallAudio() {
   return incomingCallAudio;
 }
 
+function getOutgoingCallAudio() {
+  if (!outgoingCallAudio) {
+    outgoingCallAudio = createAudio([
+      { kind: 'tone', durationMs: 180, frequency: 523, volume: 0.2 },
+      { kind: 'silence', durationMs: 70 },
+      { kind: 'tone', durationMs: 220, frequency: 659, volume: 0.24 },
+      { kind: 'silence', durationMs: 1550 },
+    ], true, 0.24);
+  }
+  return outgoingCallAudio;
+}
+
 export function playNotificationSound() {
   const audio = getNotificationAudio();
   if (!audio) {
@@ -165,6 +178,30 @@ export function stopIncomingCallSound() {
   incomingCallAudio.pause();
   try {
     incomingCallAudio.currentTime = 0;
+  } catch {
+    /* ignore */
+  }
+}
+
+export function startOutgoingCallSound() {
+  const audio = getOutgoingCallAudio();
+  if (!audio) {
+    return;
+  }
+  if (!audio.paused) {
+    return;
+  }
+  audio.currentTime = 0;
+  void audio.play().catch(() => {});
+}
+
+export function stopOutgoingCallSound() {
+  if (!outgoingCallAudio) {
+    return;
+  }
+  outgoingCallAudio.pause();
+  try {
+    outgoingCallAudio.currentTime = 0;
   } catch {
     /* ignore */
   }

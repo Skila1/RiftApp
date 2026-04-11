@@ -134,6 +134,50 @@ export function getConversationCallStatus({
     };
   }
 
+  if (isFreshOutcome(outcome, now) && outcome?.reason === 'timeout') {
+    const modeLabel = outcome.mode === 'video' ? 'Video' : 'Voice';
+    const missedUserIds = uniqueUserIds(outcome.missed_user_ids);
+    const isInitiator = Boolean(currentUserId && outcome.initiator_id === currentUserId);
+    const isAloneInitiator = Boolean(
+      isInitiator
+      && currentUserId
+      && activeVoiceMembers.length === 1
+      && activeVoiceMembers[0] === currentUserId,
+    );
+
+    if (isAloneInitiator && !isGroup) {
+      return {
+        label: 'No answer',
+        tone: 'danger',
+        indicator: 'ended',
+      };
+    }
+
+    if (currentUserId && missedUserIds.includes(currentUserId)) {
+      return {
+        label: `Missed ${modeLabel} Call`,
+        tone: 'danger',
+        indicator: 'ended',
+      };
+    }
+
+    if (isInitiator && missedUserIds.length > 0) {
+      return {
+        label: missedUserIds.length === 1
+          ? `${describeParticipants(conversation, missedUserIds, 'member')} missed your call`
+          : `${missedUserIds.length} missed your call`,
+        tone: 'danger',
+        indicator: 'ended',
+      };
+    }
+
+    return {
+      label: !isGroup ? 'No answer' : `Missed ${modeLabel} Call`,
+      tone: 'danger',
+      indicator: 'ended',
+    };
+  }
+
   if (activeVoiceMembers.length > 0) {
     return {
       label: activeVoiceMembers.length === 1 ? 'In Call' : `${activeVoiceMembers.length} In Call`,
@@ -147,7 +191,6 @@ export function getConversationCallStatus({
   }
 
   const modeLabel = outcome?.mode === 'video' ? 'Video' : 'Voice';
-  const missedUserIds = uniqueUserIds(outcome?.missed_user_ids);
   const declinedUserIds = uniqueUserIds(outcome?.declined_user_ids);
   const isInitiator = Boolean(currentUserId && outcome?.initiator_id === currentUserId);
 
@@ -174,28 +217,6 @@ export function getConversationCallStatus({
         indicator: 'active',
       };
     }
-    case 'timeout':
-      if (currentUserId && missedUserIds.includes(currentUserId)) {
-        return {
-          label: `Missed ${modeLabel} Call`,
-          tone: 'danger',
-          indicator: 'ended',
-        };
-      }
-      if (isInitiator && missedUserIds.length > 0) {
-        return {
-          label: missedUserIds.length === 1
-            ? `${describeParticipants(conversation, missedUserIds, 'member')} missed your call`
-            : `${missedUserIds.length} missed your call`,
-          tone: 'danger',
-          indicator: 'ended',
-        };
-      }
-      return {
-        label: `Missed ${modeLabel} Call`,
-        tone: 'danger',
-        indicator: 'ended',
-      };
     case 'declined':
       if (isInitiator && declinedUserIds.length > 0) {
         return {

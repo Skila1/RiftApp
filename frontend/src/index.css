@@ -335,6 +335,30 @@
   }
 }
 
+@keyframes rift-dm-call-pulse {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+
+  20% {
+    opacity: 0.9;
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.18);
+  }
+}
+
+.rift-dm-call-pulse {
+  animation: rift-dm-call-pulse 1.8s ease-out infinite;
+}
+
+.rift-dm-call-pulse-delay {
+  animation: rift-dm-call-pulse 1.8s ease-out 0.9s infinite;
+}
+
 /* ─── Image attachment responsive overrides ─────────────────────────── */
 @media (max-width: 480px) {
   .grid[style*="grid-template-columns: repeat(2"] {

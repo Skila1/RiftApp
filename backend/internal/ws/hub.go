@@ -24,7 +24,7 @@ type streamSubscription struct {
 	authorized bool
 }
 
-const conversationCallRingTTL = 45 * time.Second
+const conversationCallRingTTL = 30 * time.Second
 
 type conversationActiveCallState struct {
 	Mode      string

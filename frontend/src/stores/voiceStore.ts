@@ -32,6 +32,7 @@ import { usePresenceStore } from './presenceStore';
 import { publicAssetUrl } from '../utils/publicAssetUrl';
 import { getDesktop } from '../utils/desktop';
 import { resolveVoiceParticipantSpeakingState } from '../utils/voiceSpeakingState';
+import { startOutgoingCallSound, stopOutgoingCallSound } from '../utils/audio/appSounds';
 import {
   DEFAULT_MANUAL_MIC_THRESHOLD,
   DEFAULT_MIC_GATE_RELEASE_MS,
@@ -72,6 +73,7 @@ type TrackProcessorsModule = typeof import('@livekit/track-processors');
 
 const SPEAKING_BROADCAST_INTERVAL_MS = 30;
 const CONNECTION_STATS_POLL_INTERVAL_MS = 1000;
+const DM_CALL_SESSION_EXPIRY_MS = 90_000;
 const MANUAL_INPUT_SENSITIVITY_MIN = 0;
 const MANUAL_INPUT_SENSITIVITY_MAX = 0.08;
 const CAMERA_BACKGROUND_BLUR_RADIUS = 12;
@@ -79,6 +81,13 @@ const MAX_SAVED_CAMERA_BACKGROUNDS = 30;
 
 type VoiceConnectionTone = 'good' | 'medium' | 'bad' | 'neutral';
 type VoiceConnectionSource = 'webrtc' | 'livekit' | 'unknown';
+
+type ConversationCallSession = {
+  conversationId: string;
+  initiatorId: string;
+  mode: DMCallMode;
+  startedAtMs: number;
+};
 
 export interface VoiceMediaDevice {
   deviceId: string;
@@ -157,6 +166,182 @@ function normalizeSelectedDeviceId(deviceId: string | null | undefined) {
 
   const trimmed = deviceId.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+const conversationCallSessions = new Map<string, ConversationCallSession>();
+const conversationCallExpiryTimers = new Map<string, number>();
+
+function clearConversationCallExpiryTimer(conversationId: string) {
+  const timer = conversationCallExpiryTimers.get(conversationId);
+  if (timer != null) {
+    window.clearTimeout(timer);
+    conversationCallExpiryTimers.delete(conversationId);
+  }
+}
+
+function clearConversationCallSession(conversationId: string) {
+  conversationCallSessions.delete(conversationId);
+  clearConversationCallExpiryTimer(conversationId);
+}
+
+function registerConversationCallSession(ring: DMCallRing) {
+  const currentUserId = useAuthStore.getState().user?.id ?? null;
+  if (!currentUserId || ring.initiator_id !== currentUserId) {
+    return;
+  }
+  const startedAtMs = Date.parse(ring.started_at);
+  conversationCallSessions.set(ring.conversation_id, {
+    conversationId: ring.conversation_id,
+    initiatorId: ring.initiator_id,
+    mode: ring.mode,
+    startedAtMs: Number.isFinite(startedAtMs) ? startedAtMs : Date.now(),
+  });
+}
+
+function stopAllConversationCallEffects() {
+  stopOutgoingCallSound();
+  for (const conversationId of conversationCallExpiryTimers.keys()) {
+    clearConversationCallExpiryTimer(conversationId);
+  }
+  conversationCallSessions.clear();
+}
+
+function pendingConversationCallTargets(ring: DMCallRing | null | undefined, voiceMemberIds: string[]) {
+  if (!ring) {
+    return [];
+  }
+  const voiceMemberSet = new Set(voiceMemberIds);
+  const declinedUserSet = new Set(ring.declined_user_ids ?? []);
+  return (ring.target_user_ids ?? []).filter(
+    (userId) => !voiceMemberSet.has(userId) && !declinedUserSet.has(userId),
+  );
+}
+
+function shouldKeepConversationSessionAfterOutcome(
+  conversationId: string,
+  session: ConversationCallSession,
+  outcome: DMCallRingEnd | undefined,
+  voiceMemberIds: string[],
+  currentUserId: string | null,
+) {
+  if (!currentUserId || session.initiatorId !== currentUserId) {
+    return false;
+  }
+  const remoteMembers = voiceMemberIds.filter((memberId) => memberId !== currentUserId);
+  if (remoteMembers.length > 0) {
+    return false;
+  }
+  if (!outcome || outcome.conversation_id !== conversationId) {
+    return true;
+  }
+  return outcome.reason === 'timeout';
+}
+
+function syncConversationCallSideEffects() {
+  const state = useVoiceStore.getState();
+  const currentUserId = useAuthStore.getState().user?.id ?? null;
+  let shouldPlayOutgoingRingtone = false;
+
+  for (const [conversationId, session] of [...conversationCallSessions.entries()]) {
+    const ring = state.conversationCallRings[conversationId] ?? null;
+    const outcome = state.conversationCallOutcomes[conversationId];
+    const voiceMemberIds = state.conversationVoiceMembers[conversationId] ?? [];
+    const remoteMembers = currentUserId
+      ? voiceMemberIds.filter((memberId) => memberId !== currentUserId)
+      : voiceMemberIds;
+
+    if (remoteMembers.length > 0 || outcome?.reason === 'answered') {
+      clearConversationCallSession(conversationId);
+      continue;
+    }
+
+    const keepAfterOutcome = shouldKeepConversationSessionAfterOutcome(
+      conversationId,
+      session,
+      outcome,
+      voiceMemberIds,
+      currentUserId,
+    );
+
+    if (!ring && !keepAfterOutcome) {
+      const shouldAutoLeave = Boolean(
+        currentUserId
+        && session.initiatorId === currentUserId
+        && state.connected
+        && state.targetKind === 'conversation'
+        && state.conversationId === conversationId
+        && remoteMembers.length === 0,
+      );
+      clearConversationCallSession(conversationId);
+      if (shouldAutoLeave) {
+        queueMicrotask(() => {
+          const latest = useVoiceStore.getState();
+          if (
+            latest.connected
+            && latest.targetKind === 'conversation'
+            && latest.conversationId === conversationId
+            && (latest.conversationVoiceMembers[conversationId] ?? []).every((memberId) => memberId === currentUserId)
+          ) {
+            void latest.leave();
+          }
+        });
+      }
+      continue;
+    }
+
+    const expiresAtMs = session.startedAtMs + DM_CALL_SESSION_EXPIRY_MS;
+    const remainingMs = expiresAtMs - Date.now();
+    if (remainingMs <= 0) {
+      const shouldAutoLeave = Boolean(
+        currentUserId
+        && session.initiatorId === currentUserId
+        && state.connected
+        && state.targetKind === 'conversation'
+        && state.conversationId === conversationId
+        && remoteMembers.length === 0,
+      );
+      clearConversationCallSession(conversationId);
+      if (shouldAutoLeave) {
+        queueMicrotask(() => {
+          const latest = useVoiceStore.getState();
+          if (
+            latest.connected
+            && latest.targetKind === 'conversation'
+            && latest.conversationId === conversationId
+            && (latest.conversationVoiceMembers[conversationId] ?? []).every((memberId) => memberId === currentUserId)
+          ) {
+            void latest.leave();
+          }
+        });
+      }
+      continue;
+    }
+
+    clearConversationCallExpiryTimer(conversationId);
+    conversationCallExpiryTimers.set(
+      conversationId,
+      window.setTimeout(() => {
+        syncConversationCallSideEffects();
+      }, remainingMs),
+    );
+
+    if (
+      currentUserId
+      && session.initiatorId === currentUserId
+      && state.connected
+      && state.targetKind === 'conversation'
+      && state.conversationId === conversationId
+      && pendingConversationCallTargets(ring, voiceMemberIds).length > 0
+    ) {
+      shouldPlayOutgoingRingtone = true;
+    }
+  }
+
+  if (shouldPlayOutgoingRingtone) {
+    startOutgoingCallSound();
+  } else {
+    stopOutgoingCallSound();
+  }
 }
 
 function normalizeCameraBackgroundAsset(
@@ -1608,6 +1793,7 @@ function resetState() {
   clearTransientSpeaking();
   stopConnectionStatsMonitor();
   stopMicProcessing({ broadcast: false, identity: roomRef?.localParticipant.identity });
+  stopAllConversationCallEffects();
   useActiveSpeakerStore.getState().clearActiveSpeaker();
   useVoiceStore.setState({
     connected: false,
@@ -1891,6 +2077,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
           ),
         ),
       }));
+      syncConversationCallSideEffects();
     } catch {
       /* ignore transient DM call-state load failures */
     }
@@ -1898,6 +2085,9 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
 
   startConversationCallRing: async (conversationId, mode) => {
     const state = await api.startDMCallRing(conversationId, mode);
+    if (state.ring) {
+      registerConversationCallSession(state.ring);
+    }
     const normalized = normalizeConversationCallStates([state]);
     set((current) => {
       const nextMembers = { ...current.conversationVoiceMembers };
@@ -1921,6 +2111,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
         dismissedConversationCallRings: nextDismissed,
       };
     });
+    syncConversationCallSideEffects();
   },
 
   cancelConversationCallRing: async (conversationId) => {
@@ -1929,6 +2120,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
     } catch {
       /* ignore transient cancellation failures */
     }
+    clearConversationCallSession(conversationId);
     get().clearConversationCallRing(conversationId);
   },
 
@@ -1949,6 +2141,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
         };
       });
     }
+    syncConversationCallSideEffects();
   },
 
   leave: async () => {
@@ -2469,6 +2662,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
         action === 'join',
       ),
     }));
+    syncConversationCallSideEffects();
   },
 
   applyConversationVoiceScreenShare: (conversationId, userId, sharing) => {
@@ -2500,6 +2694,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
   },
 
   setConversationCallRing: (ring) => {
+    registerConversationCallSession(ring);
     set((state) => {
       const nextDismissed = { ...state.dismissedConversationCallRings };
       if (nextDismissed[ring.conversation_id] && nextDismissed[ring.conversation_id] !== ring.started_at) {
@@ -2516,6 +2711,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
         dismissedConversationCallRings: nextDismissed,
       };
     });
+    syncConversationCallSideEffects();
   },
 
   setConversationCallOutcome: (outcome) => {
@@ -2525,6 +2721,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
         [outcome.conversation_id]: outcome,
       },
     }));
+    syncConversationCallSideEffects();
   },
 
   clearConversationCallOutcome: (conversationId) => {
@@ -2538,6 +2735,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
         conversationCallOutcomes: nextOutcomes,
       };
     });
+    syncConversationCallSideEffects();
   },
 
   clearConversationCallRing: (conversationId) => {
@@ -2554,6 +2752,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
         dismissedConversationCallRings: nextDismissed,
       };
     });
+    syncConversationCallSideEffects();
   },
 
   dismissConversationCallRing: (conversationId) => {
@@ -2569,9 +2768,11 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
         },
       };
     });
+    syncConversationCallSideEffects();
   },
 
   clearConversationCallState: (conversationId) => {
+    clearConversationCallSession(conversationId);
     set((state) => {
       const nextMembers = { ...state.conversationVoiceMembers };
       delete nextMembers[conversationId];
@@ -2600,6 +2801,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
         conversationVoiceDeafenedUsers: nextDeafened,
       };
     });
+    syncConversationCallSideEffects();
   },
 
   applySpeakingSignal: (identity, speaking) => {

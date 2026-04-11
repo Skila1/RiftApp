@@ -73,6 +73,32 @@ describe('dmCallStatus', () => {
     });
   });
 
+  it('shows no answer for a direct-DM initiator left alone after timeout', () => {
+    const status = getConversationCallStatus({
+      conversation: createConversation({
+        is_group: false,
+        members: [
+          { id: 'user-1', username: 'alpha', display_name: 'Alpha', status: 1, created_at: '', updated_at: '' },
+          { id: 'user-2', username: 'bravo', display_name: 'Bravo', status: 1, created_at: '', updated_at: '' },
+        ],
+      }),
+      currentUserId: 'user-1',
+      voiceMemberIds: ['user-1'],
+      outcome: createOutcome({
+        reason: 'timeout',
+        mode: 'audio',
+        missed_user_ids: ['user-2'],
+      }),
+      now: Date.parse('2026-04-08T12:06:00.000Z'),
+    });
+
+    expect(status).toEqual({
+      label: 'No answer',
+      tone: 'danger',
+      indicator: 'ended',
+    });
+  });
+
   it('shows an active state when voice members are already in the conversation call', () => {
     const status = getConversationCallStatus({
       conversation: createConversation(),
