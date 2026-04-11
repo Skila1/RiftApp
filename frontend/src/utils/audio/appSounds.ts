@@ -124,11 +124,13 @@ function getNotificationAudio() {
 function getIncomingCallAudio() {
   if (!incomingCallAudio) {
     incomingCallAudio = createAudio([
-      { kind: 'tone', durationMs: 220, frequency: 659, volume: 0.22 },
-      { kind: 'silence', durationMs: 80 },
-      { kind: 'tone', durationMs: 220, frequency: 784, volume: 0.24 },
-      { kind: 'silence', durationMs: 1280 },
-    ], true, 0.28);
+      { kind: 'tone', durationMs: 190, frequency: 440, volume: 0.16 },
+      { kind: 'silence', durationMs: 55 },
+      { kind: 'tone', durationMs: 190, frequency: 554, volume: 0.18 },
+      { kind: 'silence', durationMs: 55 },
+      { kind: 'tone', durationMs: 250, frequency: 659, volume: 0.2 },
+      { kind: 'silence', durationMs: 1180 },
+    ], true, 0.24);
   }
   return incomingCallAudio;
 }
@@ -136,11 +138,15 @@ function getIncomingCallAudio() {
 function getOutgoingCallAudio() {
   if (!outgoingCallAudio) {
     outgoingCallAudio = createAudio([
-      { kind: 'tone', durationMs: 180, frequency: 523, volume: 0.2 },
-      { kind: 'silence', durationMs: 70 },
-      { kind: 'tone', durationMs: 220, frequency: 659, volume: 0.24 },
-      { kind: 'silence', durationMs: 1550 },
-    ], true, 0.24);
+      { kind: 'tone', durationMs: 170, frequency: 330, volume: 0.14 },
+      { kind: 'silence', durationMs: 50 },
+      { kind: 'tone', durationMs: 180, frequency: 440, volume: 0.16 },
+      { kind: 'silence', durationMs: 50 },
+      { kind: 'tone', durationMs: 220, frequency: 554, volume: 0.18 },
+      { kind: 'silence', durationMs: 90 },
+      { kind: 'tone', durationMs: 260, frequency: 440, volume: 0.16 },
+      { kind: 'silence', durationMs: 1260 },
+    ], true, 0.22);
   }
   return outgoingCallAudio;
 }

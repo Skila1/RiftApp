@@ -319,7 +319,7 @@ export default function DMSidebar() {
                     ? 'text-[#f87171]'
                     : 'text-[#b5bac1]';
               const statusDotClass = callStatus?.tone === 'warning'
-                ? 'animate-pulse bg-[#f0b232]'
+                ? 'bg-white/25'
                 : callStatus?.tone === 'success'
                   ? 'bg-[#23a55a]'
                   : callStatus?.tone === 'danger'

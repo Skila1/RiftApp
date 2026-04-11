@@ -172,6 +172,12 @@ function RingingAvatar({ member }: { member: ConversationCallStageMember }) {
   return (
     <div className="flex flex-col items-center gap-3 text-center transition-all duration-300">
       <div className="relative flex h-28 w-28 items-center justify-center sm:h-32 sm:w-32">
+        {member.isRinging ? (
+          <>
+            <span className="rift-dm-call-pulse absolute inset-0 rounded-full border border-white/80" />
+            <span className="rift-dm-call-pulse-delay absolute inset-[-10px] rounded-full border border-white/45" />
+          </>
+        ) : null}
         <div
           className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full"
           style={{ backgroundColor: getAvatarColor(member.id) }}
@@ -206,8 +212,8 @@ function RingingStage({
   participants: ConversationCallStageMember[];
 }) {
   return (
-    <div className="flex min-h-[260px] w-full max-w-[420px] flex-col items-center justify-center gap-6 rounded-2xl border border-white/10 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),rgba(0,0,0,0)_55%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01))] px-6 py-8 transition-all duration-300">
-      <div className="flex flex-wrap items-center justify-center gap-10">
+    <div className="flex min-h-[220px] w-full items-center justify-center px-6 py-4 transition-all duration-300">
+      <div className="flex w-full max-w-[420px] flex-wrap items-center justify-center gap-10">
         {participants.map((member) => (
           <RingingAvatar key={member.id} member={member} />
         ))}
