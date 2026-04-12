@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import type { Conversation, User } from '../../types';
 import { useAuthStore } from '../../stores/auth';
@@ -6,11 +6,21 @@ import { useDMStore } from '../../stores/dmStore';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useProfilePopoverStore } from '../../stores/profilePopoverStore';
 import { useUserContextMenuStore } from '../../stores/userContextMenuStore';
+import { dispatchChatSearchRequest } from '../../utils/chatSearchBridge';
 import { getConversationMembers, getUserLabel } from '../../utils/conversations';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import BotBadge from '../shared/BotBadge';
 import CrownIcon from '../shared/CrownIcon';
 import StatusDot, { statusLabel } from '../shared/StatusDot';
+
+function SearchIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+}
 
 function GroupMemberRow({
   member,
@@ -78,6 +88,7 @@ function GroupMemberRow({
 export default function GroupDMMemberList({ conversation }: { conversation: Conversation }) {
   const currentUserId = useAuthStore((s) => s.user?.id ?? null);
   const currentConversation = useDMStore((s) => s.conversations.find((entry) => entry.id === conversation.id) ?? conversation);
+  const [messageSearch, setMessageSearch] = useState('');
 
   const ownerId = currentConversation.owner_id ?? null;
   const members = useMemo(() => {
@@ -103,15 +114,58 @@ export default function GroupDMMemberList({ conversation }: { conversation: Conv
     return null;
   }
 
+  const openMessageSearch = () => {
+    const query = messageSearch.trim();
+    dispatchChatSearchRequest({ query: query || undefined });
+  };
+
+  const runMessageSearch = () => {
+    const query = messageSearch.trim();
+    if (!query) {
+      openMessageSearch();
+      return;
+    }
+    dispatchChatSearchRequest({ query, run: true, clearFiltersOnRun: true });
+  };
+
   return (
     <div className="relative w-60 flex-shrink-0 border-l border-riftapp-border/60 bg-riftapp-content flex flex-col overflow-visible">
-      <div className="relative z-20 border-b border-riftapp-border/50 bg-riftapp-content px-4 py-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7b818e]">
-          Members — {members.length}
-        </h3>
+      <div className="relative z-20 h-12 border-b border-riftapp-border/50 bg-riftapp-content px-3">
+        <div className="flex h-full items-center">
+          <div className="flex h-[28px] w-full min-w-0 items-center gap-1 rounded-[4px] bg-[#24272d] px-2 text-[#b5bac1] shadow-[0_1px_0_rgba(0,0,0,0.32)] transition-colors hover:bg-[#262930] focus-within:bg-[#262930]">
+            <SearchIcon className="h-[13px] w-[13px] shrink-0 text-[#72767d]" />
+            <input
+              type="text"
+              value={messageSearch}
+              onChange={(event) => {
+                setMessageSearch(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  runMessageSearch();
+                }
+              }}
+              placeholder="Search messages"
+              className="min-w-0 flex-1 bg-transparent py-0 text-[12px] leading-5 text-[#dcddde] outline-none placeholder:text-[#72767d]"
+              aria-label="Search messages"
+            />
+            <button
+              type="button"
+              onClick={runMessageSearch}
+              className="inline-flex h-5 w-6 shrink-0 items-center justify-center rounded-[3px] bg-[#2d3138] text-[#8f949c] transition-colors hover:bg-[#363a43] hover:text-[#dcddde]"
+              aria-label={messageSearch.trim() ? 'Run message search' : 'Open message search'}
+            >
+              <SearchIcon className="h-[13px] w-[13px]" />
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto px-2 py-3">
+        <h3 className="px-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#7b818e]">
+          Members — {members.length}
+        </h3>
         <div className="space-y-0.5">
           {members.map((member) => (
             <GroupMemberRow

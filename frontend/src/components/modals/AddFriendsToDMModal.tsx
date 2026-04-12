@@ -10,6 +10,7 @@ import {
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import ModalOverlay from '../shared/ModalOverlay';
 import ModalCloseButton from '../shared/ModalCloseButton';
+import StatusDot from '../shared/StatusDot';
 
 const MAX_GROUP_DM_MEMBERS = 15;
 
@@ -20,19 +21,22 @@ interface Props {
 }
 
 function FriendAvatar({ user }: { user: User }) {
-  if (user.avatar_url) {
-    return (
-      <img
-        src={publicAssetUrl(user.avatar_url)}
-        alt=""
-        className="h-10 w-10 rounded-full object-cover"
-      />
-    );
-  }
-
   return (
-    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-riftapp-accent/20 text-sm font-semibold text-riftapp-accent">
-      {getUserLabel(user).slice(0, 2).toUpperCase()}
+    <div className="relative flex-shrink-0">
+      {user.avatar_url ? (
+        <img
+          src={publicAssetUrl(user.avatar_url)}
+          alt=""
+          className="h-9 w-9 rounded-full object-cover"
+        />
+      ) : (
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-riftapp-accent/20 text-[12px] font-semibold text-riftapp-accent">
+          {getUserLabel(user).slice(0, 2).toUpperCase()}
+        </div>
+      )}
+      <div className="absolute -bottom-0.5 -right-0.5 rounded-full border-2 border-riftapp-menu">
+        <StatusDot userId={user.id} fallbackStatus={user.status} size="sm" />
+      </div>
     </div>
   );
 }
@@ -76,7 +80,7 @@ export default function AddFriendsToDMModal({ conversation, mode = 'create', onC
     const normalizedQuery = query.trim().toLowerCase();
     return friends
       .map((friendship) => friendship.user)
-	      .filter((user): user is User => user != null && !existingMemberIds.has(user.id))
+      .filter((user): user is User => user != null && !existingMemberIds.has(user.id))
       .filter((user) => {
         if (!normalizedQuery) return true;
         const haystack = `${user.display_name} ${user.username}`.toLowerCase();
@@ -140,11 +144,11 @@ export default function AddFriendsToDMModal({ conversation, mode = 'create', onC
 
   return (
     <ModalOverlay isOpen onClose={submitting ? () => {} : onClose} zIndex={330} className="p-4 sm:p-6">
-      <div className="w-[min(92vw,430px)] overflow-hidden rounded-2xl border border-white/10 bg-riftapp-menu text-[#f2f3f5] shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
-        <div className="flex items-start justify-between gap-4 px-4 pb-3 pt-4">
+      <div className="w-[min(88vw,340px)] overflow-hidden rounded-[20px] border border-white/10 bg-riftapp-menu text-[#f2f3f5] shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+        <div className="flex items-start justify-between gap-3 px-3.5 pb-2.5 pt-3.5">
           <div className="min-w-0">
-            <h2 className="text-[20px] font-semibold leading-none text-[#f2f3f5]">{title}</h2>
-            <p className="mt-2 text-[13px] text-[#b5bac1]">{description}</p>
+            <h2 className="text-[18px] font-semibold leading-none text-[#f2f3f5]">{title}</h2>
+            <p className="mt-1.5 text-[12px] leading-5 text-[#b5bac1]">{description}</p>
           </div>
           <ModalCloseButton
             onClick={onClose}
@@ -154,33 +158,33 @@ export default function AddFriendsToDMModal({ conversation, mode = 'create', onC
           />
         </div>
 
-        <div className="px-4 pb-4">
-          <div className="flex items-center gap-2">
+        <div className="px-3.5 pb-3.5">
+          <div className="flex items-center gap-1.5">
             <input
               type="text"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search for friends"
-              className="h-9 min-w-0 flex-1 rounded-md border border-[#3a3d45] bg-[#23252a] px-3 text-sm text-[#f2f3f5] outline-none transition-colors placeholder:text-[#8f949c] focus:border-[#5865f2]"
+              className="h-8 min-w-0 flex-1 rounded-md border border-[#3a3d45] bg-[#23252a] px-2.5 text-[13px] text-[#f2f3f5] outline-none transition-colors placeholder:text-[#8f949c] focus:border-[#5865f2]"
             />
             <button
               type="button"
               onClick={() => void handleSubmit()}
               disabled={selectedIds.length === 0 || submitting || remainingSlots <= 0}
-              className="inline-flex h-9 min-w-[64px] items-center justify-center rounded-md bg-[#5865f2] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#6b77ff] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-8 min-w-[54px] items-center justify-center rounded-md bg-[#5865f2] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[#6b77ff] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting ? (mode === 'add' ? 'Adding…' : 'Creating…') : submitLabel}
             </button>
           </div>
 
-          <div className="mt-2 flex items-center justify-between text-[12px] text-[#b5bac1]">
+          <div className="mt-2 flex items-center justify-between text-[11px] text-[#b5bac1]">
             <span>{selectedSummary}</span>
             <span>{remainingSlots} slot{remainingSlots === 1 ? '' : 's'} left</span>
           </div>
 
           {error ? <div className="mt-2 text-[12px] text-[#ff8d8f]">{error}</div> : null}
 
-          <div className="mt-3 max-h-[360px] overflow-y-auto rounded-md border border-white/8 bg-[#23252a] py-1">
+          <div className="mt-2.5 max-h-[320px] overflow-y-auto rounded-xl bg-[#23252a] py-1">
             {loading && friends.length === 0 ? (
               <div className="px-3 py-6 text-center text-sm text-[#949ba4]">Loading friends…</div>
             ) : availableFriends.length === 0 ? (
@@ -203,7 +207,7 @@ export default function AddFriendsToDMModal({ conversation, mode = 'create', onC
                         }
                       }}
                       disabled={disabled && !selected}
-                      className={`flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-left transition-colors ${
+                      className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors ${
                         selected
                           ? 'bg-[#313338] text-[#f2f3f5]'
                           : disabled
@@ -213,11 +217,11 @@ export default function AddFriendsToDMModal({ conversation, mode = 'create', onC
                     >
                       <FriendAvatar user={friend} />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-[14px] font-medium text-inherit">{getUserLabel(friend)}</div>
-                        <div className="truncate text-[11px] text-[#949ba4]">@{friend.username}</div>
+                        <div className="truncate text-[13px] font-medium text-inherit">{getUserLabel(friend)}</div>
+                        <div className="truncate text-[10px] text-[#949ba4]">@{friend.username}</div>
                       </div>
                       <span
-                        className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border text-[11px] font-bold transition-colors ${
+                        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border text-[10px] font-bold transition-colors ${
                           selected
                             ? 'border-[#7a85ff] bg-[#5865f2] text-white'
                             : 'border-[#5a5e68] bg-transparent text-transparent'

@@ -1780,7 +1780,11 @@ export default function ChatPanel({
 
   useEffect(() => {
     return subscribeToChatSearchRequests((detail) => {
-      if (isDMMode || !activeHubId) return;
+      if (isDMMode) {
+        if (!activeConversationId) return;
+      } else if (!activeHubId) {
+        return;
+      }
 
       const nextQuery = typeof detail.query === 'string' ? detail.query : (searchFilters.query ?? '');
       const normalizedQuery = nextQuery.trim();
@@ -1798,7 +1802,7 @@ export default function ChatPanel({
       setPendingSearchFocus(detail.focusFilter ?? null);
       setActivePanel('search');
     });
-  }, [activeHubId, isDMMode, runSearch, searchFilters.query]);
+  }, [activeConversationId, activeHubId, isDMMode, runSearch, searchFilters.query]);
 
   useEffect(() => {
     if (activePanel !== 'search' || !pendingSearchFocus) return;
@@ -2126,15 +2130,17 @@ export default function ChatPanel({
                 <IconUsers className="h-4 w-4" />
               </HeaderIconButton>
             ) : null}
-            <button
-              type="button"
-              onClick={() => setActivePanel('search')}
-              className="hidden h-7 min-w-[220px] max-w-[260px] items-center justify-between gap-3 rounded-[4px] bg-[#202225] px-3 text-left text-[12px] text-[#949ba4] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors hover:bg-[#25262b] hover:text-[#dcddde] lg:flex"
-              aria-label={`Search messages with ${activeConversationLabel}`}
-            >
-              <span className="truncate">{searchQuery.trim() || `Search ${activeConversationLabel}`}</span>
-              <IconSearch className="h-3.5 w-3.5 shrink-0 text-[#72767d]" />
-            </button>
+            {!activeConversationIsGroup ? (
+              <button
+                type="button"
+                onClick={() => setActivePanel('search')}
+                className="hidden h-7 min-w-[220px] max-w-[260px] items-center justify-between gap-3 rounded-[4px] bg-[#202225] px-3 text-left text-[12px] text-[#949ba4] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors hover:bg-[#25262b] hover:text-[#dcddde] lg:flex"
+                aria-label={`Search messages with ${activeConversationLabel}`}
+              >
+                <span className="truncate">{searchQuery.trim() || `Search ${activeConversationLabel}`}</span>
+                <IconSearch className="h-3.5 w-3.5 shrink-0 text-[#72767d]" />
+              </button>
+            ) : null}
           </>
         ) : null}
         {isDMMode ? (
@@ -2142,7 +2148,7 @@ export default function ChatPanel({
             label="Search messages"
             active={activePanel === 'search'}
             onClick={() => togglePanel('search')}
-            className="lg:hidden"
+            className={activeConversationIsGroup ? undefined : 'lg:hidden'}
           >
             <IconSearch className="h-4 w-4" />
           </HeaderIconButton>
