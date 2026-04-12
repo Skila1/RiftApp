@@ -6,6 +6,7 @@ import { useStreamStore } from '../../stores/streamStore';
 import { useMessageStore } from '../../stores/messageStore';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { isHubMuted, useHubNotificationStore } from '../../stores/hubNotificationStore';
+import { useAppSettingsStore } from '../../stores/appSettingsStore';
 import { api } from '../../api/client';
 import type { Hub, Notification } from '../../types';
 import AddServerModal from '../modals/AddServerModal';
@@ -13,6 +14,7 @@ import InviteToServerModal from '../modals/InviteToServerModal';
 import ModalOverlay from '../shared/ModalOverlay';
 import { useAuthStore } from '../../stores/auth';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
+import { menuDivider } from '../context-menus/MenuOverlay';
 
 function notifLevelSubtitle(level: string): string {
   switch (level) {
@@ -84,6 +86,7 @@ export default function HubSidebar() {
   const [muteSubmenuOpen, setMuteSubmenuOpen] = useState(false);
   const mergeReadStatesForHub = useStreamStore((s) => s.mergeReadStatesForHub);
   const loadNotifications = useNotificationStore((s) => s.loadNotifications);
+  const developerMode = useAppSettingsStore((s) => s.developerMode);
 
   const notifications = useNotificationStore((s) => s.notifications);
   const streamUnreads = useStreamStore((s) => s.streamUnreads);
@@ -400,7 +403,7 @@ export default function HubSidebar() {
                 Invite to Server
               </button>
 
-              <div className="mx-2 my-1 h-px bg-riftapp-border/40" />
+              {menuDivider()}
 
               <div
                 className="relative mx-0.5"
@@ -450,12 +453,12 @@ export default function HubSidebar() {
               </div>
 
               <div
-                className="relative mx-1"
+                className="relative mx-0.5"
                 onMouseEnter={() => setNotifSubmenuOpen(true)}
                 onMouseLeave={() => setNotifSubmenuOpen(false)}
               >
                 <div
-                  className={`flex items-center gap-2 rounded px-2 py-1.5 cursor-default ${notifSubmenuOpen ? 'bg-riftapp-chrome-hover' : 'hover:bg-riftapp-chrome-hover'}`}
+                  className={`${menuItemClassName} cursor-default ${notifSubmenuOpen ? 'bg-[#232428]' : ''}`}
                 >
                   <span className="w-4 shrink-0" aria-hidden />
                   <div className="flex-1 min-w-0">
@@ -488,7 +491,7 @@ export default function HubSidebar() {
                               notification_level: level,
                             });
                           }}
-                          className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-left hover:bg-riftapp-chrome-hover"
+                          className={submenuItemClassName}
                         >
                           <span
                             className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
@@ -505,7 +508,7 @@ export default function HubSidebar() {
                         </button>
                       ))}
 
-                      <div className="mx-2 my-1 h-px bg-riftapp-border/40" />
+                      {menuDivider()}
 
                       {(
                         [
@@ -527,7 +530,7 @@ export default function HubSidebar() {
                               [key]: !contextHubNotifSettings[key],
                             });
                           }}
-                          className="mx-1 flex w-[calc(100%-8px)] items-center justify-between gap-2 rounded-sm px-2.5 py-1.5 text-left hover:bg-riftapp-chrome-hover"
+                          className={`${submenuItemClassName} justify-between`}
                         >
                           <span>{label}</span>
                           <span
@@ -546,7 +549,7 @@ export default function HubSidebar() {
                         </button>
                       ))}
 
-                      <div className="mx-2 my-1 h-px bg-riftapp-border/40" />
+                      {menuDivider()}
 
                       <button
                         type="button"
@@ -559,7 +562,7 @@ export default function HubSidebar() {
                             mobile_push: !contextHubNotifSettings.mobile_push,
                           });
                         }}
-                        className="mx-1 flex w-[calc(100%-8px)] items-center justify-between gap-2 rounded-sm px-2.5 py-1.5 text-left hover:bg-riftapp-chrome-hover"
+                        className={`${submenuItemClassName} justify-between`}
                       >
                         <span>Mobile Push Notifications</span>
                         <span
@@ -591,9 +594,9 @@ export default function HubSidebar() {
                     hide_muted_channels: !contextHubNotifSettings.hide_muted_channels,
                   });
                 }}
-                className="mx-1 flex w-[calc(100%-8px)] items-center justify-between gap-2 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover disabled:opacity-50"
+                className={`${menuItemClassName} justify-between disabled:opacity-50`}
               >
-                <span className="pl-6">Hide Muted Channels</span>
+                <span>Hide Muted Channels</span>
                 <span
                   className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center ${
                     contextHubNotifSettings?.hide_muted_channels
@@ -609,30 +612,27 @@ export default function HubSidebar() {
                 </span>
               </button>
 
-              <div className="mx-2 my-1 h-px bg-riftapp-border/40" />
-
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(contextMenu.hub.id);
-                  closeContextMenu();
-                }}
-                className="mx-1 flex w-[calc(100%-8px)] items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-riftapp-text-dim hover:bg-riftapp-chrome-hover hover:text-riftapp-text"
-              >
-                <span className="flex items-center gap-2.5">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="shrink-0 opacity-70">
-                    <rect x="9" y="9" width="13" height="13" rx="2" />
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                  </svg>
-                  Copy Server ID
-                </span>
-                <span className="text-[10px] font-semibold px-1 py-0.5 rounded border border-riftapp-border/50 text-riftapp-text-dim">ID</span>
-              </button>
+              {developerMode ? (
+                <>
+                  {menuDivider()}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(contextMenu.hub.id);
+                      closeContextMenu();
+                    }}
+                    className={`${menuItemClassName} justify-between gap-2`}
+                  >
+                    <span>Copy Server ID</span>
+                    <span className="text-[10px] font-mono font-semibold px-1 py-0.5 rounded bg-[#1e1f22] border border-[#3f4147] text-[#b5bac1]">ID</span>
+                  </button>
+                </>
+              ) : null}
 
               {/* Leave Server – hidden for the hub owner */}
               {currentUserId && contextMenu.hub.owner_id !== currentUserId && (
                 <>
-                  <div className="mx-2 my-1 h-px bg-riftapp-border/40" />
+                  {menuDivider()}
                   <button
                     type="button"
                     onClick={() => {
@@ -640,7 +640,7 @@ export default function HubSidebar() {
                       closeContextMenu();
                       setLeaveConfirmHub(hub);
                     }}
-                    className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-red-500/20 text-left w-[calc(100%-8px)] text-red-400 hover:text-red-300"
+                    className={`${menuItemClassName} text-[#f38b8f]`}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="shrink-0">
                       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
