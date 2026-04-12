@@ -25,6 +25,7 @@ import { useDMStore } from '../../stores/dmStore';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { useFriendStore } from '../../stores/friendStore';
 import { getMutedConversationIds, useConversationMuteStore } from '../../stores/conversationMuteStore';
+import { getMutedHubIds, useHubNotificationStore } from '../../stores/hubNotificationStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useVoiceChannelUiStore } from '../../stores/voiceChannelUiStore';
 import { getDesktop } from '../../utils/desktop';
@@ -37,19 +38,46 @@ export default function AppLayout() {
   const [searchSidebarOpen, setSearchSidebarOpen] = useState(false);
   const currentUserId = useAuthStore((s) => s.user?.id ?? null);
   const loadHubs = useHubStore((s) => s.loadHubs);
+  const hubs = useHubStore((s) => s.hubs);
   const loadConversations = useDMStore((s) => s.loadConversations);
   const loadNotifications = useNotificationStore((s) => s.loadNotifications);
-  const notificationUnreadCount = useNotificationStore((s) => s.unreadCount);
+  const notifications = useNotificationStore((s) => s.notifications);
   const loadConversationCallStates = useVoiceStore((s) => s.loadConversationCallStates);
   const conversationCallRings = useVoiceStore((s) => s.conversationCallRings);
   const activeConversationId = useDMStore((s) => s.activeConversationId);
   const conversations = useDMStore((s) => s.conversations);
   const mutedUntilByConversationId = useConversationMuteStore((s) => s.mutedUntilByConversationId);
+  const clearExpiredConversationMutes = useConversationMuteStore((s) => s.clearExpiredConversationMutes);
+  const hubSettingsByHubId = useHubNotificationStore((s) => s.hubSettingsByHubId);
+  const localMutedUntilByHubId = useHubNotificationStore((s) => s.localMutedUntilByHubId);
+  const clearExpiredHubMutes = useHubNotificationStore((s) => s.clearExpiredHubMutes);
+  const loadHubSettings = useHubNotificationStore((s) => s.loadHubSettings);
   const streamUnreads = useStreamStore((s) => s.streamUnreads);
+  const streamHubMap = useStreamStore((s) => s.streamHubMap);
   const params = useParams<{ hubId?: string; streamId?: string; conversationId?: string }>();
   const mutedConversationIds = useMemo(
     () => getMutedConversationIds(mutedUntilByConversationId),
     [mutedUntilByConversationId],
+  );
+  const mutedHubIds = useMemo(
+    () => getMutedHubIds(hubSettingsByHubId, localMutedUntilByHubId),
+    [hubSettingsByHubId, localMutedUntilByHubId],
+  );
+  const mutedAwareNotificationUnreadCount = useMemo(
+    () => notifications.reduce((total, notification) => {
+      if (notification.read) {
+        return total;
+      }
+      if (notification.type === 'dm' || notification.type === 'dm_call' || notification.type === 'dm_call_missed') {
+        return total;
+      }
+      const notificationHubId = notification.hub_id ?? (notification.stream_id ? streamHubMap[notification.stream_id] : undefined);
+      if (notificationHubId && mutedHubIds.has(notificationHubId)) {
+        return total;
+      }
+      return total + 1;
+    }, 0),
+    [mutedHubIds, notifications, streamHubMap],
   );
   const mutedAwareDMUnreadCount = useMemo(
     () => conversations.reduce((total, conversation) => {
@@ -60,6 +88,15 @@ export default function AppLayout() {
     }, 0),
     [conversations, mutedConversationIds],
   );
+  const mutedAwareStreamUnreads = useMemo(
+    () => Object.fromEntries(
+      Object.entries(streamUnreads).filter(([streamId]) => {
+        const hubId = streamHubMap[streamId];
+        return !hubId || !mutedHubIds.has(hubId);
+      }),
+    ),
+    [mutedHubIds, streamHubMap, streamUnreads],
+  );
   const mutedAwareConversationCallRings = useMemo(
     () => Object.fromEntries(
       Object.entries(conversationCallRings).filter(([conversationId]) => !mutedConversationIds.has(conversationId)),
@@ -67,12 +104,12 @@ export default function AppLayout() {
     [conversationCallRings, mutedConversationIds],
   );
   const desktopAttentionSignalCount = useMemo(() => getDesktopAttentionSignalCount({
-    notificationUnreadCount,
+    notificationUnreadCount: mutedAwareNotificationUnreadCount,
     dmUnreadCount: mutedAwareDMUnreadCount,
-    streamUnreads,
+    streamUnreads: mutedAwareStreamUnreads,
     conversationCallRings: mutedAwareConversationCallRings,
     currentUserId,
-  }), [currentUserId, mutedAwareConversationCallRings, mutedAwareDMUnreadCount, notificationUnreadCount, streamUnreads]);
+  }), [currentUserId, mutedAwareConversationCallRings, mutedAwareDMUnreadCount, mutedAwareNotificationUnreadCount, mutedAwareStreamUnreads]);
   const currentAttentionSignalCountRef = useRef(desktopAttentionSignalCount);
   const previousAttentionSignalCountRef = useRef<number | null>(null);
 
@@ -82,6 +119,21 @@ export default function AppLayout() {
     loadNotifications();
     void loadConversationCallStates();
   }, [loadConversationCallStates, loadConversations, loadHubs, loadNotifications]);
+
+  useEffect(() => {
+    clearExpiredConversationMutes();
+  }, [clearExpiredConversationMutes]);
+
+  useEffect(() => {
+    clearExpiredHubMutes();
+  }, [clearExpiredHubMutes]);
+
+  useEffect(() => {
+    if (hubs.length === 0) {
+      return;
+    }
+    void loadHubSettings(hubs.map((hub) => hub.id));
+  }, [hubs, loadHubSettings]);
 
   useEffect(() => {
     currentAttentionSignalCountRef.current = desktopAttentionSignalCount;

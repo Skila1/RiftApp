@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuthStore } from '../../stores/auth';
 import { useDMStore } from '../../stores/dmStore';
+import { isConversationMuted, useConversationMuteStore } from '../../stores/conversationMuteStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useVoiceChannelUiStore } from '../../stores/voiceChannelUiStore';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
@@ -74,6 +75,7 @@ export default function IncomingDMCallPrompt() {
   const user = useAuthStore((state) => state.user);
   const conversations = useDMStore((state) => state.conversations);
   const setActiveConversation = useDMStore((state) => state.setActiveConversation);
+  const mutedUntilByConversationId = useConversationMuteStore((state) => state.mutedUntilByConversationId);
   const conversationCallRings = useVoiceStore((state) => state.conversationCallRings);
   const conversationVoiceMembers = useVoiceStore((state) => state.conversationVoiceMembers);
   const dismissedConversationCallRings = useVoiceStore((state) => state.dismissedConversationCallRings);
@@ -101,9 +103,13 @@ export default function IncomingDMCallPrompt() {
     () => conversations.find((entry) => entry.id === activeRing?.conversation_id) ?? null,
     [activeRing?.conversation_id, conversations],
   );
+  const isConversationRingMuted = activeRing
+    ? isConversationMuted(mutedUntilByConversationId[activeRing.conversation_id])
+    : false;
 
   const isPromptVisible = Boolean(
     activeRing
+    && !isConversationRingMuted
     && !(voiceTargetKind === 'conversation' && voiceConversationId === activeRing.conversation_id && (voiceConnected || voiceConnecting)),
   );
 
@@ -116,7 +122,7 @@ export default function IncomingDMCallPrompt() {
     }
     stopIncomingCallSound();
     return undefined;
-  }, [isPromptVisible, activeRing?.conversation_id, activeRing?.started_at]);
+  }, [isConversationRingMuted, isPromptVisible, activeRing?.conversation_id, activeRing?.started_at]);
 
   if (!activeRing || !isPromptVisible) {
     return null;

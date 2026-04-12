@@ -5,24 +5,14 @@ import { useDMStore } from '../../stores/dmStore';
 import { useStreamStore } from '../../stores/streamStore';
 import { useMessageStore } from '../../stores/messageStore';
 import { useNotificationStore } from '../../stores/notificationStore';
+import { isHubMuted, useHubNotificationStore } from '../../stores/hubNotificationStore';
 import { api } from '../../api/client';
-import type { Hub, HubNotificationSettings, Notification } from '../../types';
+import type { Hub, Notification } from '../../types';
 import AddServerModal from '../modals/AddServerModal';
 import InviteToServerModal from '../modals/InviteToServerModal';
 import ModalOverlay from '../shared/ModalOverlay';
 import { useAuthStore } from '../../stores/auth';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
-
-const DEFAULT_HUB_NOTIFICATION: HubNotificationSettings = {
-  notification_level: 'mentions_only',
-  suppress_everyone: false,
-  suppress_role_mentions: false,
-  suppress_highlights: false,
-  mute_events: false,
-  mobile_push: true,
-  hide_muted_channels: false,
-  server_muted: false,
-};
 
 function notifLevelSubtitle(level: string): string {
   switch (level) {
@@ -81,8 +71,16 @@ export default function HubSidebar() {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; hub: Hub } | null>(null);
   const [inviteHub, setInviteHub] = useState<Hub | null>(null);
   const [leaveConfirmHub, setLeaveConfirmHub] = useState<Hub | null>(null);
-  const [hubNotifSettings, setHubNotifSettings] = useState<HubNotificationSettings | null>(null);
+  const hubSettingsByHubId = useHubNotificationStore((s) => s.hubSettingsByHubId);
+  const localMutedUntilByHubId = useHubNotificationStore((s) => s.localMutedUntilByHubId);
+  const ensureHubSettings = useHubNotificationStore((s) => s.ensureHubSettings);
+  const loadHubSettings = useHubNotificationStore((s) => s.loadHubSettings);
+  const patchHubSettings = useHubNotificationStore((s) => s.patchHubSettings);
+  const muteHubLocally = useHubNotificationStore((s) => s.muteHubLocally);
+  const unmuteHubLocally = useHubNotificationStore((s) => s.unmuteHubLocally);
+  const clearExpiredHubMutes = useHubNotificationStore((s) => s.clearExpiredHubMutes);
   const [notifSubmenuOpen, setNotifSubmenuOpen] = useState(false);
+  const [muteSubmenuOpen, setMuteSubmenuOpen] = useState(false);
   const mergeReadStatesForHub = useStreamStore((s) => s.mergeReadStatesForHub);
   const loadNotifications = useNotificationStore((s) => s.loadNotifications);
 
@@ -95,36 +93,35 @@ export default function HubSidebar() {
 
   useEffect(() => {
     if (!contextMenu) return;
-    const handler = () => setContextMenu(null);
+    const handler = () => closeContextMenu();
     window.addEventListener('click', handler);
     return () => window.removeEventListener('click', handler);
   }, [contextMenu]);
 
   useEffect(() => {
     if (!contextMenu) {
-      setHubNotifSettings(null);
       setNotifSubmenuOpen(false);
+      setMuteSubmenuOpen(false);
       return;
     }
-    let cancelled = false;
-    setHubNotifSettings(null);
-    (async () => {
-      try {
-        const st = await api.getHubNotificationSettings(contextMenu.hub.id);
-        if (!cancelled) setHubNotifSettings(st);
-      } catch {
-        if (!cancelled) setHubNotifSettings({ ...DEFAULT_HUB_NOTIFICATION });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    void ensureHubSettings(contextMenu.hub.id);
   }, [contextMenu?.hub.id]);
+
+  useEffect(() => {
+    clearExpiredHubMutes();
+  }, [clearExpiredHubMutes]);
+
+  useEffect(() => {
+    if (hubs.length === 0) {
+      return;
+    }
+    void loadHubSettings(hubs.map((hub) => hub.id));
+  }, [hubs, loadHubSettings]);
 
   useEffect(() => {
     if (!contextMenu) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setContextMenu(null);
+      if (e.key === 'Escape') closeContextMenu();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -137,6 +134,77 @@ export default function HubSidebar() {
     useMessageStore.getState().clearMessages();
     loadConversations();
   };
+
+  const contextHubNotifSettings = contextMenu
+    ? hubSettingsByHubId[contextMenu.hub.id] ?? null
+    : null;
+  const contextHubMuted = contextMenu
+    ? isHubMuted(contextHubNotifSettings, localMutedUntilByHubId[contextMenu.hub.id])
+    : false;
+
+  const closeContextMenu = () => {
+    setNotifSubmenuOpen(false);
+    setMuteSubmenuOpen(false);
+    setContextMenu(null);
+  };
+
+  const handleToggleHubMute = async () => {
+    if (!contextMenu) {
+      return;
+    }
+
+    const hubId = contextMenu.hub.id;
+    const settings = contextHubNotifSettings ?? await ensureHubSettings(hubId);
+    if (contextHubMuted) {
+      unmuteHubLocally(hubId);
+      if (settings.server_muted) {
+        try {
+          await patchHubSettings(hubId, { ...settings, server_muted: false });
+        } catch {
+          /* ignore save failures */
+        }
+      }
+      closeContextMenu();
+      return;
+    }
+
+    unmuteHubLocally(hubId);
+    try {
+      await patchHubSettings(hubId, { ...settings, server_muted: true });
+    } catch {
+      /* ignore save failures */
+    }
+    closeContextMenu();
+  };
+
+  const handleApplyTimedHubMute = async (durationMs: number | null) => {
+    if (!contextMenu) {
+      return;
+    }
+
+    const hubId = contextMenu.hub.id;
+    const settings = contextHubNotifSettings ?? await ensureHubSettings(hubId);
+    if (settings.server_muted) {
+      try {
+        await patchHubSettings(hubId, { ...settings, server_muted: false });
+      } catch {
+        /* ignore save failures */
+      }
+    }
+    muteHubLocally(hubId, durationMs);
+    closeContextMenu();
+  };
+
+  const muteOptions: Array<{ label: string; durationMs: number | null }> = [
+    { label: 'For 15 Minutes', durationMs: 15 * 60 * 1000 },
+    { label: 'For 1 Hour', durationMs: 60 * 60 * 1000 },
+    { label: 'For 3 Hours', durationMs: 3 * 60 * 60 * 1000 },
+    { label: 'For 8 Hours', durationMs: 8 * 60 * 60 * 1000 },
+    { label: 'For 24 Hours', durationMs: 24 * 60 * 60 * 1000 },
+    { label: 'Until I turn it back on', durationMs: null },
+  ];
+  const menuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center gap-2.5 rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
+  const submenuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center gap-2.5 rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
 
   return (
     <div className="flex w-[72px] flex-shrink-0 flex-col items-center gap-2 overflow-y-auto border-r border-riftapp-border/60 bg-riftapp-chrome py-3">
@@ -186,6 +254,7 @@ export default function HubSidebar() {
       {hubs.map((hub) => {
         const isActive = activeHubId === hub.id;
         const isHovered = hoveredId === hub.id;
+        const hubMuted = isHubMuted(hubSettingsByHubId[hub.id], localMutedUntilByHubId[hub.id]);
         const mentions = hubMentionCount(notifications, hub.id);
         const quietUnread = hubHasQuietUnread(
           hub.id,
@@ -213,7 +282,7 @@ export default function HubSidebar() {
               }`}
             />
 
-            {quietUnread && <div className="hub-unread-smidge" aria-hidden />}
+            {quietUnread && !hubMuted && <div className="hub-unread-smidge" aria-hidden />}
 
             {/* Hub icon with Discord-style morph */}
             <button
@@ -226,10 +295,10 @@ export default function HubSidebar() {
                 <img
                   src={publicAssetUrl(hub.icon_url)}
                   alt=""
-                  className="w-full h-full rounded-[inherit] object-cover"
+                  className={`w-full h-full rounded-[inherit] object-cover ${hubMuted ? 'grayscale opacity-60 brightness-75' : ''}`.trim()}
                 />
               ) : (
-                hub.name.slice(0, 2).toUpperCase()
+                <span className={hubMuted ? 'text-[#8f949c]' : undefined}>{hub.name.slice(0, 2).toUpperCase()}</span>
               )}
               {mentions > 0 && (
                 <span
@@ -272,10 +341,10 @@ export default function HubSidebar() {
       {contextMenu && createPortal(
         <div
           className="fixed inset-0 z-[200]"
-          onClick={() => setContextMenu(null)}
+          onClick={closeContextMenu}
           onContextMenu={(e) => {
             e.preventDefault();
-            setContextMenu(null);
+            closeContextMenu();
           }}
         >
           <div
@@ -293,9 +362,9 @@ export default function HubSidebar() {
                     await mergeReadStatesForHub(hub.id);
                     await loadNotifications();
                   } catch { /* ignore */ }
-                  setContextMenu(null);
+                  closeContextMenu();
                 }}
-                className="flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover mx-1"
+                className={menuItemClassName}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-riftapp-text-dim shrink-0">
                   <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
@@ -308,9 +377,9 @@ export default function HubSidebar() {
                 type="button"
                 onClick={() => {
                   setInviteHub(contextMenu.hub);
-                  setContextMenu(null);
+                  closeContextMenu();
                 }}
-                className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover"
+                className={menuItemClassName}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-riftapp-text-dim shrink-0">
                   <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -323,29 +392,52 @@ export default function HubSidebar() {
 
               <div className="mx-2 my-1 h-px bg-riftapp-border/40" />
 
-              <button
-                type="button"
-                disabled={hubNotifSettings == null}
-                onClick={async () => {
-                  if (!hubNotifSettings) return;
-                  const next = { ...hubNotifSettings, server_muted: !hubNotifSettings.server_muted };
-                  setHubNotifSettings(next);
-                  try {
-                    const saved = await api.patchHubNotificationSettings(contextMenu.hub.id, next);
-                    setHubNotifSettings(saved);
-                  } catch {
-                    try {
-                      setHubNotifSettings(await api.getHubNotificationSettings(contextMenu.hub.id));
-                    } catch {
-                      setHubNotifSettings(hubNotifSettings);
-                    }
-                  }
-                }}
-                className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover disabled:opacity-50"
+              <div
+                className="relative mx-0.5"
+                onMouseEnter={() => setMuteSubmenuOpen(true)}
+                onMouseLeave={() => setMuteSubmenuOpen(false)}
               >
-                <span className="w-4 shrink-0" aria-hidden />
-                {hubNotifSettings?.server_muted ? 'Unmute Server' : 'Mute Server'}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => { void handleToggleHubMute(); }}
+                  className={`${menuItemClassName} justify-between ${muteSubmenuOpen ? 'bg-[#232428]' : ''}`}
+                >
+                  <span className="w-4 shrink-0" aria-hidden />
+                  <span className="flex-1 text-left">{contextHubMuted ? 'Unmute Server' : 'Mute Server'}</span>
+                  <span className="text-[#8f949c]">›</span>
+                </button>
+
+                {muteSubmenuOpen ? (
+                  <div className="absolute left-full top-0 z-10 pl-1" onMouseEnter={() => setMuteSubmenuOpen(true)}>
+                    <div className="rift-context-submenu-shell min-w-[220px]">
+                      {contextHubMuted ? (
+                        <button
+                          type="button"
+                          onClick={() => { void handleToggleHubMute(); }}
+                          className={submenuItemClassName}
+                        >
+                          <span className="w-4 shrink-0" aria-hidden />
+                          Unmute Server
+                        </button>
+                      ) : null}
+
+                      {contextHubMuted ? <div className="mx-2 my-1 h-px bg-riftapp-border/40" /> : null}
+
+                      {muteOptions.map((option) => (
+                        <button
+                          key={option.label}
+                          type="button"
+                          onClick={() => { void handleApplyTimedHubMute(option.durationMs); }}
+                          className={submenuItemClassName}
+                        >
+                          <span className="w-4 shrink-0" aria-hidden />
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
 
               <div
                 className="relative mx-1"
@@ -362,12 +454,12 @@ export default function HubSidebar() {
                       <span className="text-riftapp-text-dim">›</span>
                     </div>
                     <p className="text-[11px] text-riftapp-text-dim leading-tight mt-0.5">
-                      {hubNotifSettings ? notifLevelSubtitle(hubNotifSettings.notification_level) : '…'}
+                      {contextHubNotifSettings ? notifLevelSubtitle(contextHubNotifSettings.notification_level) : '…'}
                     </p>
                   </div>
                 </div>
 
-                {notifSubmenuOpen && hubNotifSettings && (
+                {notifSubmenuOpen && contextHubNotifSettings && (
                   <div
                     className="absolute left-full top-0 pl-1 z-10"
                     onMouseEnter={() => setNotifSubmenuOpen(true)}
@@ -377,27 +469,23 @@ export default function HubSidebar() {
                         <button
                           key={level}
                           type="button"
-                          onClick={async () => {
-                            const base = hubNotifSettings;
-                            const next = { ...base, notification_level: level };
-                            setHubNotifSettings(next);
-                            try {
-                              const saved = await api.patchHubNotificationSettings(contextMenu.hub.id, next);
-                              setHubNotifSettings(saved);
-                            } catch {
-                              try {
-                                setHubNotifSettings(await api.getHubNotificationSettings(contextMenu.hub.id));
-                              } catch { /* ignore */ }
+                          onClick={() => {
+                            if (!contextMenu) {
+                              return;
                             }
+                            void patchHubSettings(contextMenu.hub.id, {
+                              ...contextHubNotifSettings,
+                              notification_level: level,
+                            });
                           }}
                           className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-left hover:bg-riftapp-chrome-hover"
                         >
                           <span
                             className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
-                              hubNotifSettings.notification_level === level ? 'border-[#5865f2]' : 'border-riftapp-border'
+                              contextHubNotifSettings.notification_level === level ? 'border-[#5865f2]' : 'border-riftapp-border'
                             }`}
                           >
-                            {hubNotifSettings.notification_level === level && (
+                            {contextHubNotifSettings.notification_level === level && (
                               <span className="w-2 h-2 rounded-full bg-white" />
                             )}
                           </span>
@@ -420,30 +508,26 @@ export default function HubSidebar() {
                         <button
                           key={key}
                           type="button"
-                          onClick={async () => {
-                            const base = hubNotifSettings;
-                            const next = { ...base, [key]: !base[key] };
-                            setHubNotifSettings(next);
-                            try {
-                              const saved = await api.patchHubNotificationSettings(contextMenu.hub.id, next);
-                              setHubNotifSettings(saved);
-                            } catch {
-                              try {
-                                setHubNotifSettings(await api.getHubNotificationSettings(contextMenu.hub.id));
-                              } catch { /* ignore */ }
+                          onClick={() => {
+                            if (!contextMenu) {
+                              return;
                             }
+                            void patchHubSettings(contextMenu.hub.id, {
+                              ...contextHubNotifSettings,
+                              [key]: !contextHubNotifSettings[key],
+                            });
                           }}
                           className="mx-1 flex w-[calc(100%-8px)] items-center justify-between gap-2 rounded-sm px-2.5 py-1.5 text-left hover:bg-riftapp-chrome-hover"
                         >
                           <span>{label}</span>
                           <span
                             className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center ${
-                              hubNotifSettings[key]
+                              contextHubNotifSettings[key]
                                 ? 'bg-[#5865f2] border-[#5865f2]'
                                 : 'border-riftapp-border'
                             }`}
                           >
-                            {hubNotifSettings[key] && (
+                            {contextHubNotifSettings[key] && (
                               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                                 <polyline points="20 6 9 17 4 12" />
                               </svg>
@@ -456,30 +540,26 @@ export default function HubSidebar() {
 
                       <button
                         type="button"
-                        onClick={async () => {
-                          const base = hubNotifSettings;
-                          const next = { ...base, mobile_push: !base.mobile_push };
-                          setHubNotifSettings(next);
-                          try {
-                            const saved = await api.patchHubNotificationSettings(contextMenu.hub.id, next);
-                            setHubNotifSettings(saved);
-                          } catch {
-                            try {
-                              setHubNotifSettings(await api.getHubNotificationSettings(contextMenu.hub.id));
-                            } catch { /* ignore */ }
+                        onClick={() => {
+                          if (!contextMenu) {
+                            return;
                           }
+                          void patchHubSettings(contextMenu.hub.id, {
+                            ...contextHubNotifSettings,
+                            mobile_push: !contextHubNotifSettings.mobile_push,
+                          });
                         }}
                         className="mx-1 flex w-[calc(100%-8px)] items-center justify-between gap-2 rounded-sm px-2.5 py-1.5 text-left hover:bg-riftapp-chrome-hover"
                       >
                         <span>Mobile Push Notifications</span>
                         <span
                           className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center ${
-                            hubNotifSettings.mobile_push
+                            contextHubNotifSettings.mobile_push
                               ? 'bg-[#5865f2] border-[#5865f2]'
                               : 'border-riftapp-border'
                           }`}
                         >
-                          {hubNotifSettings.mobile_push && (
+                          {contextHubNotifSettings.mobile_push && (
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                               <polyline points="20 6 9 17 4 12" />
                             </svg>
@@ -493,33 +573,25 @@ export default function HubSidebar() {
 
               <button
                 type="button"
-                disabled={hubNotifSettings == null}
-                onClick={async () => {
-                  if (!hubNotifSettings) return;
-                  const next = { ...hubNotifSettings, hide_muted_channels: !hubNotifSettings.hide_muted_channels };
-                  setHubNotifSettings(next);
-                  try {
-                    const saved = await api.patchHubNotificationSettings(contextMenu.hub.id, next);
-                    setHubNotifSettings(saved);
-                  } catch {
-                    try {
-                      setHubNotifSettings(await api.getHubNotificationSettings(contextMenu.hub.id));
-                    } catch {
-                      setHubNotifSettings(hubNotifSettings);
-                    }
-                  }
+                disabled={contextHubNotifSettings == null}
+                onClick={() => {
+                  if (!contextHubNotifSettings || !contextMenu) return;
+                  void patchHubSettings(contextMenu.hub.id, {
+                    ...contextHubNotifSettings,
+                    hide_muted_channels: !contextHubNotifSettings.hide_muted_channels,
+                  });
                 }}
                 className="mx-1 flex w-[calc(100%-8px)] items-center justify-between gap-2 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover disabled:opacity-50"
               >
                 <span className="pl-6">Hide Muted Channels</span>
                 <span
                   className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center ${
-                    hubNotifSettings?.hide_muted_channels
+                    contextHubNotifSettings?.hide_muted_channels
                       ? 'bg-[#5865f2] border-[#5865f2]'
                       : 'border-riftapp-border'
                   }`}
                 >
-                  {hubNotifSettings?.hide_muted_channels && (
+                  {contextHubNotifSettings?.hide_muted_channels && (
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="20 6 9 17 4 12" />
                     </svg>
@@ -533,7 +605,7 @@ export default function HubSidebar() {
                 type="button"
                 onClick={() => {
                   navigator.clipboard.writeText(contextMenu.hub.id);
-                  setContextMenu(null);
+                  closeContextMenu();
                 }}
                 className="mx-1 flex w-[calc(100%-8px)] items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-riftapp-text-dim hover:bg-riftapp-chrome-hover hover:text-riftapp-text"
               >
@@ -555,7 +627,7 @@ export default function HubSidebar() {
                     type="button"
                     onClick={() => {
                       const hub = contextMenu.hub;
-                      setContextMenu(null);
+                      closeContextMenu();
                       setLeaveConfirmHub(hub);
                     }}
                     className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-red-500/20 text-left w-[calc(100%-8px)] text-red-400 hover:text-red-300"

@@ -68,20 +68,23 @@ function ConversationAvatar({
   conversation,
   viewerUserId,
   fallbackStatus,
+  muted = false,
 }: {
   conversation: Conversation;
   viewerUserId?: string | null;
   fallbackStatus?: number;
+  muted?: boolean;
 }) {
   const conversationIconUrl = getConversationIconUrl(conversation);
   const otherMembers = getConversationOtherMembers(conversation, viewerUserId);
+  const mutedClassName = muted ? 'grayscale opacity-60 brightness-75' : '';
 
   if (conversationIconUrl) {
     return (
       <img
         src={publicAssetUrl(conversationIconUrl)}
         alt=""
-        className="h-8 w-8 flex-shrink-0 rounded-full object-cover"
+        className={`h-8 w-8 flex-shrink-0 rounded-full object-cover ${mutedClassName}`.trim()}
       />
     );
   }
@@ -90,7 +93,9 @@ function ConversationAvatar({
     const member = otherMembers[0] ?? conversation.recipient;
     return (
       <div className="relative flex-shrink-0">
-        <AvatarCircle user={member} />
+        <div className={mutedClassName}>
+          <AvatarCircle user={member} />
+        </div>
         <StatusDot
           userId={member?.id}
           fallbackStatus={fallbackStatus}
@@ -102,7 +107,7 @@ function ConversationAvatar({
 
   const avatarMembers = otherMembers.slice(0, 2);
   return (
-    <div className="relative h-8 w-8 flex-shrink-0">
+    <div className={`relative h-8 w-8 flex-shrink-0 ${mutedClassName}`.trim()}>
       <div className="absolute left-0 top-0">
         <AvatarCircle user={avatarMembers[0]} sizeClass="h-[19px] w-[19px]" textClass="text-[9px]" ringClassName="ring-2 ring-riftapp-chrome" />
       </div>
@@ -268,9 +273,10 @@ export default function DMSidebar() {
   const muteOptions: Array<{ label: string; durationMs: number | null }> = [
     { label: 'For 15 Minutes', durationMs: 15 * 60 * 1000 },
     { label: 'For 1 Hour', durationMs: 60 * 60 * 1000 },
+    { label: 'For 3 Hours', durationMs: 3 * 60 * 60 * 1000 },
     { label: 'For 8 Hours', durationMs: 8 * 60 * 60 * 1000 },
     { label: 'For 24 Hours', durationMs: 24 * 60 * 60 * 1000 },
-    { label: 'Until I Turn It Back On', durationMs: null },
+    { label: 'Until I turn it back on', durationMs: null },
   ];
 
   const menuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center gap-2.5 rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
@@ -411,6 +417,7 @@ export default function DMSidebar() {
           <div className="space-y-0.5">
             {filteredConversations.map((conv) => {
               const isActive = conv.id === activeConversationId;
+              const conversationMuted = isConversationMuted(mutedUntilByConversationId[conv.id]);
               const otherMembers = getConversationOtherMembers(conv, currentUserId);
               const allMembers = getConversationMembers(conv);
               const primaryMember = otherMembers[0] ?? conv.recipient;
@@ -444,6 +451,19 @@ export default function DMSidebar() {
                   : callStatus?.tone === 'danger'
                     ? 'bg-[#f87171]'
                     : 'bg-[#72767d]';
+              const rowClassName = conversationMuted
+                ? isActive
+                  ? 'bg-[#2a2d31] text-[#c8ccd1]'
+                  : 'text-[#8f949c] hover:bg-[#25282d] hover:text-[#c8ccd1]'
+                : isActive
+                  ? 'bg-riftapp-chrome-hover text-riftapp-text'
+                  : 'text-riftapp-text-muted hover:bg-riftapp-chrome-hover/80 hover:text-riftapp-text';
+              const titleClassName = conversationMuted ? 'text-[#aeb4bb]' : '';
+              const subtitleClassName = conversationMuted ? 'text-[#747a84]' : 'text-riftapp-text-dim';
+              const timeClassName = conversationMuted ? 'text-[#686e78]' : 'text-riftapp-text-dim';
+              const unreadBadgeClassName = conversationMuted
+                ? 'bg-[#51565d] text-[#f2f3f5]'
+                : 'bg-riftapp-accent text-white';
 
               return (
                 <button
@@ -453,18 +473,14 @@ export default function DMSidebar() {
                     if ((conv.unread_count ?? 0) > 0) ackDM(conv.id);
                   }}
                   onContextMenu={(event) => handleOpenConversationMenu(event, conv)}
-                  className={`w-full flex items-center gap-2.5 px-2 py-2 rounded-md transition-colors ${
-                    isActive
-                      ? 'bg-riftapp-chrome-hover text-riftapp-text'
-                      : 'text-riftapp-text-muted hover:bg-riftapp-chrome-hover/80 hover:text-riftapp-text'
-                  }`}
+                  className={`w-full flex items-center gap-2.5 px-2 py-2 rounded-md transition-colors ${rowClassName}`}
                 >
-                  <ConversationAvatar conversation={conv} viewerUserId={currentUserId} fallbackStatus={recipientStatus} />
+                  <ConversationAvatar conversation={conv} viewerUserId={currentUserId} fallbackStatus={recipientStatus} muted={conversationMuted} />
 
                   {/* Name + subtitle */}
                   <div className="flex-1 min-w-0 text-left">
                     <div className="text-sm font-medium truncate flex items-center gap-1.5">
-                      <span className="truncate">{conversationTitle}</span>
+                      <span className={`truncate ${titleClassName}`.trim()}>{conversationTitle}</span>
                       {!isGroupDm && primaryMember?.is_bot && <BotBadge />}
                     </div>
                     {callStatus ? (
@@ -472,11 +488,11 @@ export default function DMSidebar() {
                         {callStatus.label}
                       </div>
                     ) : isGroupDm ? (
-                      <div className="text-xs text-riftapp-text-dim truncate">
+                      <div className={`text-xs truncate ${subtitleClassName}`.trim()}>
                       {groupMemberCountLabel}
                       </div>
                     ) : lastMessagePreview ? (
-                      <div className="text-xs text-riftapp-text-dim truncate">
+                      <div className={`text-xs truncate ${subtitleClassName}`.trim()}>
                         {lastMessagePreview}
                       </div>
                     ) : null}
@@ -488,12 +504,12 @@ export default function DMSidebar() {
                       <span className={`h-2.5 w-2.5 rounded-full ${statusDotClass}`} />
                     ) : null}
                     {conv.last_message && (
-                      <span className="text-[10px] text-riftapp-text-dim">
+                      <span className={`text-[10px] ${timeClassName}`.trim()}>
                         {timeAgo(conv.last_message.created_at)}
                       </span>
                     )}
                     {(conv.unread_count ?? 0) > 0 && !isActive && (
-                      <span className="min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-riftapp-accent text-white text-[10px] font-bold px-1 leading-none">
+                      <span className={`min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-bold px-1 leading-none ${unreadBadgeClassName}`.trim()}>
                         {(conv.unread_count ?? 0) > 99 ? '99+' : conv.unread_count}
                       </span>
                     )}
@@ -557,11 +573,22 @@ export default function DMSidebar() {
               onMouseEnter={() => setMuteSubmenuOpen(true)}
               onMouseLeave={() => setMuteSubmenuOpen(false)}
             >
-              <div className={`${menuItemClassName} cursor-default ${muteSubmenuOpen ? 'bg-[#232428]' : ''}`}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (contextConversationMuted) {
+                    unmuteConversation(contextMenu.conversation.id);
+                  } else {
+                    muteConversation(contextMenu.conversation.id, null);
+                  }
+                  closeContextMenu();
+                }}
+                className={`${menuItemClassName} justify-between ${muteSubmenuOpen ? 'bg-[#232428]' : ''}`}
+              >
                 <span className="w-4 shrink-0" aria-hidden />
-                <span className="flex-1">Mute Conversation</span>
+                <span className="flex-1 text-left">{contextConversationMuted ? 'Unmute Conversation' : 'Mute Conversation'}</span>
                 <span className="text-[#8f949c]">›</span>
-              </div>
+              </button>
 
               {muteSubmenuOpen ? (
                 <div className="absolute left-full top-0 z-10 pl-1" onMouseEnter={() => setMuteSubmenuOpen(true)}>

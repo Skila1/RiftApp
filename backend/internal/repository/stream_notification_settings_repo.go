@@ -41,7 +41,17 @@ func NewStreamNotificationSettingsRepo(db *pgxpool.Pool) *StreamNotificationSett
 }
 
 func (r *StreamNotificationSettingsRepo) Get(ctx context.Context, userID, streamID string) (StreamNotificationSettings, error) {
-	def := DefaultStreamNotificationSettings()
+	st, err := r.GetOverride(ctx, userID, streamID)
+	if err != nil {
+		return DefaultStreamNotificationSettings(), err
+	}
+	if st == nil {
+		return DefaultStreamNotificationSettings(), nil
+	}
+	return *st, nil
+}
+
+func (r *StreamNotificationSettingsRepo) GetOverride(ctx context.Context, userID, streamID string) (*StreamNotificationSettings, error) {
 	var s StreamNotificationSettings
 	err := r.db.QueryRow(ctx,
 		`SELECT notification_level, suppress_everyone, suppress_role_mentions, suppress_highlights,
@@ -54,11 +64,11 @@ func (r *StreamNotificationSettingsRepo) Get(ctx context.Context, userID, stream
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return def, nil
+			return nil, nil
 		}
-		return def, err
+		return nil, err
 	}
-	return s, nil
+	return &s, nil
 }
 
 func (r *StreamNotificationSettingsRepo) Upsert(ctx context.Context, userID, streamID string, in StreamNotificationSettings) error {

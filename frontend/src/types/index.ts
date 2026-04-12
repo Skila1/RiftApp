@@ -212,7 +212,7 @@ export interface StreamNotificationSettings {
 export interface Notification {
   id: string;
   user_id: string;
-  type: string; // mention, invite, dm, dm_call
+  type: string; // mention, message, invite, dm, dm_call, dm_call_missed
   title: string;
   body?: string;
   reference_id?: string;

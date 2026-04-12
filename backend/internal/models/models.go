@@ -197,7 +197,7 @@ type Conversation struct {
 type Notification struct {
 	ID          string    `json:"id"`
 	UserID      string    `json:"user_id"`
-	Type        string    `json:"type"` // mention, invite, dm
+	Type        string    `json:"type"` // mention, message, invite, dm
 	Title       string    `json:"title"`
 	Body        *string   `json:"body,omitempty"`
 	ReferenceID *string   `json:"reference_id,omitempty"`

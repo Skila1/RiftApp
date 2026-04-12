@@ -6,6 +6,8 @@ import { usePresenceStore } from '../stores/presenceStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { useDMStore } from '../stores/dmStore';
 import { useFriendStore } from '../stores/friendStore';
+import { isConversationMuted, useConversationMuteStore } from '../stores/conversationMuteStore';
+import { isHubMuted, useHubNotificationStore } from '../stores/hubNotificationStore';
 import { useHubStore } from '../stores/hubStore';
 import { useVoiceStore } from '../stores/voiceStore';
 import { useVoiceChannelUiStore } from '../stores/voiceChannelUiStore';
@@ -28,6 +30,23 @@ export function wsSend(op: string, d?: unknown) {
 
 export function useWsSend() {
   return globalSend;
+}
+
+function isMutedHubNotification(hubId?: string, streamId?: string) {
+  const resolvedHubId = hubId ?? (streamId ? useStreamStore.getState().streamHubMap[streamId] : undefined);
+  if (!resolvedHubId) {
+    return false;
+  }
+  const { hubSettingsByHubId, localMutedUntilByHubId } = useHubNotificationStore.getState();
+  return isHubMuted(hubSettingsByHubId[resolvedHubId], localMutedUntilByHubId[resolvedHubId]);
+}
+
+function isMutedConversationNotification(conversationId?: string) {
+  if (!conversationId) {
+    return false;
+  }
+  const { mutedUntilByConversationId } = useConversationMuteStore.getState();
+  return isConversationMuted(mutedUntilByConversationId[conversationId]);
 }
 
 export function useWebSocket() {
@@ -174,7 +193,12 @@ export function useWebSocket() {
           case 'notification_create': {
             const notif = evt.d as Notification;
             useNotificationStore.getState().addNotification(notif);
-            if (notif.type !== 'dm' && notif.type !== 'dm_call') {
+            if (
+              notif.type !== 'dm'
+              && notif.type !== 'dm_call'
+              && notif.type !== 'dm_call_missed'
+              && !isMutedHubNotification(notif.hub_id, notif.stream_id)
+            ) {
               playNotificationSound();
             }
             break;
@@ -189,7 +213,11 @@ export function useWebSocket() {
             const activeConvId = useDMStore.getState().activeConversationId;
             if (dmMsg.conversation_id && dmMsg.conversation_id === activeConvId) {
               useDMStore.getState().ackDM(dmMsg.conversation_id);
-            } else if (dmMsg.author_id && dmMsg.author_id !== useAuthStore.getState().user?.id) {
+            } else if (
+              dmMsg.author_id
+              && dmMsg.author_id !== useAuthStore.getState().user?.id
+              && !isMutedConversationNotification(dmMsg.conversation_id)
+            ) {
               playNotificationSound();
             }
             break;

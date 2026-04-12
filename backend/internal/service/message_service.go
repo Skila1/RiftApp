@@ -21,6 +21,14 @@ var mentionRegex = regexp.MustCompile(`@(\w+)`)
 const maxAttachmentsPerMessage = 10
 const maxMentionsPerMessage = 25
 
+type streamNotificationPolicy int
+
+const (
+	streamNotificationPolicyNone streamNotificationPolicy = iota
+	streamNotificationPolicyMentionsOnly
+	streamNotificationPolicyAll
+)
+
 type MessageService struct {
 	msgRepo         *repository.MessageRepo
 	streamRepo      *repository.StreamRepo
@@ -161,11 +169,11 @@ func (s *MessageService) Create(ctx context.Context, userID, streamID string, in
 	evt := ws.NewEvent(ws.OpMessageCreate, msg)
 	s.hub.BroadcastToStream(streamID, evt, "")
 
-	if s.notifSvc != nil && input.Content != "" {
+	if s.notifSvc != nil {
 		notifCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		go func() {
 			defer cancel()
-			s.createMentionNotifications(notifCtx, msg, hubID, streamID, userID, msg.Author)
+			s.createStreamNotifications(notifCtx, msg, hubID, streamID, userID, msg.Author)
 		}()
 	}
 
@@ -533,77 +541,71 @@ func (s *MessageService) broadcastToConversation(ctx context.Context, conversati
 	}
 }
 
-func (s *MessageService) createMentionNotifications(ctx context.Context, msg *models.Message, hubID, streamID, authorID string, author *models.User) {
-	matches := mentionRegex.FindAllStringSubmatch(msg.Content, -1)
-	if len(matches) == 0 {
+func (s *MessageService) createStreamNotifications(ctx context.Context, msg *models.Message, hubID, streamID, authorID string, author *models.User) {
+	if msg == nil {
 		return
 	}
 
-	uniqueUsernames := make([]string, 0, len(matches))
-	seen := map[string]bool{}
-	for _, match := range matches {
-		username := match[1]
-		if !seen[username] {
-			seen[username] = true
-			uniqueUsernames = append(uniqueUsernames, username)
-		}
-		if len(uniqueUsernames) >= maxMentionsPerMessage {
-			break
-		}
+	mentionedUserIDs, err := s.mentionedUserIDs(ctx, hubID, msg.Content)
+	if err != nil {
+		mentionedUserIDs = map[string]struct{}{}
 	}
 
-	if len(uniqueUsernames) == 0 || author == nil {
-		return
-	}
-
-	sName, _ := s.streamRepo.GetName(ctx, streamID)
-	title := author.DisplayName + " mentioned you in #" + sName
-	bodyStr := msg.Content
-
-	db := s.msgRepo.GetDB()
-	rows, err := db.Query(ctx,
-		`SELECT u.username, hm.user_id
-		 FROM hub_members hm JOIN users u ON hm.user_id = u.id
-		 WHERE hm.hub_id = $1 AND u.username = ANY($2)`,
-		hubID, uniqueUsernames)
+	memberIDs, err := s.hubMemberIDs(ctx, hubID)
 	if err != nil {
 		return
 	}
-	defer rows.Close()
 
-	usernameToID := make(map[string]string)
-	for rows.Next() {
-		var uname, uid string
-		if rows.Scan(&uname, &uid) == nil {
-			usernameToID[uname] = uid
-		}
+	streamTitle := streamNotificationLocation("")
+	if sName, err := s.streamRepo.GetName(ctx, streamID); err == nil {
+		streamTitle = streamNotificationLocation(sName)
 	}
 
-	for _, username := range uniqueUsernames {
-		mentionedID, ok := usernameToID[username]
-		if !ok || mentionedID == authorID {
+	actorLabel := notificationActorLabel(author)
+	mentionTitle := actorLabel + " mentioned you in " + streamTitle
+	messageTitle := actorLabel + " sent a message in " + streamTitle
+	bodyStr := streamNotificationBody(msg)
+	mID, hID, sID, aID := msg.ID, hubID, streamID, authorID
+
+	for _, memberID := range memberIDs {
+		if memberID == authorID {
 			continue
 		}
-		if !s.hubService.CanViewStream(ctx, streamID, mentionedID) {
+		if !s.hubService.CanViewStream(ctx, streamID, memberID) {
 			continue
 		}
-		st, err := s.hubNotifRepo.Get(ctx, mentionedID, hubID)
+
+		hubSettings, err := s.hubNotifRepo.Get(ctx, memberID, hubID)
 		if err != nil {
 			continue
 		}
-		streamSt, err := s.streamMentionSettings(ctx, mentionedID, streamID)
+		streamSettings, err := s.streamNotificationSettingsOverride(ctx, memberID, streamID)
 		if err != nil {
 			continue
 		}
-		if !streamMentionNotificationsEnabled(st, streamSt) {
+
+		policy := effectiveStreamNotificationPolicy(hubSettings, streamSettings)
+		if policy == streamNotificationPolicyNone {
 			continue
 		}
-		mID, hID, sID, aID := msg.ID, hubID, streamID, authorID
-		go func() {
-			mentionCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+
+		notifType := ""
+		title := ""
+		if _, mentioned := mentionedUserIDs[memberID]; mentioned {
+			notifType = "mention"
+			title = mentionTitle
+		} else if policy == streamNotificationPolicyAll {
+			notifType = "message"
+			title = messageTitle
+		} else {
+			continue
+		}
+
+		go func(recipientID, notificationType, notificationTitle string) {
+			notifCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			s.notifSvc.Create(mentionCtx, mentionedID, "mention", title, &bodyStr, &mID, &hID, &sID, &aID)
-		}()
+			s.notifSvc.Create(notifCtx, recipientID, notificationType, notificationTitle, &bodyStr, &mID, &hID, &sID, &aID)
+		}(memberID, notifType, title)
 	}
 }
 
@@ -707,45 +709,140 @@ func (s *MessageService) validateStreamReplyTarget(ctx context.Context, streamID
 	return nil
 }
 
-func (s *MessageService) streamMentionSettings(ctx context.Context, userID, streamID string) (*repository.StreamNotificationSettings, error) {
-	if s.streamNotifRepo == nil {
-		return nil, nil
+func (s *MessageService) mentionedUserIDs(ctx context.Context, hubID, content string) (map[string]struct{}, error) {
+	mentionedUserIDs := map[string]struct{}{}
+	matches := mentionRegex.FindAllStringSubmatch(content, -1)
+	if len(matches) == 0 {
+		return mentionedUserIDs, nil
 	}
-	st, err := s.streamNotifRepo.Get(ctx, userID, streamID)
+
+	uniqueUsernames := make([]string, 0, len(matches))
+	seen := map[string]bool{}
+	for _, match := range matches {
+		username := match[1]
+		if !seen[username] {
+			seen[username] = true
+			uniqueUsernames = append(uniqueUsernames, username)
+		}
+		if len(uniqueUsernames) >= maxMentionsPerMessage {
+			break
+		}
+	}
+
+	if len(uniqueUsernames) == 0 {
+		return mentionedUserIDs, nil
+	}
+
+	rows, err := s.msgRepo.GetDB().Query(ctx,
+		`SELECT hm.user_id
+		 FROM hub_members hm JOIN users u ON hm.user_id = u.id
+		 WHERE hm.hub_id = $1 AND u.username = ANY($2)`,
+		hubID, uniqueUsernames)
+	if err != nil {
+		return mentionedUserIDs, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var userID string
+		if rows.Scan(&userID) == nil {
+			mentionedUserIDs[userID] = struct{}{}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return mentionedUserIDs, err
+	}
+
+	return mentionedUserIDs, nil
+}
+
+func (s *MessageService) hubMemberIDs(ctx context.Context, hubID string) ([]string, error) {
+	rows, err := s.msgRepo.GetDB().Query(ctx, `SELECT user_id FROM hub_members WHERE hub_id = $1`, hubID)
 	if err != nil {
 		return nil, err
 	}
-	return &st, nil
+	defer rows.Close()
+
+	memberIDs := make([]string, 0, 8)
+	for rows.Next() {
+		var userID string
+		if err := rows.Scan(&userID); err != nil {
+			return nil, err
+		}
+		memberIDs = append(memberIDs, userID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return memberIDs, nil
 }
 
-func hubMentionNotificationsEnabled(st repository.HubNotificationSettings) bool {
-	if st.ServerMuted {
-		return false
+func notificationActorLabel(author *models.User) string {
+	if author == nil {
+		return "Someone"
 	}
-	switch st.NotificationLevel {
-	case "nothing":
-		return false
-	case "all", "mentions_only":
-		return true
-	default:
-		return true
+	if displayName := strings.TrimSpace(author.DisplayName); displayName != "" {
+		return displayName
 	}
+	if username := strings.TrimSpace(author.Username); username != "" {
+		return username
+	}
+	return "Someone"
 }
 
-func streamMentionNotificationsEnabled(hub repository.HubNotificationSettings, stream *repository.StreamNotificationSettings) bool {
-	if !hubMentionNotificationsEnabled(hub) {
-		return false
+func streamNotificationLocation(streamName string) string {
+	trimmed := strings.TrimSpace(streamName)
+	if trimmed == "" {
+		return "this channel"
 	}
-	if stream == nil {
-		return true
+	return "#" + trimmed
+}
+
+func streamNotificationBody(msg *models.Message) string {
+	trimmed := strings.TrimSpace(msg.Content)
+	if trimmed != "" {
+		return trimmed
 	}
-	if stream.ChannelMuted {
-		return false
+	if len(msg.Attachments) == 1 {
+		return "Sent an attachment"
 	}
-	switch stream.NotificationLevel {
+	if len(msg.Attachments) > 1 {
+		return fmt.Sprintf("Sent %d attachments", len(msg.Attachments))
+	}
+	return "Sent a message"
+}
+
+func (s *MessageService) streamNotificationSettingsOverride(ctx context.Context, userID, streamID string) (*repository.StreamNotificationSettings, error) {
+	if s.streamNotifRepo == nil {
+		return nil, nil
+	}
+	return s.streamNotifRepo.GetOverride(ctx, userID, streamID)
+}
+
+func effectiveStreamNotificationPolicy(hub repository.HubNotificationSettings, stream *repository.StreamNotificationSettings) streamNotificationPolicy {
+	if hub.ServerMuted {
+		return streamNotificationPolicyNone
+	}
+	if stream != nil && stream.ChannelMuted {
+		return streamNotificationPolicyNone
+	}
+	if stream != nil {
+		switch stream.NotificationLevel {
+		case "nothing":
+			return streamNotificationPolicyNone
+		case "all":
+			return streamNotificationPolicyAll
+		default:
+			return streamNotificationPolicyMentionsOnly
+		}
+	}
+	switch hub.NotificationLevel {
 	case "nothing":
-		return false
+		return streamNotificationPolicyNone
+	case "all":
+		return streamNotificationPolicyAll
 	default:
-		return true
+		return streamNotificationPolicyMentionsOnly
 	}
 }
