@@ -437,7 +437,6 @@ export default function MessageContextMenu({
           : null}
 
         {!isOwn ? row('Report Message', <IconFlag />, () => {
-          onClose();
           setShowReport(true);
         }, { danger: true }) : null}
 
@@ -451,11 +450,15 @@ export default function MessageContextMenu({
       </div>
       {showReport && (
         <ReportModal
-          onClose={() => setShowReport(false)}
+          onClose={() => { setShowReport(false); onClose(); }}
           reportedUserId={message.author?.id ?? message.author_id}
           messageId={message.id}
           hubId={hubId ?? undefined}
           messageContent={message.content}
+          messageCreatedAt={message.created_at}
+          messageAuthorName={message.author?.display_name ?? message.author?.username ?? message.webhook_name ?? 'Unknown User'}
+          messageAuthorAvatarUrl={message.author?.avatar_url ?? message.webhook_avatar_url}
+          messageHasAttachments={Boolean(message.attachments?.length)}
         />
       )}
     </MenuOverlay>
