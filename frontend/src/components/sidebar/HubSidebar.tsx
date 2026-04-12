@@ -217,6 +217,16 @@ export default function HubSidebar() {
         : 'border-[#70757f] bg-[#181a1f] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
     }`
   );
+  const radioClassName = (checked: boolean) => (
+    `order-2 ml-auto flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+      checked
+        ? 'border-[#8ea1ff] bg-[#5865f2]/20 shadow-[0_0_0_1px_rgba(88,101,242,0.28)]'
+        : 'border-[#7a808a] bg-[#181a1f] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'
+    }`
+  );
+  const radioDotClassName = (checked: boolean) => (
+    `h-2 w-2 rounded-full transition-colors ${checked ? 'bg-[#dfe4ff]' : 'bg-transparent'}`
+  );
 
   const showTooltip = (label: string, event: ReactMouseEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -484,20 +494,18 @@ export default function HubSidebar() {
                               notification_level: level,
                             });
                           }}
-                          className={submenuControlItemClassName}
+                          className={`${submenuControlItemClassName} justify-between`}
                         >
-                          <span
-                            className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
-                              contextHubNotifSettings.notification_level === level ? 'border-[#5865f2]' : 'border-riftapp-border'
-                            }`}
-                          >
-                            {contextHubNotifSettings.notification_level === level && (
-                              <span className="w-2 h-2 rounded-full bg-white" />
-                            )}
+                          <span>
+                            {level === 'all' && 'All Messages'}
+                            {level === 'mentions_only' && 'Only @mentions'}
+                            {level === 'nothing' && 'Nothing'}
                           </span>
-                          {level === 'all' && 'All Messages'}
-                          {level === 'mentions_only' && 'Only @mentions'}
-                          {level === 'nothing' && 'Nothing'}
+                          <span
+                            className={radioClassName(contextHubNotifSettings.notification_level === level)}
+                          >
+                            <span className={radioDotClassName(contextHubNotifSettings.notification_level === level)} />
+                          </span>
                         </button>
                       ))}
 
@@ -507,8 +515,6 @@ export default function HubSidebar() {
                         [
                           ['suppress_everyone', 'Suppress @everyone and @here'],
                           ['suppress_role_mentions', 'Suppress All Role @mentions'],
-                          ['suppress_highlights', 'Suppress Highlights'],
-                          ['mute_events', 'Mute New Events'],
                         ] as const
                       ).map(([key, label]) => (
                         <button

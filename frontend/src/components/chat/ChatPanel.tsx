@@ -97,8 +97,6 @@ const DEFAULT_STREAM_NOTIFICATION: StreamNotificationSettings = {
 const STREAM_NOTIFICATION_TOGGLES: ReadonlyArray<readonly [StreamNotificationToggleKey, string]> = [
   ['suppress_everyone', 'Suppress @everyone and @here'],
   ['suppress_role_mentions', 'Suppress role mentions'],
-  ['suppress_highlights', 'Suppress highlights'],
-  ['mute_events', 'Mute new events'],
   ['mobile_push', 'Mobile push notifications'],
   ['hide_muted_channels', 'Hide muted channels'],
 ];
