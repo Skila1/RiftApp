@@ -10,7 +10,6 @@ import { initPushNotifications, teardownPushNotifications } from './lib/pushNoti
 import { App as CapApp } from '@capacitor/app';
 import TitleBar from './components/layout/TitleBar';
 import { isProtectedImportUpdateReadyError, safeImport } from './utils/safeImport';
-// Push build cuz yeah hectic
 
 function protectedLazy<T extends ComponentType<any>>(loader: () => Promise<{ default: T }>) {
   return lazy(() => safeImport(loader));

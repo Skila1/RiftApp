@@ -1,6 +1,5 @@
 import { Capacitor } from '@capacitor/core';
 import { StatusBar, Style } from '@capacitor/status-bar';
-import { Keyboard } from '@capacitor/keyboard';
 import { App, type URLOpenListenerEvent } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
 
@@ -27,36 +26,7 @@ export async function hideSplash(): Promise<void> {
   await SplashScreen.hide();
 }
 
-export function setupKeyboardListeners(callbacks: {
-  onShow?: (height: number) => void;
-  onHide?: () => void;
-}): () => void {
-  if (!isNative()) return () => {};
 
-  const handles: Array<() => void> = [];
-
-  if (callbacks.onShow) {
-    const listener = Keyboard.addListener('keyboardWillShow', (info) => {
-      callbacks.onShow?.(info.keyboardHeight);
-    });
-    handles.push(() => {
-      void listener.then((h) => h.remove());
-    });
-  }
-
-  if (callbacks.onHide) {
-    const listener = Keyboard.addListener('keyboardWillHide', () => {
-      callbacks.onHide?.();
-    });
-    handles.push(() => {
-      void listener.then((h) => h.remove());
-    });
-  }
-
-  return () => {
-    handles.forEach((fn) => fn());
-  };
-}
 
 export function setupBackButton(callback: () => void): () => void {
   if (getPlatform() !== 'android') return () => {};

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import ModalCloseButton from '../shared/ModalCloseButton';
-import { HS, hsTw } from './hubSettingsTokens';
+import { HS } from './hubSettingsTokens';
 
 export function SettingsDivider() {
   return <div className="my-5 h-px bg-riftapp-border/60" role="separator" />;
@@ -134,15 +134,6 @@ export function CloseButtonEsc({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function PageHeader({ title, right }: { title: string; right?: ReactNode }) {
-  return (
-    <div className="flex items-start justify-between gap-4 mb-6">
-      <h1 className={hsTw.title}>{title}</h1>
-      {right}
-    </div>
-  );
-}
-
 export function UnlockBoostingButton({ onClick }: { onClick?: () => void }) {
   return (
     <button
@@ -166,27 +157,6 @@ export function LevelBadge({ level }: { level: 1 | 2 | 3 }) {
     <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-[#5865f2]/25 text-[#949ba4] border border-[#5865f2]/40">
       LVL {level}
     </span>
-  );
-}
-
-export function EmptyStateBlock({
-  title,
-  subtitle,
-  action,
-}: {
-  title: string;
-  subtitle: string;
-  action?: ReactNode;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-      <div className="mb-6 flex h-28 w-28 items-center justify-center rounded-2xl border border-riftapp-border/60 bg-riftapp-panel opacity-90">
-        <div className="grid grid-cols-3 gap-1 text-lg grayscale opacity-60 select-none">😀👻👑😈💀🎭</div>
-      </div>
-      <p className="mb-2 text-[15px] font-bold uppercase tracking-wide text-riftapp-text-dim">{title}</p>
-      <p className="mb-6 max-w-sm text-[13px] leading-relaxed text-riftapp-text-dim">{subtitle}</p>
-      {action}
-    </div>
   );
 }
 

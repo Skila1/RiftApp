@@ -45,7 +45,3 @@ func (b *RedisBroker) Subscribe(ctx context.Context, channel string, handler fun
 func (b *RedisBroker) Close() error {
 	return b.client.Close()
 }
-
-func (b *RedisBroker) Client() *redis.Client {
-	return b.client
-}

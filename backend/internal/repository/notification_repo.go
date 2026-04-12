@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -129,8 +128,4 @@ func (r *NotificationRepo) GetDisplayName(ctx context.Context, userID string) (s
 	err := r.db.QueryRow(ctx,
 		`SELECT display_name FROM users WHERE id = $1`, userID).Scan(&name)
 	return name, err
-}
-
-func (r *NotificationRepo) Now() time.Time {
-	return time.Now()
 }

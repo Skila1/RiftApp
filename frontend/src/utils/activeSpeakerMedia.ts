@@ -1,6 +1,6 @@
 export type ActiveSpeakerTrackType = 'camera' | 'screenshare';
 
-export interface ActiveSpeakerCandidate<TTrack = unknown> {
+interface ActiveSpeakerCandidate<TTrack = unknown> {
   identity: string;
   isSpeaking: boolean;
   isCameraOn?: boolean;
@@ -9,14 +9,14 @@ export interface ActiveSpeakerCandidate<TTrack = unknown> {
   screenTrack?: TTrack | null;
 }
 
-export interface ActiveSpeakerSelection<TTrack = unknown> {
+interface ActiveSpeakerSelection<TTrack = unknown> {
   userId: string;
   trackType: ActiveSpeakerTrackType | null;
   track: TTrack | null;
   priority: number;
 }
 
-export interface CurrentActiveSpeakerTarget {
+interface CurrentActiveSpeakerTarget {
   userId: string;
   trackType: ActiveSpeakerTrackType | null;
 }

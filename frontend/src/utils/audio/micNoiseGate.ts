@@ -16,7 +16,7 @@ const SPEAKING_DEBUG_LOG_INTERVAL_MS = 250;
 export const DEFAULT_MANUAL_MIC_THRESHOLD = 0.025;
 export const DEFAULT_MIC_GATE_RELEASE_MS = 30;
 
-export interface MicNoiseGateSettings {
+interface MicNoiseGateSettings {
   automaticSensitivity: boolean;
   manualThreshold: number;
   releaseMs: number;

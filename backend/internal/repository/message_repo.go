@@ -405,17 +405,6 @@ func (r *MessageRepo) CloneAttachments(ctx context.Context, sourceMsgID, uploade
 	return attachmentIDs, nil
 }
 
-func (r *MessageRepo) GetAuthorInfo(ctx context.Context, userID string) (*models.User, error) {
-	var user models.User
-	err := r.db.QueryRow(ctx,
-		`SELECT id, username, display_name, avatar_url, bio, is_bot FROM users WHERE id = $1`, userID,
-	).Scan(&user.ID, &user.Username, &user.DisplayName, &user.AvatarURL, &user.Bio, &user.IsBot)
-	if err != nil {
-		return nil, err
-	}
-	return &user, nil
-}
-
 func (r *MessageRepo) FetchReplyTargets(ctx context.Context, replyIDs []string) (map[string]models.Message, error) {
 	result := make(map[string]models.Message)
 	if len(replyIDs) == 0 {

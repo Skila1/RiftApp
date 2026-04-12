@@ -244,7 +244,3 @@ func (r *HubRepo) CountMembers(ctx context.Context, hubID string) (int, error) {
 func (r *HubRepo) GetDB() *pgxpool.Pool {
 	return r.db
 }
-
-func (r *HubRepo) BeginTx(ctx context.Context) (pgx.Tx, error) {
-	return r.db.Begin(ctx)
-}

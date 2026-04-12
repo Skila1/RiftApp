@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -175,9 +174,4 @@ func (r *StreamRepo) BulkUpdatePositions(ctx context.Context, hubID string, item
 		}
 	}
 	return tx.Commit(ctx)
-}
-
-// SetLastActivity records when activity occurred for ordering (convenience for future use)
-func (r *StreamRepo) Touch(ctx context.Context, streamID string) {
-	r.db.Exec(ctx, `UPDATE streams SET created_at = $1 WHERE id = $2`, time.Now(), streamID)
 }

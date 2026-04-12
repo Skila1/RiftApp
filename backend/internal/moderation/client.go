@@ -49,28 +49,10 @@ func (c *Client) AnalyzeText(ctx context.Context, text string, classifiers []str
 	return &result, nil
 }
 
-func (c *Client) AnalyzeBatch(ctx context.Context, texts []string, classifiers []string) (*BatchAnalyzeResponse, error) {
-	body := BatchAnalyzeRequest{Texts: texts, Classifiers: classifiers}
-	var result BatchAnalyzeResponse
-	if err := c.post(ctx, "/analyze/batch", body, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
 func (c *Client) AnalyzeImageURL(ctx context.Context, imageURL string) (*ImageAnalyzeResponse, error) {
 	body := ImageURLRequest{ImageURL: imageURL}
 	var result ImageAnalyzeResponse
 	if err := c.post(ctx, "/analyze/image", body, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
-}
-
-func (c *Client) RedactPII(ctx context.Context, text string) (*RedactResponse, error) {
-	body := RedactRequest{Text: text}
-	var result RedactResponse
-	if err := c.post(ctx, "/redact", body, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil
