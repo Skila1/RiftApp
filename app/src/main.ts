@@ -88,6 +88,7 @@ let updateStatus: DesktopUpdateStatus = {
   message: "",
 };
 let pendingDisplaySourceId: string | null = null;
+let pendingDisplaySourceKind: DesktopDisplaySource["kind"] | null = null;
 let desktopDateTimePreferencesCache: DesktopDateTimePreferences | null = null;
 let taskbarAttentionRequested = false;
 
@@ -289,6 +290,11 @@ async function findDesktopDisplaySourceById(sourceId: string): Promise<Electron.
   return sources.find((source) => source.id === sourceId) ?? null;
 }
 
+function clearPendingDisplaySourceSelection(): void {
+  pendingDisplaySourceId = null;
+  pendingDisplaySourceKind = null;
+}
+
 function configureRendererPermissions(): void {
   const ses = session.defaultSession;
 
@@ -330,7 +336,8 @@ function configureDisplayMediaHandling(): void {
       }
 
       const sourceId = pendingDisplaySourceId;
-      pendingDisplaySourceId = null;
+      const sourceKind = pendingDisplaySourceKind;
+      clearPendingDisplaySourceSelection();
 
       if (!sourceId) {
         console.warn(`[Rift permissions] Missing pending display source for ${request.securityOrigin}`);
@@ -346,7 +353,7 @@ function configureDisplayMediaHandling(): void {
           return;
         }
 
-        if (request.audioRequested && process.platform === "win32") {
+        if (request.audioRequested && process.platform === "win32" && sourceKind === "screen") {
           callback({ video: source, audio: "loopback" });
           return;
         }
@@ -743,7 +750,7 @@ function registerIpc(): void {
       return [];
     }
 
-    return getDesktopDisplaySources({ width: 320, height: 180 });
+    return getDesktopDisplaySources({ width: 640, height: 360 });
   });
 
   ipcMain.handle("desktop:select-display-source", async (event, sourceId: string) => {
@@ -752,17 +759,18 @@ function registerIpc(): void {
     }
 
     if (typeof sourceId !== "string" || sourceId.trim().length === 0) {
-      pendingDisplaySourceId = null;
+      clearPendingDisplaySourceSelection();
       return false;
     }
 
     const source = await findDesktopDisplaySourceById(sourceId);
     if (!source) {
-      pendingDisplaySourceId = null;
+      clearPendingDisplaySourceSelection();
       return false;
     }
 
     pendingDisplaySourceId = source.id;
+    pendingDisplaySourceKind = source.id.startsWith("window:") ? "window" : "screen";
     return true;
   });
 }
@@ -1001,7 +1009,7 @@ if (!gotLock) {
 
   app.on("before-quit", () => {
     allowMainWindowClose = true;
-    pendingDisplaySourceId = null;
+    clearPendingDisplaySourceSelection();
     taskbarAttentionRequested = false;
     clearUpdateStatusResetTimer();
     clearBackgroundUpdateTimer();

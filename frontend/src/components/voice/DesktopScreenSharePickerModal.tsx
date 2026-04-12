@@ -5,7 +5,6 @@ import {
   type ScreenShareKind,
   type ScreenShareResolution,
 } from '../../stores/voiceStore';
-import ModalCloseButton from '../shared/ModalCloseButton';
 import ModalOverlay from '../shared/ModalOverlay';
 
 type PickerTab = 'applications' | 'screen';
@@ -170,9 +169,9 @@ export default function DesktopScreenSharePickerModal() {
       zIndex={290}
       backdropClose={canClose}
     >
-      <div className="w-[960px] max-w-[calc(100vw-28px)] overflow-hidden rounded-[18px] border border-white/8 bg-[#2b2d31] shadow-[0_28px_80px_rgba(0,0,0,0.55)]">
-        <div className="flex items-center gap-4 px-4 pb-3 pt-4">
-          <div className="flex min-w-0 flex-1 rounded-xl border border-white/8 bg-[#1e1f22] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+      <div className="w-[960px] max-w-[calc(100vw-28px)] overflow-hidden rounded-[18px] bg-[#2b2d31] shadow-[0_28px_80px_rgba(0,0,0,0.55)]">
+        <div className="px-4 pb-3 pt-4">
+          <div className="flex min-w-0 flex-1 rounded-xl bg-[#1f2126] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
             {([
               { tab: 'applications' as PickerTab, label: 'Applications', icon: <IconApplications /> },
               { tab: 'screen' as PickerTab, label: 'Entire Screen', icon: <IconEntireScreen /> },
@@ -186,7 +185,7 @@ export default function DesktopScreenSharePickerModal() {
                   className={[
                     'flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-[12px] font-semibold transition-colors',
                     selected
-                      ? 'bg-[#3a3c43] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
+                      ? 'bg-[#3a3c43] text-white shadow-[0_8px_18px_rgba(0,0,0,0.18)]'
                       : 'text-[#b5bac1] hover:bg-white/[0.04] hover:text-white',
                   ].join(' ')}
                 >
@@ -196,18 +195,17 @@ export default function DesktopScreenSharePickerModal() {
               );
             })}
           </div>
-          <ModalCloseButton onClick={closePicker} size="sm" disabled={!canClose} className="shrink-0" />
         </div>
 
         <div className="px-4 pb-4">
           <div className="max-h-[58vh] overflow-y-auto pr-1">
             {loading ? (
-              <div className="flex h-[380px] items-center justify-center rounded-2xl border border-white/6 bg-[#232428] text-sm text-[#b5bac1]">
+              <div className="flex h-[380px] items-center justify-center rounded-2xl bg-[#232428] text-sm text-[#b5bac1] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
                 Loading shareable sources...
               </div>
             ) : filteredSources.length === 0 ? (
-              <div className="flex h-[380px] flex-col items-center justify-center rounded-2xl border border-white/6 bg-[#232428] text-center">
-                <div className="rounded-full border border-white/8 bg-[#2b2d31] p-3 text-[#b5bac1]">
+              <div className="flex h-[380px] flex-col items-center justify-center rounded-2xl bg-[#232428] text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+                <div className="rounded-full bg-[#2b2d31] p-3 text-[#b5bac1] shadow-[0_10px_24px_rgba(0,0,0,0.18)]">
                   {activeTab === 'screen' ? <IconEntireScreen /> : <IconApplications />}
                 </div>
                 <p className="mt-4 text-[15px] font-semibold text-white">
@@ -227,25 +225,28 @@ export default function DesktopScreenSharePickerModal() {
                     type="button"
                     disabled={requesting}
                     onClick={() => void chooseSource(source.id)}
-                    className="group overflow-hidden rounded-2xl border border-white/7 bg-[#232428] text-left transition-all duration-150 hover:border-[#5865f2]/65 hover:bg-[#2a2c31] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="group text-left transition-all duration-150 hover:-translate-y-[1px] disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <div className="relative aspect-video overflow-hidden border-b border-white/6 bg-[#111214]">
+                    <div className="relative aspect-video overflow-hidden rounded-[16px] bg-[#111214] shadow-[0_12px_28px_rgba(0,0,0,0.3)] transition-shadow duration-150 group-hover:shadow-[0_14px_32px_rgba(0,0,0,0.38)]">
                       {source.thumbnailDataUrl ? (
                         <img
                           src={source.thumbnailDataUrl}
                           alt=""
-                          className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.015]"
+                          className={[
+                            'h-full w-full transition-transform duration-200 group-hover:scale-[1.01]',
+                            source.kind === 'screen' ? 'object-cover' : 'object-contain',
+                          ].join(' ')}
                         />
                       ) : (
                         <EmptyThumbnail kind={source.kind} />
                       )}
                     </div>
 
-                    <div className="flex items-center gap-3 px-3.5 py-2.5">
+                    <div className="flex items-center gap-2 px-1.5 pb-1 pt-2.5">
                       {source.appIconDataUrl ? (
-                        <img src={source.appIconDataUrl} alt="" className="h-6 w-6 rounded-md object-contain" />
+                        <img src={source.appIconDataUrl} alt="" className="h-4 w-4 rounded-[4px] object-contain" />
                       ) : (
-                        <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[#3a3c43] text-[#b5bac1]">
+                        <div className="flex h-4 w-4 items-center justify-center text-[#8b9098]">
                           <SourceKindIcon kind={source.kind} />
                         </div>
                       )}
@@ -261,7 +262,7 @@ export default function DesktopScreenSharePickerModal() {
           </div>
         </div>
 
-        <div className="border-t border-white/6 bg-[#2f3136] px-4 pb-4 pt-3">
+        <div className="bg-[#2f3136] px-4 pb-4 pt-3">
           <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
               <p className="truncate text-[13px] font-semibold text-white">
@@ -277,7 +278,7 @@ export default function DesktopScreenSharePickerModal() {
                 className={[
                   'rounded-[10px] px-3 py-1.5 text-[11px] font-semibold transition-colors',
                   screenShareFps === 60 && screenShareResolution === '720p'
-                    ? 'bg-[#111214] text-white ring-1 ring-white/10'
+                    ? 'bg-[#111214] text-white shadow-[0_8px_18px_rgba(0,0,0,0.22)]'
                     : 'bg-[#1f2023] text-[#b5bac1] hover:bg-[#26272b] hover:text-white',
                 ].join(' ')}
               >
@@ -289,7 +290,7 @@ export default function DesktopScreenSharePickerModal() {
                 className={[
                   'rounded-[10px] px-3 py-1.5 text-[11px] font-semibold transition-colors',
                   screenShareFps === 60 && screenShareResolution === '1440p'
-                    ? 'bg-[#111214] text-white ring-1 ring-[#5865f2]/50'
+                    ? 'bg-[#111214] text-white shadow-[0_8px_18px_rgba(0,0,0,0.22)]'
                     : 'bg-[#1f2023] text-[#b5bac1] hover:bg-[#26272b] hover:text-white',
                 ].join(' ')}
               >
@@ -301,7 +302,7 @@ export default function DesktopScreenSharePickerModal() {
                 className={[
                   'inline-flex h-8 w-8 items-center justify-center rounded-[10px] transition-colors',
                   settingsOpen
-                    ? 'bg-[#111214] text-white ring-1 ring-white/10'
+                    ? 'bg-[#111214] text-white shadow-[0_8px_18px_rgba(0,0,0,0.22)]'
                     : 'bg-[#1f2023] text-[#b5bac1] hover:bg-[#26272b] hover:text-white',
                 ].join(' ')}
                 aria-label="Stream quality settings"
@@ -310,7 +311,7 @@ export default function DesktopScreenSharePickerModal() {
               </button>
 
               {settingsOpen ? (
-                <div className="absolute bottom-[calc(100%+12px)] right-0 z-10 w-[280px] rounded-2xl border border-white/8 bg-[#232428] p-3 shadow-[0_18px_40px_rgba(0,0,0,0.45)]">
+                <div className="absolute bottom-[calc(100%+12px)] right-0 z-10 w-[280px] rounded-2xl bg-[#232428] p-3 shadow-[0_18px_40px_rgba(0,0,0,0.45)]">
                   <div className="px-2 pb-2 text-[13px] font-semibold text-white">Stream Mode</div>
 
                   {[
@@ -359,7 +360,7 @@ export default function DesktopScreenSharePickerModal() {
                   })}
 
                   {settingsMode === 'custom' ? (
-                    <div className="mt-2 border-t border-white/6 px-2 pt-3">
+                    <div className="mt-2 px-2 pt-3">
                       <div>
                         <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#949ba4]">Resolution</p>
                         <div className="mt-2 flex flex-wrap gap-2">

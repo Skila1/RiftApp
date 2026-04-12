@@ -1649,6 +1649,7 @@ async function startScreenShare(
   } catch (err) {
     const name = err instanceof DOMException ? err.name : '';
     const message = err instanceof Error ? err.message.toLowerCase() : '';
+    console.error('Failed to start screen share:', err);
     useVoiceStore.setState({ screenShareRequesting: false });
     if (name === 'AbortError' || message.includes('cancel')) {
       setScreenShareNotice({ tone: 'info', message: 'Screen share cancelled' });
