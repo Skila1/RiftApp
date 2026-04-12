@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useDMStore } from '../../stores/dmStore';
 import { useAuthStore } from '../../stores/auth';
 import { useAppSettingsStore } from '../../stores/appSettingsStore';
+import { isConversationMuted, useConversationMuteStore } from '../../stores/conversationMuteStore';
+import { useHubStore } from '../../stores/hubStore';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useFriendStore } from '../../stores/friendStore';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -23,6 +25,16 @@ import BotBadge from '../shared/BotBadge';
 import { MenuOverlay, menuDivider } from '../context-menus/MenuOverlay';
 import GroupDMSettingsModal from '../modals/GroupDMSettingsModal';
 import ConfirmModal from '../modals/ConfirmModal';
+import InviteHubToConversationModal from '../modals/InviteHubToConversationModal';
+
+function SearchIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+}
 
 function AvatarCircle({
   user,
@@ -111,6 +123,12 @@ export default function DMSidebar() {
   const leaveConversation = useDMStore((s) => s.leaveConversation);
   const currentUserId = useAuthStore((s) => s.user?.id);
   const developerMode = useAppSettingsStore((s) => s.developerMode);
+  const hubs = useHubStore((s) => s.hubs);
+  const loadHubs = useHubStore((s) => s.loadHubs);
+  const mutedUntilByConversationId = useConversationMuteStore((s) => s.mutedUntilByConversationId);
+  const muteConversation = useConversationMuteStore((s) => s.muteConversation);
+  const unmuteConversation = useConversationMuteStore((s) => s.unmuteConversation);
+  const clearExpiredConversationMutes = useConversationMuteStore((s) => s.clearExpiredConversationMutes);
   const presence = usePresenceStore((s) => s.presence);
   const conversationVoiceMembers = useVoiceStore((s) => s.conversationVoiceMembers);
   const conversationCallRings = useVoiceStore((s) => s.conversationCallRings);
@@ -118,8 +136,6 @@ export default function DMSidebar() {
   const pendingCount = useFriendStore((s) => s.pendingCount);
   const loadPendingCount = useFriendStore((s) => s.loadPendingCount);
 
-  // New-DM search state
-  const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResult, setSearchResult] = useState<User | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -127,9 +143,11 @@ export default function DMSidebar() {
   const [opening, setOpening] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ conversation: Conversation; x: number; y: number } | null>(null);
   const [editConversation, setEditConversation] = useState<Conversation | null>(null);
+  const [inviteConversation, setInviteConversation] = useState<Conversation | null>(null);
   const [leaveConversationTarget, setLeaveConversationTarget] = useState<Conversation | null>(null);
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
+  const [muteSubmenuOpen, setMuteSubmenuOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -137,10 +155,20 @@ export default function DMSidebar() {
     loadPendingCount();
   }, [loadConversations, loadPendingCount]);
 
-  const handleSearchSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    clearExpiredConversationMutes();
+  }, [clearExpiredConversationMutes]);
+
+  useEffect(() => {
+    if (hubs.length === 0) {
+      void loadHubs();
+    }
+  }, [hubs.length, loadHubs]);
+
+  const runUserSearch = async () => {
     const q = searchQuery.trim();
     if (!q) return;
+
     setSearchError(null);
     setSearchResult(null);
     setSearching(true);
@@ -158,20 +186,12 @@ export default function DMSidebar() {
     setOpening(true);
     try {
       await openDM(userId);
-      setShowSearch(false);
       setSearchQuery('');
       setSearchResult(null);
+      setSearchError(null);
     } finally {
       setOpening(false);
     }
-  };
-
-  const handleSearchToggle = () => {
-    setShowSearch((s) => !s);
-    setSearchQuery('');
-    setSearchResult(null);
-    setSearchError(null);
-    if (!showSearch) setTimeout(() => searchInputRef.current?.focus(), 50);
   };
 
   const timeAgo = (dateStr?: string) => {
@@ -185,15 +205,15 @@ export default function DMSidebar() {
     return `${Math.floor(hrs / 24)}d ago`;
   };
 
-  const closeContextMenu = () => setContextMenu(null);
+  const closeContextMenu = () => {
+    setMuteSubmenuOpen(false);
+    setContextMenu(null);
+  };
 
   const handleOpenConversationMenu = (event: React.MouseEvent, conversation: Conversation) => {
-    const isGroupDm = isGroupConversation(conversation, currentUserId);
-    const hasActions = (conversation.unread_count ?? 0) > 0 || isGroupDm || developerMode;
-    if (!hasActions) {
-      return;
-    }
     event.preventDefault();
+    clearExpiredConversationMutes();
+    setMuteSubmenuOpen(false);
     setContextMenu({ conversation, x: event.clientX, y: event.clientY });
   };
 
@@ -223,53 +243,91 @@ export default function DMSidebar() {
     }
   };
 
+  const filteredConversations = conversations.filter((conversation) => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return true;
+    }
+
+    const title = getConversationTitle(conversation, currentUserId).toLowerCase();
+    if (title.includes(normalizedQuery)) {
+      return true;
+    }
+
+    return getConversationMembers(conversation).some((member) => {
+      const haystack = `${member.display_name} ${member.username}`.toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+  });
+  const shouldShowSearchPanel = Boolean(searchResult || searchError || (searchQuery.trim() && filteredConversations.length === 0));
+
+  const contextConversationMuted = contextMenu
+    ? isConversationMuted(mutedUntilByConversationId[contextMenu.conversation.id])
+    : false;
+
+  const muteOptions: Array<{ label: string; durationMs: number | null }> = [
+    { label: 'For 15 Minutes', durationMs: 15 * 60 * 1000 },
+    { label: 'For 1 Hour', durationMs: 60 * 60 * 1000 },
+    { label: 'For 8 Hours', durationMs: 8 * 60 * 60 * 1000 },
+    { label: 'For 24 Hours', durationMs: 24 * 60 * 60 * 1000 },
+    { label: 'Until I Turn It Back On', durationMs: null },
+  ];
+
+  const menuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center gap-2.5 rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
+  const submenuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center gap-2.5 rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
+
   return (
     <>
       <div className="w-60 flex-shrink-0 border-r border-riftapp-border/60 bg-riftapp-chrome flex flex-col">
-      {/* Search bar */}
-      <div className="h-12 flex items-center border-b border-riftapp-border/50 px-3 flex-shrink-0">
-        <button
-          onClick={handleSearchToggle}
-          className="w-full h-[28px] flex items-center gap-2 px-2 rounded bg-riftapp-chrome-hover/80 text-riftapp-text-dim text-[13px] hover:bg-riftapp-chrome-hover transition-colors"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="flex-shrink-0 opacity-60">
-            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <span>Find or start a conversation</span>
-        </button>
-      </div>
-
-      {/* New DM search panel */}
-      {showSearch && (
-        <div className="px-3 py-2.5 animate-fade-in">
-          <form onSubmit={handleSearchSubmit} className="flex gap-1.5">
+      <div className="relative z-20 h-12 border-b border-riftapp-border/50 bg-riftapp-chrome px-3 flex-shrink-0">
+        <div className="flex h-full items-center">
+          <div className="flex h-[28px] w-full min-w-0 items-center gap-1 rounded-[4px] bg-[#24272d] px-2 text-[#b5bac1] shadow-[0_1px_0_rgba(0,0,0,0.32)] transition-colors hover:bg-[#262930] focus-within:bg-[#262930]">
+            <SearchIcon className="h-[13px] w-[13px] shrink-0 text-[#72767d]" />
             <input
               ref={searchInputRef}
               type="text"
               value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setSearchResult(null); setSearchError(null); }}
-              placeholder="Search by username..."
-              className="settings-input text-[13px] flex-1 py-1.5"
-              maxLength={32}
+              onChange={(event) => {
+                setSearchQuery(event.target.value);
+                setSearchResult(null);
+                setSearchError(null);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  void runUserSearch();
+                }
+              }}
+              placeholder="Find or start a conversation"
+              className="min-w-0 flex-1 bg-transparent py-0 text-[12px] leading-5 text-[#dcddde] outline-none placeholder:text-[#72767d]"
+              aria-label="Find or start a conversation"
             />
             <button
-              type="submit"
+              type="button"
+              onClick={() => {
+                void runUserSearch();
+              }}
               disabled={!searchQuery.trim() || searching}
-              className="btn-primary py-1.5 px-2.5 text-[13px]"
+              className="inline-flex h-5 w-6 shrink-0 items-center justify-center rounded-[3px] bg-[#2d3138] text-[#8f949c] transition-colors hover:bg-[#363a43] hover:text-[#dcddde] disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label="Search for a user"
             >
               {searching ? (
-                <div className="w-3.5 h-3.5 border border-white border-t-transparent rounded-full animate-spin" />
-              ) : 'Go'}
+                <div className="h-[13px] w-[13px] rounded-full border border-current border-t-transparent animate-spin" />
+              ) : (
+                <SearchIcon className="h-[13px] w-[13px]" />
+              )}
             </button>
-          </form>
-          {searchError && (
-            <p className="text-[11px] text-riftapp-danger mt-1.5">{searchError}</p>
-          )}
-          {searchResult && (
+          </div>
+        </div>
+      </div>
+
+      {shouldShowSearchPanel && (
+        <div className="border-b border-riftapp-border/50 px-3 py-2 animate-fade-in">
+          {searchResult ? (
             <button
-              onClick={() => handleOpenDM(searchResult.id)}
+              onClick={() => void handleOpenDM(searchResult.id)}
               disabled={opening}
-              className="w-full flex items-center gap-2.5 mt-2 px-2.5 py-2 rounded-lg bg-riftapp-chrome-hover hover:bg-riftapp-chrome-hover/90 border border-riftapp-border/40 transition-all duration-150 active:scale-[0.98]"
+              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-riftapp-chrome-hover hover:bg-riftapp-chrome-hover/90 border border-riftapp-border/40 transition-all duration-150 active:scale-[0.98]"
             >
               <div className="w-7 h-7 rounded-full bg-riftapp-accent/20 flex items-center justify-center text-[10px] font-semibold text-riftapp-accent flex-shrink-0">
                 {searchResult.display_name.slice(0, 2).toUpperCase()}
@@ -282,7 +340,11 @@ export default function DMSidebar() {
                 {opening ? '...' : 'Message'}
               </span>
             </button>
-          )}
+          ) : searchError ? (
+            <p className="px-1 text-[11px] text-riftapp-danger">{searchError}</p>
+          ) : searchQuery.trim() ? (
+            <p className="px-1 text-[11px] text-riftapp-text-dim">Press Enter to search for <span className="font-medium text-riftapp-text">@{searchQuery.trim()}</span>.</p>
+          ) : null}
         </div>
       )}
 
@@ -316,7 +378,10 @@ export default function DMSidebar() {
         <div className="flex items-center justify-between">
           <h3 className="text-[11px] font-semibold uppercase tracking-wider text-riftapp-text-dim">Direct Messages</h3>
           <button
-            onClick={() => { if (!showSearch) handleSearchToggle(); }}
+            onClick={() => {
+              searchInputRef.current?.focus();
+              searchInputRef.current?.select();
+            }}
             title="New direct message"
             className="w-5 h-5 flex items-center justify-center text-riftapp-text-dim hover:text-riftapp-text transition-colors"
           >
@@ -330,25 +395,29 @@ export default function DMSidebar() {
 
       {/* Conversation list */}
       <div className="flex-1 overflow-y-auto py-1 px-2">
-        {conversations.length === 0 ? (
+        {filteredConversations.length === 0 ? (
           <div className="px-2 py-8 text-center text-riftapp-text-dim text-sm">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-2 opacity-40">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
-            <p className="font-medium text-[13px]">No conversations yet</p>
-            <p className="mt-1 text-[11px] text-riftapp-text-dim/70">Click <span className="font-bold text-riftapp-accent">+</span> above to message someone.</p>
+            <p className="font-medium text-[13px]">{searchQuery.trim() ? 'No matching conversations' : 'No conversations yet'}</p>
+            {searchQuery.trim() ? (
+              <p className="mt-1 text-[11px] text-riftapp-text-dim/70">Try a different name or press Enter to search for a user.</p>
+            ) : (
+              <p className="mt-1 text-[11px] text-riftapp-text-dim/70">Click <span className="font-bold text-riftapp-accent">+</span> above to message someone.</p>
+            )}
           </div>
         ) : (
           <div className="space-y-0.5">
-            {conversations.map((conv) => {
+            {filteredConversations.map((conv) => {
               const isActive = conv.id === activeConversationId;
               const otherMembers = getConversationOtherMembers(conv, currentUserId);
-            const allMembers = getConversationMembers(conv);
+              const allMembers = getConversationMembers(conv);
               const primaryMember = otherMembers[0] ?? conv.recipient;
               const recipientStatus = primaryMember ? (presence[primaryMember.id] ?? primaryMember.status) : undefined;
               const conversationTitle = getConversationTitle(conv, currentUserId);
               const isGroupDm = isGroupConversation(conv, currentUserId);
-            const groupMemberCountLabel = `${allMembers.length} Member${allMembers.length === 1 ? '' : 's'}`;
+              const groupMemberCountLabel = `${allMembers.length} Member${allMembers.length === 1 ? '' : 's'}`;
               const activeVoiceMembers = conversationVoiceMembers[conv.id] ?? [];
               const activeRing = conversationCallRings[conv.id];
               const lastMessagePreview = conv.last_message
@@ -439,35 +508,102 @@ export default function DMSidebar() {
 
       {contextMenu ? (
         <MenuOverlay x={contextMenu.x} y={contextMenu.y} onClose={closeContextMenu} zIndex={350}>
-          <div className="min-w-[188px] rounded-[8px] border border-[#1f2124] bg-[#2b2d31] p-1 shadow-[0_16px_40px_rgba(0,0,0,0.45)]" onContextMenu={(event) => event.preventDefault()}>
-            {(contextMenu.conversation.unread_count ?? 0) > 0 ? (
+          <div className="rift-context-menu-shell min-w-[210px] text-[#dbdee1]" onContextMenu={(event) => event.preventDefault()}>
+            <button
+              type="button"
+              onClick={() => {
+                void ackDM(contextMenu.conversation.id);
+                closeContextMenu();
+              }}
+              disabled={(contextMenu.conversation.unread_count ?? 0) === 0}
+              className={`${menuItemClassName} disabled:cursor-not-allowed disabled:opacity-45`}
+            >
+              <span className="w-4 shrink-0" aria-hidden />
+              Mark as Read
+            </button>
+
+            {menuDivider()}
+
+            <button
+              type="button"
+              onClick={() => {
+                setInviteConversation(contextMenu.conversation);
+                closeContextMenu();
+              }}
+              className={menuItemClassName}
+            >
+              <span className="w-4 shrink-0" aria-hidden />
+              Invites
+            </button>
+
+            {isGroupConversation(contextMenu.conversation, currentUserId) ? (
               <button
                 type="button"
                 onClick={() => {
-                  void ackDM(contextMenu.conversation.id);
+                  setEditConversation(contextMenu.conversation);
                   closeContextMenu();
                 }}
-                className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+                className={menuItemClassName}
               >
                 <span className="w-4 shrink-0" aria-hidden />
-                Mark as Read
+                Edit Group
               </button>
             ) : null}
 
+            {menuDivider()}
+
+            <div
+              className="relative mx-0.5"
+              onMouseEnter={() => setMuteSubmenuOpen(true)}
+              onMouseLeave={() => setMuteSubmenuOpen(false)}
+            >
+              <div className={`${menuItemClassName} cursor-default ${muteSubmenuOpen ? 'bg-[#232428]' : ''}`}>
+                <span className="w-4 shrink-0" aria-hidden />
+                <span className="flex-1">Mute Conversation</span>
+                <span className="text-[#8f949c]">›</span>
+              </div>
+
+              {muteSubmenuOpen ? (
+                <div className="absolute left-full top-0 z-10 pl-1" onMouseEnter={() => setMuteSubmenuOpen(true)}>
+                  <div className="rift-context-submenu-shell min-w-[220px]">
+                    {contextConversationMuted ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          unmuteConversation(contextMenu.conversation.id);
+                          closeContextMenu();
+                        }}
+                        className={submenuItemClassName}
+                      >
+                        <span className="w-4 shrink-0" aria-hidden />
+                        Unmute Conversation
+                      </button>
+                    ) : null}
+
+                    {contextConversationMuted ? menuDivider() : null}
+
+                    {muteOptions.map((option) => (
+                      <button
+                        key={option.label}
+                        type="button"
+                        onClick={() => {
+                          muteConversation(contextMenu.conversation.id, option.durationMs);
+                          closeContextMenu();
+                        }}
+                        className={submenuItemClassName}
+                      >
+                        <span className="w-4 shrink-0" aria-hidden />
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
             {isGroupConversation(contextMenu.conversation, currentUserId) ? (
               <>
-                {(contextMenu.conversation.unread_count ?? 0) > 0 ? menuDivider() : null}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditConversation(contextMenu.conversation);
-                    closeContextMenu();
-                  }}
-                  className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
-                >
-                  <span className="w-4 shrink-0" aria-hidden />
-                  Edit Group
-                </button>
+                {menuDivider()}
                 <button
                   type="button"
                   onClick={() => {
@@ -475,7 +611,7 @@ export default function DMSidebar() {
                     setLeaveConversationTarget(contextMenu.conversation);
                     closeContextMenu();
                   }}
-                  className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)] text-[#f23f42]"
+                  className={`${menuItemClassName} text-[#f38b8f]`}
                 >
                   <span className="w-4 shrink-0" aria-hidden />
                   Leave Group
@@ -485,13 +621,13 @@ export default function DMSidebar() {
 
             {developerMode ? (
               <>
-                {(contextMenu.conversation.unread_count ?? 0) > 0 || isGroupConversation(contextMenu.conversation, currentUserId) ? menuDivider() : null}
+                {menuDivider()}
                 <button
                   type="button"
                   onClick={() => {
                     void handleCopyConversationId(contextMenu.conversation.id);
                   }}
-                  className="flex items-center justify-between gap-2 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+                  className={`${menuItemClassName} justify-between gap-2`}
                 >
                   <span>Copy Channel ID</span>
                   <span className="text-[10px] font-mono font-semibold px-1 py-0.5 rounded bg-[#1e1f22] border border-[#3f4147] text-[#b5bac1]">ID</span>
@@ -506,6 +642,13 @@ export default function DMSidebar() {
         <GroupDMSettingsModal
           conversation={editConversation}
           onClose={() => setEditConversation(null)}
+        />
+      ) : null}
+
+      {inviteConversation ? (
+        <InviteHubToConversationModal
+          conversation={inviteConversation}
+          onClose={() => setInviteConversation(null)}
         />
       ) : null}
 

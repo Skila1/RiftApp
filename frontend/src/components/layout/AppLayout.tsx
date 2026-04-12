@@ -24,6 +24,7 @@ import { useStreamStore } from '../../stores/streamStore';
 import { useDMStore } from '../../stores/dmStore';
 import { useNotificationStore } from '../../stores/notificationStore';
 import { useFriendStore } from '../../stores/friendStore';
+import { getMutedConversationIds, useConversationMuteStore } from '../../stores/conversationMuteStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useVoiceChannelUiStore } from '../../stores/voiceChannelUiStore';
 import { getDesktop } from '../../utils/desktop';
@@ -37,22 +38,41 @@ export default function AppLayout() {
   const currentUserId = useAuthStore((s) => s.user?.id ?? null);
   const loadHubs = useHubStore((s) => s.loadHubs);
   const loadConversations = useDMStore((s) => s.loadConversations);
-  const dmTotalUnread = useDMStore((s) => s.dmTotalUnread);
   const loadNotifications = useNotificationStore((s) => s.loadNotifications);
   const notificationUnreadCount = useNotificationStore((s) => s.unreadCount);
   const loadConversationCallStates = useVoiceStore((s) => s.loadConversationCallStates);
   const conversationCallRings = useVoiceStore((s) => s.conversationCallRings);
   const activeConversationId = useDMStore((s) => s.activeConversationId);
   const conversations = useDMStore((s) => s.conversations);
+  const mutedUntilByConversationId = useConversationMuteStore((s) => s.mutedUntilByConversationId);
   const streamUnreads = useStreamStore((s) => s.streamUnreads);
   const params = useParams<{ hubId?: string; streamId?: string; conversationId?: string }>();
+  const mutedConversationIds = useMemo(
+    () => getMutedConversationIds(mutedUntilByConversationId),
+    [mutedUntilByConversationId],
+  );
+  const mutedAwareDMUnreadCount = useMemo(
+    () => conversations.reduce((total, conversation) => {
+      if (mutedConversationIds.has(conversation.id)) {
+        return total;
+      }
+      return total + (conversation.unread_count ?? 0);
+    }, 0),
+    [conversations, mutedConversationIds],
+  );
+  const mutedAwareConversationCallRings = useMemo(
+    () => Object.fromEntries(
+      Object.entries(conversationCallRings).filter(([conversationId]) => !mutedConversationIds.has(conversationId)),
+    ),
+    [conversationCallRings, mutedConversationIds],
+  );
   const desktopAttentionSignalCount = useMemo(() => getDesktopAttentionSignalCount({
     notificationUnreadCount,
-    dmUnreadCount: dmTotalUnread,
+    dmUnreadCount: mutedAwareDMUnreadCount,
     streamUnreads,
-    conversationCallRings,
+    conversationCallRings: mutedAwareConversationCallRings,
     currentUserId,
-  }), [conversationCallRings, currentUserId, dmTotalUnread, notificationUnreadCount, streamUnreads]);
+  }), [currentUserId, mutedAwareConversationCallRings, mutedAwareDMUnreadCount, notificationUnreadCount, streamUnreads]);
   const currentAttentionSignalCountRef = useRef(desktopAttentionSignalCount);
   const previousAttentionSignalCountRef = useRef<number | null>(null);
 
