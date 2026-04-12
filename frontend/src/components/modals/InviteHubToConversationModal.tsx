@@ -67,6 +67,8 @@ export default function InviteHubToConversationModal({ conversation, onClose }: 
       })
       .sort((left, right) => left.name.localeCompare(right.name));
   }, [hubs, query]);
+  const showEmptyServerState = filteredHubs.length === 0;
+  const removeBottomDivider = showEmptyServerState && hubs.length === 0;
 
   const handleInvite = async (hubId: string) => {
     if (sendingHubId) {
@@ -110,12 +112,12 @@ export default function InviteHubToConversationModal({ conversation, onClose }: 
             />
           </div>
 
-          <div className="rounded-xl border border-white/6 bg-[#17181c]">
+          <div className={`rounded-xl border border-white/6 bg-[#17181c] ${removeBottomDivider ? 'border-b-0' : ''}`}>
             <div className="border-b border-white/6 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#949ba4]">
               Your Servers
             </div>
             <div className="max-h-[320px] overflow-y-auto p-2">
-              {filteredHubs.length === 0 ? (
+              {showEmptyServerState ? (
                 <div className="px-3 py-6 text-center text-sm text-[#949ba4]">
                   {hubs.length === 0 ? 'You do not have any servers to invite from yet.' : 'No matching servers found.'}
                 </div>
