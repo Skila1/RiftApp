@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type MouseEvent as ReactMouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useHubStore } from '../../stores/hubStore';
 import { useDMStore } from '../../stores/dmStore';
@@ -68,6 +68,7 @@ export default function HubSidebar() {
   const [showAddServer, setShowAddServer] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [dmHovered, setDmHovered] = useState(false);
+  const [hoverTooltip, setHoverTooltip] = useState<{ label: string; left: number; top: number } | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; hub: Hub } | null>(null);
   const [inviteHub, setInviteHub] = useState<Hub | null>(null);
   const [leaveConfirmHub, setLeaveConfirmHub] = useState<Hub | null>(null);
@@ -206,13 +207,28 @@ export default function HubSidebar() {
   const menuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center gap-2.5 rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
   const submenuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center gap-2.5 rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
 
+  const showTooltip = (label: string, event: ReactMouseEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setHoverTooltip({
+      label,
+      left: rect.right + 12,
+      top: rect.top + (rect.height / 2),
+    });
+  };
+
   return (
-    <div className="flex w-[72px] flex-shrink-0 flex-col items-center gap-2 overflow-y-auto border-r border-riftapp-border/60 bg-riftapp-chrome py-3">
+    <div className="flex w-[72px] flex-shrink-0 flex-col items-center gap-2 overflow-x-hidden overflow-y-auto border-r border-riftapp-border/60 bg-riftapp-chrome py-3">
       {/* DM Button */}
       <div
         className="relative flex items-center justify-center w-full"
-        onMouseEnter={() => setDmHovered(true)}
-        onMouseLeave={() => setDmHovered(false)}
+        onMouseEnter={(event) => {
+          setDmHovered(true);
+          showTooltip('Direct Messages', event);
+        }}
+        onMouseLeave={() => {
+          setDmHovered(false);
+          setHoverTooltip(null);
+        }}
       >
         <div
           className={`hub-pill ${
@@ -240,11 +256,6 @@ export default function HubSidebar() {
             </span>
           )}
         </button>
-        {dmHovered && (
-          <div className="absolute left-[68px] z-50 px-3 py-1.5 rounded-lg bg-riftapp-panel text-sm text-riftapp-text shadow-elevation-high font-medium whitespace-nowrap animate-fade-in pointer-events-none">
-            Direct Messages
-          </div>
-        )}
       </div>
 
       {/* Separator */}
@@ -268,8 +279,14 @@ export default function HubSidebar() {
           <div
             key={hub.id}
             className="relative flex items-center justify-center w-full"
-            onMouseEnter={() => setHoveredId(hub.id)}
-            onMouseLeave={() => setHoveredId(null)}
+            onMouseEnter={(event) => {
+              setHoveredId(hub.id);
+              showTooltip(hub.name, event);
+            }}
+            onMouseLeave={() => {
+              setHoveredId(null);
+              setHoverTooltip(null);
+            }}
           >
             {/* Active / hover pill indicator */}
             <div
@@ -309,13 +326,6 @@ export default function HubSidebar() {
                 </span>
               )}
             </button>
-
-            {/* Tooltip */}
-            {isHovered && (
-              <div className="absolute left-[68px] z-50 px-3 py-1.5 rounded-lg bg-riftapp-panel text-sm text-riftapp-text shadow-elevation-high font-medium whitespace-nowrap animate-fade-in pointer-events-none">
-                {hub.name}
-              </div>
-            )}
           </div>
         );
       })}
@@ -648,6 +658,16 @@ export default function HubSidebar() {
       )}
 
       {showAddServer && <AddServerModal onClose={() => setShowAddServer(false)} />}
+
+      {hoverTooltip ? createPortal(
+        <div
+          className="pointer-events-none fixed z-[260] -translate-y-1/2 rounded-lg bg-riftapp-panel px-3 py-1.5 text-sm font-medium whitespace-nowrap text-riftapp-text shadow-elevation-high animate-fade-in"
+          style={{ left: hoverTooltip.left, top: hoverTooltip.top }}
+        >
+          {hoverTooltip.label}
+        </div>,
+        document.body,
+      ) : null}
 
       {/* Invite to Server modal */}
       {inviteHub && <InviteToServerModal hub={inviteHub} onClose={() => setInviteHub(null)} />}
