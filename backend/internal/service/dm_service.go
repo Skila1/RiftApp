@@ -447,17 +447,19 @@ func (s *DMService) createOrOpenConversation(ctx context.Context, userID string,
 	lockKey := repository.AdvisoryConversationLockKey(memberIDs)
 	tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, lockKey)
 
-	existingID, err := s.dmRepo.FindConversationByMembers(ctx, tx, memberIDs)
-	if err == nil {
-		tx.Rollback(ctx)
-		response, buildErr := s.buildConversationResponse(ctx, existingID, userID)
-		if buildErr != nil {
-			return repository.ConvResponse{}, false, buildErr
+	if !requireGroup {
+		existingID, err := s.dmRepo.FindConversationByMembers(ctx, tx, memberIDs)
+		if err == nil {
+			tx.Rollback(ctx)
+			response, buildErr := s.buildConversationResponse(ctx, existingID, userID)
+			if buildErr != nil {
+				return repository.ConvResponse{}, false, buildErr
+			}
+			return response, false, nil
 		}
-		return response, false, nil
-	}
-	if err != pgx.ErrNoRows {
-		return repository.ConvResponse{}, false, apperror.Internal("internal error", err)
+		if err != pgx.ErrNoRows {
+			return repository.ConvResponse{}, false, apperror.Internal("internal error", err)
+		}
 	}
 
 	convID := uuid.New().String()
@@ -491,6 +493,7 @@ func (s *DMService) createOrOpenConversation(ctx context.Context, userID string,
 		ID:        convID,
 		CreatedAt: now,
 		UpdatedAt: now,
+		OwnerID:   ownerID,
 		IsGroup:   requireGroup,
 	}
 

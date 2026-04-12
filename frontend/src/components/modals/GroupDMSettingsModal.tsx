@@ -1,17 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Conversation } from '../../types';
 import { api } from '../../api/client';
 import { useAuthStore } from '../../stores/auth';
 import { useDMStore } from '../../stores/dmStore';
 import {
   getConversationIconUrl,
-  getConversationMembers,
   getConversationTitle,
-  getUserLabel,
 } from '../../utils/conversations';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
-import AddFriendsToDMModal from './AddFriendsToDMModal';
-import CrownIcon from '../shared/CrownIcon';
 import ModalOverlay from '../shared/ModalOverlay';
 
 interface Props {
@@ -19,15 +15,20 @@ interface Props {
   onClose: () => void;
 }
 
-function MemberAvatar({ label, avatarUrl }: { label: string; avatarUrl?: string }) {
-  if (avatarUrl) {
-    return <img src={publicAssetUrl(avatarUrl)} alt="" className="h-10 w-10 rounded-full object-cover" />;
-  }
-
+function GroupPlaceholderIcon() {
   return (
-    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-riftapp-accent/20 text-sm font-semibold text-riftapp-accent">
-      {label.slice(0, 2).toUpperCase()}
-    </div>
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="h-10 w-10 text-[#4f545c]">
+      <path d="M15.5 15.5a4.5 4.5 0 0 1 4.49 4.19l.01.31h-2a2.5 2.5 0 0 0-2.34-2.49L15.5 17.5h-1.04c.37-.6.72-1.28 1.04-2ZM8.5 14c3.2 0 5.8 2.47 5.99 5.62L14.5 20H2.5c0-3.31 2.69-6 6-6Zm0 2c-1.96 0-3.6 1.41-3.95 3.27L4.5 20h8a4 4 0 0 0-3.73-3.99L8.5 16Zm7-10a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7Zm-7 1a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm7 2a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm-7 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function PencilIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="h-3.5 w-3.5">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
+    </svg>
   );
 }
 
@@ -35,17 +36,13 @@ export default function GroupDMSettingsModal({ conversation, onClose }: Props) {
   const currentUserId = useAuthStore((s) => s.user?.id);
   const currentConversation = useDMStore((s) => s.conversations.find((entry) => entry.id === conversation.id) ?? conversation);
   const patchConversation = useDMStore((s) => s.patchConversation);
-  const removeConversationMember = useDMStore((s) => s.removeConversationMember);
-  const leaveConversation = useDMStore((s) => s.leaveConversation);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(currentConversation.name ?? '');
   const [iconPreview, setIconPreview] = useState<string | null>(getConversationIconUrl(currentConversation) ?? null);
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
-  const [memberActionId, setMemberActionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showAddMembersModal, setShowAddMembersModal] = useState(false);
 
   useEffect(() => {
     setName(currentConversation.name ?? '');
@@ -53,25 +50,11 @@ export default function GroupDMSettingsModal({ conversation, onClose }: Props) {
     setIconFile(null);
   }, [currentConversation.id, currentConversation.name, currentConversation.icon_url]);
 
-  const ownerId = currentConversation.owner_id ?? null;
-  const canRemoveMembers = Boolean(ownerId && ownerId === currentUserId);
-
-  const members = useMemo(() => {
-    const entries = getConversationMembers(currentConversation);
-    return [...entries].sort((left, right) => {
-	      if (left.id === ownerId && right.id !== ownerId) return -1;
-	      if (right.id === ownerId && left.id !== ownerId) return 1;
-	      if (left.id === currentUserId) return -1;
-	      if (right.id === currentUserId) return 1;
-      return getUserLabel(left).localeCompare(getUserLabel(right));
-    });
-  }, [currentConversation, currentUserId, ownerId]);
-
   const initialName = currentConversation.name ?? '';
   const initialIcon = getConversationIconUrl(currentConversation) ?? null;
   const metadataDirty = name.trim() !== initialName.trim() || iconPreview !== initialIcon || iconFile != null;
 
-  const handleIconSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleIconSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     setIconFile(file);
@@ -97,6 +80,7 @@ export default function GroupDMSettingsModal({ conversation, onClose }: Props) {
       if (Object.keys(patch).length > 0) {
         await patchConversation(currentConversation.id, patch);
       }
+      onClose();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Could not update the group DM');
     } finally {
@@ -104,181 +88,90 @@ export default function GroupDMSettingsModal({ conversation, onClose }: Props) {
     }
   };
 
-  const handleRemoveMember = async (userId: string) => {
-    if (memberActionId) return;
-    const member = members.find((entry) => entry.id === userId);
-    const confirmed = window.confirm(`Remove ${getUserLabel(member)} from this group DM?`);
-    if (!confirmed) return;
-    setMemberActionId(userId);
-    setError(null);
-    try {
-      await removeConversationMember(currentConversation.id, userId);
-    } catch (removeError) {
-      setError(removeError instanceof Error ? removeError.message : 'Could not remove member');
-    } finally {
-      setMemberActionId(null);
+  const handleCancel = () => {
+    if (saving) {
+      return;
     }
-  };
-
-  const handleLeave = async () => {
-    if (memberActionId) return;
-    const confirmed = window.confirm('Leave this group DM?');
-    if (!confirmed) return;
-    setMemberActionId(currentUserId ?? 'leave');
-    setError(null);
-    try {
-      await leaveConversation(currentConversation.id);
-      onClose();
-    } catch (leaveError) {
-      setError(leaveError instanceof Error ? leaveError.message : 'Could not leave group DM');
-    } finally {
-      setMemberActionId(null);
-    }
+    onClose();
   };
 
   return (
-    <>
-      <ModalOverlay isOpen onClose={saving || memberActionId ? () => {} : onClose} zIndex={340} className="p-4 sm:p-6">
-        <div className="w-[min(94vw,640px)] overflow-hidden rounded-2xl border border-white/10 bg-[#111214] shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
-          <div className="border-b border-white/6 px-5 py-4">
-            <h2 className="text-lg font-semibold text-[#f2f3f5]">Group DM Settings</h2>
-            <p className="mt-1 text-sm text-[#949ba4]">Manage {getConversationTitle(currentConversation, currentUserId)}.</p>
+    <ModalOverlay isOpen onClose={saving ? () => {} : onClose} zIndex={340} className="p-4 sm:p-6">
+      <div className="w-[min(92vw,308px)] overflow-hidden rounded-2xl bg-[#2b2d31] shadow-[0_28px_60px_rgba(0,0,0,0.45)]">
+        <div className="flex items-center justify-between px-4 pb-2 pt-4">
+          <h2 className="text-[22px] font-bold leading-none text-[#f2f3f5]">Edit Group</h2>
+          <button
+            type="button"
+            onClick={handleCancel}
+            disabled={saving}
+            aria-label="Close edit group dialog"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[#b5bac1] transition-colors hover:bg-white/6 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="px-4 pb-4">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            className="hidden"
+            onChange={handleIconSelect}
+          />
+
+          <div className="mb-4 mt-1 flex justify-center">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="group relative flex h-[92px] w-[92px] items-center justify-center rounded-full bg-[#1f2124] transition-transform hover:scale-[1.02]"
+              aria-label="Change group icon"
+            >
+              {iconPreview ? (
+                <img src={publicAssetUrl(iconPreview)} alt="" className="h-full w-full rounded-full object-cover" />
+              ) : (
+                <GroupPlaceholderIcon />
+              )}
+              <span className="absolute right-0 top-0 inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#1f2124] text-[#dcddde] shadow-[0_4px_12px_rgba(0,0,0,0.35)] transition-colors group-hover:bg-[#292b2f] group-hover:text-white">
+                <PencilIcon />
+              </span>
+            </button>
           </div>
 
-          <div className="grid gap-5 px-5 py-5 lg:grid-cols-[220px,minmax(0,1fr)]">
-            <div className="space-y-3">
-              <div className="rounded-2xl border border-white/8 bg-[#17181c] p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#949ba4]">Group Icon</div>
-                <div className="mt-4 flex flex-col items-center gap-3">
-                  {iconPreview ? (
-                    <img src={publicAssetUrl(iconPreview)} alt="" className="h-28 w-28 rounded-3xl object-cover" />
-                  ) : (
-                    <div className="flex h-28 w-28 items-center justify-center rounded-3xl bg-[#23252b] text-3xl font-semibold text-[#f2f3f5]">
-                      {getConversationTitle(currentConversation, currentUserId).slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
-                  <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={handleIconSelect} />
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full rounded-lg bg-[#5865f2] px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#6b77ff]"
-                  >
-                    Upload Icon
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setIconFile(null); setIconPreview(null); }}
-                    className="w-full rounded-lg border border-white/10 px-3 py-2 text-sm font-medium text-[#dbdee1] transition-colors hover:bg-white/5"
-                  >
-                    Remove Icon
-                  </button>
-                </div>
-              </div>
-            </div>
+          <input
+            type="text"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={100}
+            placeholder={getConversationTitle(currentConversation, currentUserId)}
+            className="w-full rounded-[6px] border border-[#5865f2] bg-[#1e1f22] px-3 py-[9px] text-[14px] text-[#f2f3f5] outline-none transition-colors placeholder:text-[#a3a6ad] focus:border-[#6f7bf7]"
+          />
 
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-white/8 bg-[#17181c] p-4">
-                <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.12em] text-[#949ba4]">Group Name</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  maxLength={100}
-                  placeholder="Give your group a name"
-                  className="w-full rounded-xl border border-[#2e3138] bg-[#111214] px-3 py-2.5 text-sm text-[#f2f3f5] outline-none transition-colors placeholder:text-[#72767d] focus:border-[#5865f2]"
-                />
-                <div className="mt-3 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => void handleSave()}
-                    disabled={!metadataDirty || saving}
-                    className="rounded-lg bg-[#5865f2] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#6b77ff] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {saving ? 'Saving…' : 'Save Changes'}
-                  </button>
-                </div>
-                <p className="mt-3 text-xs text-[#949ba4]">Anyone in this group can change the name or icon.</p>
-              </div>
+          {error ? <p className="mt-2 text-[12px] text-[#ed4245]">{error}</p> : null}
 
-              <div className="rounded-2xl border border-white/8 bg-[#17181c] p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#949ba4]">Members</div>
-                    <div className="mt-1 text-sm text-[#949ba4]">
-                      {members.length} member{members.length === 1 ? '' : 's'}
-                      {ownerId ? ' • Crown marks the group owner' : ''}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddMembersModal(true)}
-                    className="rounded-lg border border-white/10 px-3 py-2 text-sm font-medium text-[#dbdee1] transition-colors hover:bg-white/5"
-                  >
-                    Add Members
-                  </button>
-                </div>
-
-                <div className="mt-4 space-y-2">
-                  {members.map((member) => {
-                    const isCurrentUser = member.id === currentUserId;
-                    const label = getUserLabel(member);
-                    return (
-                      <div key={member.id} className="flex items-center gap-3 rounded-xl border border-white/6 bg-[#111214] px-3 py-2.5">
-                        <MemberAvatar label={label} avatarUrl={member.avatar_url} />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5 truncate text-sm font-medium text-[#f2f3f5]">
-                            <span className="truncate">{label}</span>
-                            {ownerId === member.id ? <CrownIcon className="h-3.5 w-3.5 shrink-0 text-[#f0b232]" /> : null}
-                          </div>
-                          <div className="truncate text-xs text-[#949ba4]">@{member.username}{isCurrentUser ? ' • You' : ''}</div>
-                        </div>
-                        {!isCurrentUser && canRemoveMembers ? (
-                          <button
-                            type="button"
-                            onClick={() => void handleRemoveMember(member.id)}
-                            disabled={memberActionId === member.id}
-                            className="rounded-lg border border-[#5c2b2e] px-3 py-2 text-xs font-semibold text-[#ffb3b8] transition-colors hover:bg-[#5c2b2e]/30 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {memberActionId === member.id ? 'Removing…' : 'Remove'}
-                          </button>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-                {!canRemoveMembers ? (
-                  <div className="mt-3 text-xs text-[#949ba4]">Only the group owner can remove members.</div>
-                ) : null}
-              </div>
-
-              {error ? <div className="text-sm text-[#ed4245]">{error}</div> : null}
-
-              <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#5c2b2e]/70 bg-[#201214] px-4 py-3">
-                <div>
-                  <div className="text-sm font-semibold text-[#ffb3b8]">Leave Group</div>
-                  <div className="mt-1 text-xs text-[#c98f95]">You will stop seeing this conversation unless someone adds you again.</div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void handleLeave()}
-                  disabled={memberActionId === (currentUserId ?? 'leave')}
-                  className="rounded-lg bg-[#ed4245] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#ff5458] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {memberActionId === (currentUserId ?? 'leave') ? 'Leaving…' : 'Leave'}
-                </button>
-              </div>
-            </div>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={saving}
+              className="rounded-[5px] bg-[#4f545c] px-4 py-2 text-[14px] font-medium text-white transition-colors hover:bg-[#5d6269] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={!metadataDirty || saving}
+              className="rounded-[5px] bg-[#5865f2] px-4 py-2 text-[14px] font-medium text-white transition-colors hover:bg-[#6b77ff] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
           </div>
         </div>
-      </ModalOverlay>
-
-      {showAddMembersModal ? (
-        <AddFriendsToDMModal
-          conversation={currentConversation}
-          mode="add"
-          onClose={() => setShowAddMembersModal(false)}
-        />
-      ) : null}
-    </>
+      </div>
+    </ModalOverlay>
   );
 }

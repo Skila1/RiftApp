@@ -348,9 +348,11 @@ export const useDMStore = create<DMState>((set, get) => ({
   },
 
   ackDM: async (convId) => {
-    const messages = get().dmMessages;
-    if (messages.length === 0) return;
-    const lastMsg = messages[messages.length - 1];
+    const state = get();
+    const messages = state.dmMessages.filter((message) => message.conversation_id === convId);
+    const lastMsg = messages[messages.length - 1]
+      ?? state.conversations.find((conversation) => conversation.id === convId)?.last_message;
+    if (!lastMsg) return;
     try {
       await api.ackDM(convId, lastMsg.id);
       set((s) => {

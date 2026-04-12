@@ -107,6 +107,9 @@ func TestGroupDMOwnerPermissionsAndTransfer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create group dm failed: %v", err)
 	}
+	if conversation.OwnerID == nil || *conversation.OwnerID != owner.User.ID {
+		t.Fatalf("expected returned conversation owner %q, got %v", owner.User.ID, conversation.OwnerID)
+	}
 
 	storedConversation, err := dmRepo.GetConversation(ctx, conversation.ID)
 	if err != nil {
@@ -150,6 +153,77 @@ func TestGroupDMOwnerPermissionsAndTransfer(t *testing.T) {
 	}
 	if len(remainingMembers) != 1 || remainingMembers[0] != memberOne.User.ID {
 		t.Fatalf("unexpected remaining members after new owner removal: %v", remainingMembers)
+	}
+}
+
+func TestGroupDMCreateWithSameMembersCreatesNewConversation(t *testing.T) {
+	cleanTables(t)
+	ctx := context.Background()
+
+	authSvc := auth.NewService(testPool, "integration-test-secret")
+	creatorOne, err := authSvc.Register(ctx, auth.RegisterInput{
+		Username: "group_creator_one",
+		Password: "password123",
+	})
+	if err != nil {
+		t.Fatalf("register first creator failed: %v", err)
+	}
+
+	creatorTwo, err := authSvc.Register(ctx, auth.RegisterInput{
+		Username: "group_creator_two",
+		Password: "password123",
+	})
+	if err != nil {
+		t.Fatalf("register second creator failed: %v", err)
+	}
+
+	memberThree, err := authSvc.Register(ctx, auth.RegisterInput{
+		Username: "group_creator_three",
+		Password: "password123",
+	})
+	if err != nil {
+		t.Fatalf("register third member failed: %v", err)
+	}
+
+	dmRepo := repository.NewDMRepo(testPool)
+	dmSvc := service.NewDMService(
+		dmRepo,
+		repository.NewMessageRepo(testPool),
+		nil,
+		ws.NewHub(testPool),
+	)
+
+	firstConversation, firstCreated, err := dmSvc.CreateOrOpenGroup(ctx, creatorOne.User.ID, []string{creatorTwo.User.ID, memberThree.User.ID})
+	if err != nil {
+		t.Fatalf("create first group dm failed: %v", err)
+	}
+	if !firstCreated {
+		t.Fatal("expected first group dm creation to report created")
+	}
+	if firstConversation.OwnerID == nil || *firstConversation.OwnerID != creatorOne.User.ID {
+		t.Fatalf("expected first conversation owner %q, got %v", creatorOne.User.ID, firstConversation.OwnerID)
+	}
+
+	secondConversation, secondCreated, err := dmSvc.CreateOrOpenGroup(ctx, creatorTwo.User.ID, []string{creatorOne.User.ID, memberThree.User.ID})
+	if err != nil {
+		t.Fatalf("create second group dm failed: %v", err)
+	}
+	if !secondCreated {
+		t.Fatal("expected second group dm creation to report created")
+	}
+	if secondConversation.ID == firstConversation.ID {
+		t.Fatalf("expected distinct group conversations, both ids were %q", firstConversation.ID)
+	}
+	if secondConversation.OwnerID == nil || *secondConversation.OwnerID != creatorTwo.User.ID {
+		t.Fatalf("expected second conversation owner %q, got %v", creatorTwo.User.ID, secondConversation.OwnerID)
+	}
+
+	storedSecondConversation, err := dmRepo.GetConversation(ctx, secondConversation.ID)
+	if err != nil {
+		t.Fatalf("load second stored conversation failed: %v", err)
+	}
+	if storedSecondConversation.OwnerID == nil || *storedSecondConversation.OwnerID != creatorTwo.User.ID {
+		t.Fatalf("expected stored second conversation owner %q, got %v", creatorTwo.User.ID, storedSecondConversation.OwnerID)
 	}
 }
 

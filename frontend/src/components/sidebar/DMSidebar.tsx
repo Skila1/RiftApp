@@ -1,6 +1,7 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useDMStore } from '../../stores/dmStore';
 import { useAuthStore } from '../../stores/auth';
+import { useAppSettingsStore } from '../../stores/appSettingsStore';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useFriendStore } from '../../stores/friendStore';
 import { useVoiceStore } from '../../stores/voiceStore';
@@ -19,6 +20,9 @@ import { getConversationCallStatus } from '../../utils/dmCallStatus';
 import { getConversationCallSystemMessagePreview } from '../../utils/messageSystem';
 import StatusDot from '../shared/StatusDot';
 import BotBadge from '../shared/BotBadge';
+import { MenuOverlay, menuDivider } from '../context-menus/MenuOverlay';
+import GroupDMSettingsModal from '../modals/GroupDMSettingsModal';
+import ConfirmModal from '../modals/ConfirmModal';
 
 function AvatarCircle({
   user,
@@ -104,7 +108,9 @@ export default function DMSidebar() {
   const openDM = useDMStore((s) => s.openDM);
   const loadConversations = useDMStore((s) => s.loadConversations);
   const ackDM = useDMStore((s) => s.ackDM);
+  const leaveConversation = useDMStore((s) => s.leaveConversation);
   const currentUserId = useAuthStore((s) => s.user?.id);
+  const developerMode = useAppSettingsStore((s) => s.developerMode);
   const presence = usePresenceStore((s) => s.presence);
   const conversationVoiceMembers = useVoiceStore((s) => s.conversationVoiceMembers);
   const conversationCallRings = useVoiceStore((s) => s.conversationCallRings);
@@ -119,6 +125,11 @@ export default function DMSidebar() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
   const [opening, setOpening] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ conversation: Conversation; x: number; y: number } | null>(null);
+  const [editConversation, setEditConversation] = useState<Conversation | null>(null);
+  const [leaveConversationTarget, setLeaveConversationTarget] = useState<Conversation | null>(null);
+  const [leaveBusy, setLeaveBusy] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -174,8 +185,47 @@ export default function DMSidebar() {
     return `${Math.floor(hrs / 24)}d ago`;
   };
 
+  const closeContextMenu = () => setContextMenu(null);
+
+  const handleOpenConversationMenu = (event: React.MouseEvent, conversation: Conversation) => {
+    const isGroupDm = isGroupConversation(conversation, currentUserId);
+    const hasActions = (conversation.unread_count ?? 0) > 0 || isGroupDm || developerMode;
+    if (!hasActions) {
+      return;
+    }
+    event.preventDefault();
+    setContextMenu({ conversation, x: event.clientX, y: event.clientY });
+  };
+
+  const handleCopyConversationId = async (conversationId: string) => {
+    try {
+      await navigator.clipboard.writeText(conversationId);
+    } catch {
+      /* ignore clipboard failures */
+    }
+    closeContextMenu();
+  };
+
+  const handleLeaveGroup = async () => {
+    if (!leaveConversationTarget || leaveBusy) {
+      return;
+    }
+
+    setLeaveBusy(true);
+    setLeaveError(null);
+    try {
+      await leaveConversation(leaveConversationTarget.id);
+      setLeaveConversationTarget(null);
+    } catch (error) {
+      setLeaveError(error instanceof Error ? error.message : 'Could not leave group');
+    } finally {
+      setLeaveBusy(false);
+    }
+  };
+
   return (
-    <div className="w-60 flex-shrink-0 border-r border-riftapp-border/60 bg-riftapp-chrome flex flex-col">
+    <>
+      <div className="w-60 flex-shrink-0 border-r border-riftapp-border/60 bg-riftapp-chrome flex flex-col">
       {/* Search bar */}
       <div className="h-12 flex items-center border-b border-riftapp-border/50 px-3 flex-shrink-0">
         <button
@@ -333,6 +383,7 @@ export default function DMSidebar() {
                     setActiveConversation(conv.id);
                     if ((conv.unread_count ?? 0) > 0) ackDM(conv.id);
                   }}
+                  onContextMenu={(event) => handleOpenConversationMenu(event, conv)}
                   className={`w-full flex items-center gap-2.5 px-2 py-2 rounded-md transition-colors ${
                     isActive
                       ? 'bg-riftapp-chrome-hover text-riftapp-text'
@@ -384,6 +435,100 @@ export default function DMSidebar() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+
+      {contextMenu ? (
+        <MenuOverlay x={contextMenu.x} y={contextMenu.y} onClose={closeContextMenu} zIndex={350}>
+          <div className="min-w-[188px] rounded-[8px] border border-[#1f2124] bg-[#2b2d31] p-1 shadow-[0_16px_40px_rgba(0,0,0,0.45)]" onContextMenu={(event) => event.preventDefault()}>
+            {(contextMenu.conversation.unread_count ?? 0) > 0 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void ackDM(contextMenu.conversation.id);
+                  closeContextMenu();
+                }}
+                className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+              >
+                <span className="w-4 shrink-0" aria-hidden />
+                Mark as Read
+              </button>
+            ) : null}
+
+            {isGroupConversation(contextMenu.conversation, currentUserId) ? (
+              <>
+                {(contextMenu.conversation.unread_count ?? 0) > 0 ? menuDivider() : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditConversation(contextMenu.conversation);
+                    closeContextMenu();
+                  }}
+                  className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+                >
+                  <span className="w-4 shrink-0" aria-hidden />
+                  Edit Group
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLeaveError(null);
+                    setLeaveConversationTarget(contextMenu.conversation);
+                    closeContextMenu();
+                  }}
+                  className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)] text-[#f23f42]"
+                >
+                  <span className="w-4 shrink-0" aria-hidden />
+                  Leave Group
+                </button>
+              </>
+            ) : null}
+
+            {developerMode ? (
+              <>
+                {(contextMenu.conversation.unread_count ?? 0) > 0 || isGroupConversation(contextMenu.conversation, currentUserId) ? menuDivider() : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleCopyConversationId(contextMenu.conversation.id);
+                  }}
+                  className="flex items-center justify-between gap-2 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+                >
+                  <span>Copy Channel ID</span>
+                  <span className="text-[10px] font-mono font-semibold px-1 py-0.5 rounded bg-[#1e1f22] border border-[#3f4147] text-[#b5bac1]">ID</span>
+                </button>
+              </>
+            ) : null}
+          </div>
+        </MenuOverlay>
+      ) : null}
+
+      {editConversation ? (
+        <GroupDMSettingsModal
+          conversation={editConversation}
+          onClose={() => setEditConversation(null)}
+        />
+      ) : null}
+
+      <ConfirmModal
+        isOpen={leaveConversationTarget != null}
+        title="Leave Group"
+        description={leaveConversationTarget
+          ? `Leave ${getConversationTitle(leaveConversationTarget, currentUserId)}? You can be re-added later by another group member.`
+          : 'Leave this group?'}
+        confirmText="Leave Group"
+        variant="danger"
+        onConfirm={handleLeaveGroup}
+        onCancel={() => {
+          if (leaveBusy) {
+            return;
+          }
+          setLeaveConversationTarget(null);
+          setLeaveError(null);
+        }}
+        loading={leaveBusy}
+      >
+        {leaveError ? <p className="text-sm text-[#f23f42]">{leaveError}</p> : null}
+      </ConfirmModal>
+    </>
   );
 }
