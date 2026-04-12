@@ -55,3 +55,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            RIFT_BACKEND_BUILD_SHA=${{ github.sha }}
+            RIFT_BACKEND_BUILD_ID=${{ github.run_id }}-${{ github.run_attempt }}

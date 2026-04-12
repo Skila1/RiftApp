@@ -4,10 +4,14 @@
 FROM golang:1.25-alpine AS builder
 
 WORKDIR /src
+ARG RIFT_BACKEND_BUILD_SHA=dev
+ARG RIFT_BACKEND_BUILD_ID=
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /riftapp ./cmd/riftapp
+RUN CGO_ENABLED=0 go build \
+  -ldflags "-X github.com/riftapp-cloud/riftapp/internal/buildinfo.CommitSHA=${RIFT_BACKEND_BUILD_SHA} -X github.com/riftapp-cloud/riftapp/internal/buildinfo.BuildID=${RIFT_BACKEND_BUILD_ID}" \
+  -o /riftapp ./cmd/riftapp
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata curl && \

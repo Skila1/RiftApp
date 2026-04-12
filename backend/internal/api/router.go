@@ -12,6 +12,7 @@ import (
 
 	"github.com/riftapp-cloud/riftapp/internal/admin"
 	"github.com/riftapp-cloud/riftapp/internal/auth"
+	"github.com/riftapp-cloud/riftapp/internal/buildinfo"
 	"github.com/riftapp-cloud/riftapp/internal/config"
 	"github.com/riftapp-cloud/riftapp/internal/middleware"
 	"github.com/riftapp-cloud/riftapp/internal/moderation"
@@ -118,8 +119,13 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
 	}
+	buildInfoHandler := func(w http.ResponseWriter, r *http.Request) {
+		writeData(w, http.StatusOK, buildinfo.Current())
+	}
 	r.Get("/health", healthHandler)
 	r.Get("/api/health", healthHandler)
+	r.Get("/build-info", buildInfoHandler)
+	r.Get("/api/build-info", buildInfoHandler)
 
 	// Link unfurl (OG metadata) — authenticated + rate-limited separately.
 	unfurlRL := middleware.NewRateLimiter(rate.Every(2*time.Second), 10)

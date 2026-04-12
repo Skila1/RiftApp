@@ -14,7 +14,7 @@ function IconUpdateAction({ className }: { className?: string }) {
 }
 
 export default function UpdateActionButton({ className = '' }: { className?: string }) {
-  const frontendUpdateReady = useFrontendUpdateStore((s) => s.updateReady);
+  const appUpdateReady = useFrontendUpdateStore((s) => s.updateReady);
   const applyFrontendUpdate = useFrontendUpdateStore((s) => s.applyUpdate);
   const desktop = useMemo(() => getDesktop(), []);
   const [updateStatus, setUpdateStatus] = useState<DesktopUpdateStatus>(idleDesktopUpdateStatus);
@@ -47,13 +47,13 @@ export default function UpdateActionButton({ className = '' }: { className?: str
   }, [desktop]);
 
   const desktopUpdateReady = Boolean(desktop && updateStatus.state === 'ready');
-  const showUpdateAction = Boolean(desktop) && (desktopUpdateReady || frontendUpdateReady);
+  const showUpdateAction = Boolean(desktop) && (desktopUpdateReady || appUpdateReady);
 
   if (showUpdateAction) {
     const updateActionLabel = desktopUpdateReady ? 'Restart to update' : 'Refresh to update';
     const updateActionTitle = desktopUpdateReady
       ? 'Restart to install the downloaded desktop update'
-      : 'Refresh to load the latest frontend build';
+      : 'Refresh to reconnect to the latest Rift deployment';
 
     return (
       <button

@@ -12,9 +12,17 @@ import {
 } from './utils/frontendUpdate';
 import { initializeDateTimePreferences } from './utils/dateTime';
 
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 const DEPLOY_CHECK_INTERVAL_MS = 3 * 60 * 1000;
 const DEPLOY_SCRIPT_RE = /<script[^>]+type=["']module["'][^>]+src=["']([^"']*\/assets\/[^"']+\.js[^"']*)["']/i;
 const DEPLOY_STYLE_RE = /<link[^>]+rel=["']stylesheet["'][^>]+href=["']([^"']*\/assets\/[^"']+\.css[^"']*)["']/i;
+
+type BackendBuildInfoResponse = {
+  data?: {
+    commit_sha?: string;
+    build_id?: string;
+  };
+};
 
 function normalizeAssetPath(value: string) {
   try {
@@ -27,6 +35,31 @@ function normalizeAssetPath(value: string) {
 function createDeploySignature(scriptPath: string | null, stylePath: string | null) {
   if (!scriptPath && !stylePath) return null;
   return `${scriptPath ?? ''}|${stylePath ?? ''}`;
+}
+
+function createBackendIdentity(commitSha: string | null, buildId: string | null) {
+  if (!commitSha && !buildId) return null;
+  return `${commitSha ?? ''}|${buildId ?? ''}`;
+}
+
+function normalizeBuildToken(value: unknown) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function buildApiUrl(path: string) {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
+  if (/^https?:\/\//i.test(API_BASE)) {
+    return `${API_BASE.replace(/\/+$/, '')}${normalizedPath}`;
+  }
+
+  const normalizedBase = API_BASE.startsWith('/') ? API_BASE : `/${API_BASE}`;
+  return `${window.location.origin}${normalizedBase.replace(/\/+$/, '')}${normalizedPath}`;
 }
 
 function getCurrentDeploySignature() {
@@ -64,6 +97,31 @@ async function fetchLatestDeploySignature() {
   return extractDeploySignature(await response.text());
 }
 
+async function fetchLatestBackendIdentity(): Promise<{ available: boolean; identity: string | null } | null> {
+  const response = await fetch(`${buildApiUrl('/build-info')}?deploy-check=${Date.now()}`, {
+    cache: 'no-store',
+  });
+
+  if (response.status === 404) {
+    return { available: false, identity: null };
+  }
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const payload = await response.json().catch(() => null) as BackendBuildInfoResponse | null;
+  const buildInfo = payload?.data;
+
+  return {
+    available: true,
+    identity: createBackendIdentity(
+      normalizeBuildToken(buildInfo?.commit_sha),
+      normalizeBuildToken(buildInfo?.build_id),
+    ),
+  };
+}
+
 function installDeployRefreshMonitor() {
   if (import.meta.env.DEV) return;
 
@@ -72,6 +130,8 @@ function installDeployRefreshMonitor() {
   useFrontendUpdateStore.getState().setCurrentSignature(currentSignature);
 
   let knownSignature = currentSignature;
+  let backendIdentityState: 'unknown' | 'known' | 'unavailable' = 'unknown';
+  let knownBackendIdentity: string | null = null;
   let checkInFlight = false;
 
   const checkForDeployUpdate = async () => {
@@ -80,16 +140,51 @@ function installDeployRefreshMonitor() {
 
     try {
       const latestSignature = await fetchLatestDeploySignature();
-      if (!latestSignature || latestSignature === knownSignature) return;
+      if (latestSignature && latestSignature !== knownSignature) {
+        knownSignature = latestSignature;
+        useFrontendUpdateStore.getState().markUpdateReady(latestSignature);
+      }
 
-      knownSignature = latestSignature;
-      useFrontendUpdateStore.getState().markUpdateReady(latestSignature);
+      const backendResult = await fetchLatestBackendIdentity();
+      if (!backendResult) {
+        return;
+      }
+
+      if (!backendResult.available) {
+        backendIdentityState = 'unavailable';
+        return;
+      }
+
+      if (backendIdentityState === 'unknown') {
+        backendIdentityState = 'known';
+        knownBackendIdentity = backendResult.identity;
+        useFrontendUpdateStore.getState().setCurrentBackendIdentity(backendResult.identity);
+        return;
+      }
+
+      if (backendIdentityState === 'unavailable') {
+        backendIdentityState = 'known';
+        knownBackendIdentity = backendResult.identity;
+        if (backendResult.identity) {
+          useFrontendUpdateStore.getState().markBackendUpdateReady(backendResult.identity);
+        }
+        return;
+      }
+
+      if (!backendResult.identity || backendResult.identity === knownBackendIdentity) {
+        return;
+      }
+
+      knownBackendIdentity = backendResult.identity;
+      useFrontendUpdateStore.getState().markBackendUpdateReady(backendResult.identity);
     } catch {
       /* ignore transient deploy check failures */
     } finally {
       checkInFlight = false;
     }
   };
+
+  void checkForDeployUpdate();
 
   const intervalId = window.setInterval(() => {
     void checkForDeployUpdate();
