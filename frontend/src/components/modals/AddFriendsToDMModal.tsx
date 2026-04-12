@@ -20,6 +20,15 @@ interface Props {
   onClose: () => void;
 }
 
+function SearchIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+}
+
 function FriendAvatar({ user }: { user: User }) {
   return (
     <div className="relative flex-shrink-0">
@@ -160,13 +169,16 @@ export default function AddFriendsToDMModal({ conversation, mode = 'create', onC
 
         <div className="px-3.5 pb-3.5">
           <div className="flex items-center gap-1.5">
-            <input
-              type="text"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search for friends"
-              className="h-8 min-w-0 flex-1 rounded-md border border-[#3a3d45] bg-[#23252a] px-2.5 text-[13px] text-[#f2f3f5] outline-none transition-colors placeholder:text-[#8f949c] focus:border-[#5865f2]"
-            />
+            <div className="relative min-w-0 flex-1">
+              <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-[13px] w-[13px] -translate-y-1/2 text-[#8f949c]" />
+              <input
+                type="text"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search for friends"
+                className="h-8 w-full rounded-md border border-[#3a3d45] bg-[#23252a] pl-8 pr-2.5 text-[13px] text-[#f2f3f5] outline-none transition-colors placeholder:text-[#8f949c] focus:border-[#5865f2]"
+              />
+            </div>
             <button
               type="button"
               onClick={() => void handleSubmit()}

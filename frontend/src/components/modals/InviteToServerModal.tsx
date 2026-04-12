@@ -183,9 +183,9 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
     <ModalOverlay isOpen onClose={onClose} zIndex={300} className="p-4 sm:p-6">
       {!showSettings && (
       <div
-        className="flex max-h-[min(78vh,620px)] w-[min(92vw,360px)] flex-col overflow-hidden rounded-[16px] border border-white/8 bg-[#313338] text-[#f2f3f5] shadow-[0_28px_80px_rgba(0,0,0,0.52)]"
+        className="flex max-h-[min(78vh,620px)] w-[min(88vw,340px)] flex-col overflow-hidden rounded-[20px] bg-riftapp-menu text-[#f2f3f5] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
       >
-        <div className="flex-shrink-0 px-4 pb-0 pt-4">
+        <div className="flex-shrink-0 px-3.5 pb-0 pt-3.5">
           <div className="mb-1 flex items-start justify-between gap-3">
             <div>
               <h2 className="text-[17px] font-semibold leading-snug text-[#f2f3f5]">
@@ -211,7 +211,7 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
           </div>
         </div>
 
-        <div className="mt-3 flex-1 overflow-y-auto px-2 pb-2">
+        <div className="mt-2.5 flex-1 overflow-y-auto px-2 pb-2">
           {friendsLoading && friends.length === 0 ? (
             <div className="py-10 text-center text-[13px] text-[#949ba4]">
               Loading friends...
@@ -279,7 +279,7 @@ export default function InviteToServerModal({ hub, onClose }: Props) {
           })}
         </div>
 
-        <div className="border-t border-white/8 bg-[#2b2d31] px-4 pb-4 pt-3">
+        <div className="bg-riftapp-menu px-3.5 pb-3.5 pt-2.5">
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#b5bac1]">
             Or send a server invite link
           </p>
@@ -351,10 +351,10 @@ function InviteSettingsModal({
 
   return (
       <div
-        className="w-[min(92vw,360px)] overflow-hidden rounded-[16px] border border-white/8 bg-[#313338] text-[#f2f3f5] shadow-[0_28px_80px_rgba(0,0,0,0.52)] animate-scale-in"
+        className="w-[min(88vw,340px)] overflow-hidden rounded-[20px] bg-riftapp-menu text-[#f2f3f5] shadow-[0_24px_80px_rgba(0,0,0,0.45)] animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between px-4 pb-3 pt-4">
+        <div className="flex items-start justify-between px-3.5 pb-2.5 pt-3.5">
           <div className="flex items-center gap-2.5">
             <button
               onClick={onBack}
@@ -375,7 +375,7 @@ function InviteSettingsModal({
           <ModalCloseButton onClick={onClose} className="-mr-1 -mt-1 border-white/10 bg-transparent hover:bg-white/5" title="Close invite settings" ariaLabel="Close invite settings" />
         </div>
 
-        <div className="space-y-4 px-4 pb-4">
+        <div className="space-y-4 px-3.5 pb-3.5">
           <div>
             <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[#b5bac1]">
               Expire after
@@ -434,7 +434,7 @@ function InviteSettingsModal({
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 border-t border-white/8 bg-[#2b2d31] px-4 py-3">
+        <div className="flex items-center justify-end gap-3 bg-riftapp-menu px-3.5 py-3">
           <button
             onClick={onBack}
             className="px-2 py-2 text-[13px] font-medium text-[#f2f3f5] hover:underline"
