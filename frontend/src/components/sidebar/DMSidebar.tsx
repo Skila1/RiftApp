@@ -524,7 +524,7 @@ export default function DMSidebar() {
 
       {contextMenu ? (
         <MenuOverlay x={contextMenu.x} y={contextMenu.y} onClose={closeContextMenu} zIndex={350}>
-          <div className="rift-context-menu-shell min-w-[210px] text-[#dbdee1]" onContextMenu={(event) => event.preventDefault()}>
+          <div className="rift-context-menu-shell min-w-[210px] overflow-visible text-[#dbdee1]" onContextMenu={(event) => event.preventDefault()}>
             <button
               type="button"
               onClick={() => {

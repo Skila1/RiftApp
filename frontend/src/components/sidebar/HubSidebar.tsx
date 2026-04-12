@@ -362,7 +362,7 @@ export default function HubSidebar() {
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="rift-context-menu-shell min-w-[220px] text-[13px] text-riftapp-text">
+            <div className="rift-context-menu-shell min-w-[220px] overflow-visible text-[13px] text-riftapp-text">
               <button
                 type="button"
                 onClick={async () => {
