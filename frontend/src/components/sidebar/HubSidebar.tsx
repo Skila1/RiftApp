@@ -210,6 +210,13 @@ export default function HubSidebar() {
   const menuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
   const submenuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
   const submenuControlItemClassName = `${submenuItemClassName} gap-2.5`;
+  const checkboxClassName = (checked?: boolean) => (
+    `w-4 h-4 rounded border shrink-0 flex items-center justify-center ${
+      checked
+        ? 'bg-[#5865f2] border-[#5865f2]'
+        : 'border-[#70757f] bg-[#181a1f] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]'
+    }`
+  );
 
   const showTooltip = (label: string, event: ReactMouseEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -519,13 +526,7 @@ export default function HubSidebar() {
                           className={`${submenuControlItemClassName} justify-between`}
                         >
                           <span>{label}</span>
-                          <span
-                            className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center ${
-                              contextHubNotifSettings[key]
-                                ? 'bg-[#5865f2] border-[#5865f2]'
-                                : 'border-riftapp-border'
-                            }`}
-                          >
+                          <span className={checkboxClassName(contextHubNotifSettings[key])}>
                             {contextHubNotifSettings[key] && (
                               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                                 <polyline points="20 6 9 17 4 12" />
@@ -551,13 +552,7 @@ export default function HubSidebar() {
                         className={`${submenuControlItemClassName} justify-between`}
                       >
                         <span>Mobile Push Notifications</span>
-                        <span
-                          className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center ${
-                            contextHubNotifSettings.mobile_push
-                              ? 'bg-[#5865f2] border-[#5865f2]'
-                              : 'border-riftapp-border'
-                          }`}
-                        >
+                        <span className={checkboxClassName(contextHubNotifSettings.mobile_push)}>
                           {contextHubNotifSettings.mobile_push && (
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                               <polyline points="20 6 9 17 4 12" />
@@ -583,13 +578,7 @@ export default function HubSidebar() {
                 className={`${menuItemClassName} justify-between disabled:opacity-50`}
               >
                 <span>Hide Muted Channels</span>
-                <span
-                  className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center ${
-                    contextHubNotifSettings?.hide_muted_channels
-                      ? 'bg-[#5865f2] border-[#5865f2]'
-                      : 'border-riftapp-border'
-                  }`}
-                >
+                <span className={checkboxClassName(contextHubNotifSettings?.hide_muted_channels)}>
                   {contextHubNotifSettings?.hide_muted_channels && (
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="20 6 9 17 4 12" />

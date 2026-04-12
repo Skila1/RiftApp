@@ -452,7 +452,7 @@ export default function MessageContextMenu({
       {showReport && (
         <ReportModal
           onClose={() => setShowReport(false)}
-          reportedUserId={message.author?.id}
+          reportedUserId={message.author?.id ?? message.author_id}
           messageId={message.id}
           hubId={hubId ?? undefined}
           messageContent={message.content}
