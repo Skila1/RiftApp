@@ -170,12 +170,12 @@ function RingingAvatar({ member }: { member: ConversationCallStageMember }) {
   const avatarUrl = member.user?.avatar_url;
 
   return (
-    <div className="flex flex-col items-center gap-3 text-center transition-all duration-300">
-      <div className="relative flex h-28 w-28 items-center justify-center sm:h-32 sm:w-32">
+    <div className="flex items-center justify-center text-center transition-all duration-300">
+      <div className="relative flex h-20 w-20 items-center justify-center sm:h-24 sm:w-24">
         {member.isRinging ? (
           <>
             <span className="rift-dm-call-pulse absolute inset-0 rounded-full border border-white/80" />
-            <span className="rift-dm-call-pulse-delay absolute inset-[-10px] rounded-full border border-white/45" />
+            <span className="rift-dm-call-pulse-delay absolute inset-[-8px] rounded-full border border-white/45" />
           </>
         ) : null}
         <div
@@ -185,11 +185,10 @@ function RingingAvatar({ member }: { member: ConversationCallStageMember }) {
           {avatarUrl ? (
             <img src={publicAssetUrl(avatarUrl)} alt={label} className="h-full w-full object-cover" />
           ) : (
-            <span className="text-3xl font-semibold text-white">{label.slice(0, 2).toUpperCase()}</span>
+            <span className="text-2xl font-semibold text-white">{label.slice(0, 2).toUpperCase()}</span>
           )}
         </div>
       </div>
-      <p className="max-w-[180px] truncate text-base font-semibold text-white">{label}</p>
     </div>
   );
 }
@@ -212,8 +211,8 @@ function RingingStage({
   participants: ConversationCallStageMember[];
 }) {
   return (
-    <div className="flex min-h-[220px] w-full items-center justify-center px-6 py-4 transition-all duration-300">
-      <div className="flex w-full max-w-[420px] flex-wrap items-center justify-center gap-10">
+    <div className="flex min-h-[150px] w-full items-center justify-center px-6 py-2 transition-all duration-300">
+      <div className="flex w-full max-w-[260px] flex-wrap items-center justify-center gap-6">
         {participants.map((member) => (
           <RingingAvatar key={member.id} member={member} />
         ))}
