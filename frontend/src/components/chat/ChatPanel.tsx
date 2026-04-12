@@ -286,6 +286,17 @@ function IconUsers(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+function IconUsersPlus(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M14 19a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4" />
+      <circle cx="8" cy="9" r="4" />
+      <path d="M19 8v6" />
+      <path d="M16 11h6" />
+    </svg>
+  );
+}
+
 function IconPhone(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
@@ -1952,13 +1963,14 @@ export default function ChatPanel({
 
   const canShowNotificationTools = !showWelcome && !isDMMode && Boolean(activeHubId);
   const canShowPinnedTools = !showWelcome && Boolean(activeStreamId || activeConversationId);
-  const canShowMemberListToggle = !showWelcome && !isDMMode && Boolean(activeHubId);
+    const canShowMemberListToggle = !showWelcome && !isDMMode && Boolean(activeHubId);
   const searchSidebarTitle = searchLoading ? 'Searching…' : searchPerformed ? `${searchResults.length} Results` : 'Search';
   const searchInputClass = 'w-full rounded-md border border-[#2b2d31] bg-[#1a1b1e] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors placeholder:text-[#72767d] focus:border-[#4f545c]';
   const searchSelectClass = 'w-full rounded-md border border-[#2b2d31] bg-[#1a1b1e] px-3 py-2 text-sm text-[#f2f3f5] outline-none transition-colors focus:border-[#4f545c]';
   const [showAddFriendsModal, setShowAddFriendsModal] = useState(false);
   const [showGroupSettingsModal, setShowGroupSettingsModal] = useState(false);
   const activeConversationIsGroup = isGroupConversation(activeConversation, user?.id);
+  const canShowGroupMemberListToggle = !showWelcome && isDMMode && activeConversationIsGroup;
 
   const handleDMCall = useCallback(async (mode: 'audio' | 'video') => {
     if (!activeConversation) return;
@@ -2009,19 +2021,40 @@ export default function ChatPanel({
         >
           <div className="flex min-w-0 flex-1 items-center gap-3">
             {isDMMode ? (
-              <>
-                <ConversationAvatar conversation={activeConversation} viewerUserId={user?.id} sizeClass="w-7 h-7" textClass="text-[11px]" />
-                <div className="min-w-0">
-                  <h3 className="truncate text-[15px] font-semibold text-[#f2f3f5]">
-					  {activeConversationLabel}
-                  </h3>
-                  {activeConversationCallStatus && !showConversationCallStage ? (
-                    <div className="mt-1 flex items-center gap-2">
-                      <HeaderStatusPill label={activeConversationCallStatus.label} tone={activeConversationCallStatus.tone} />
-                    </div>
-                  ) : null}
-                </div>
-              </>
+              activeConversationIsGroup ? (
+                <button
+                  type="button"
+                  onClick={() => setShowGroupSettingsModal(true)}
+                  className="-mx-1 flex min-w-0 items-center gap-3 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-white/5"
+                  aria-label={`Open settings for ${activeConversationLabel}`}
+                >
+                  <ConversationAvatar conversation={activeConversation} viewerUserId={user?.id} sizeClass="w-7 h-7" textClass="text-[11px]" />
+                  <div className="min-w-0">
+                    <h3 className="truncate text-[15px] font-semibold text-[#f2f3f5]">
+					    {activeConversationLabel}
+                    </h3>
+                    {activeConversationCallStatus && !showConversationCallStage ? (
+                      <div className="mt-1 flex items-center gap-2">
+                        <HeaderStatusPill label={activeConversationCallStatus.label} tone={activeConversationCallStatus.tone} />
+                      </div>
+                    ) : null}
+                  </div>
+                </button>
+              ) : (
+                <>
+                  <ConversationAvatar conversation={activeConversation} viewerUserId={user?.id} sizeClass="w-7 h-7" textClass="text-[11px]" />
+                  <div className="min-w-0">
+                    <h3 className="truncate text-[15px] font-semibold text-[#f2f3f5]">
+					      {activeConversationLabel}
+                    </h3>
+                    {activeConversationCallStatus && !showConversationCallStage ? (
+                      <div className="mt-1 flex items-center gap-2">
+                        <HeaderStatusPill label={activeConversationCallStatus.label} tone={activeConversationCallStatus.tone} />
+                      </div>
+                    ) : null}
+                  </div>
+                </>
+              )
             ) : (
               <>
                 <span className="text-lg font-medium text-[#949ba4]">#</span>
@@ -2080,21 +2113,21 @@ export default function ChatPanel({
             >
               <IconPin className="h-4 w-4" />
             </HeaderIconButton>
-            {activeConversationIsGroup ? (
+            <HeaderIconButton
+              label={activeConversationIsGroup ? 'Add friends to group DM' : 'Add friends to DM'}
+              onClick={() => setShowAddFriendsModal(true)}
+            >
+              <IconUsersPlus className="h-4 w-4" />
+            </HeaderIconButton>
+            {canShowGroupMemberListToggle ? (
               <HeaderIconButton
-                label="Group settings"
-                onClick={() => setShowGroupSettingsModal(true)}
-              >
-                <IconSlidersHorizontal className="h-4 w-4" />
-              </HeaderIconButton>
-            ) : (
-              <HeaderIconButton
-                label="Add friends to DM"
-                onClick={() => setShowAddFriendsModal(true)}
+                label={showMemberList ? 'Hide user list' : 'Show user list'}
+                active={showMemberList}
+                onClick={onToggleMemberList}
               >
                 <IconUsers className="h-4 w-4" />
               </HeaderIconButton>
-            )}
+            ) : null}
             <button
               type="button"
               onClick={() => setActivePanel('search')}

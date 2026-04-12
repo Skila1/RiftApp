@@ -28,7 +28,7 @@ type ConvResponse struct {
 
 func (r *DMRepo) ListConversations(ctx context.Context, userID string) ([]ConvResponse, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT c.id, c.created_at, c.updated_at, c.name, c.icon_url, c.is_group,
+		`SELECT c.id, c.created_at, c.updated_at, c.owner_id, c.name, c.icon_url, c.is_group,
 		        u.id, u.username, u.display_name, u.avatar_url, u.status, u.last_seen
 		 FROM conversations c
 		 JOIN conversation_members self_cm ON c.id = self_cm.conversation_id AND self_cm.user_id = $1
@@ -47,13 +47,14 @@ func (r *DMRepo) ListConversations(ctx context.Context, userID string) ([]ConvRe
 			conversationID string
 			createdAt      time.Time
 			updatedAt      time.Time
+			ownerID        *string
 			name           *string
 			iconURL        *string
 			isGroup        bool
 			member         models.User
 		)
 		if err := rows.Scan(
-			&conversationID, &createdAt, &updatedAt, &name, &iconURL, &isGroup,
+			&conversationID, &createdAt, &updatedAt, &ownerID, &name, &iconURL, &isGroup,
 			&member.ID, &member.Username, &member.DisplayName,
 			&member.AvatarURL, &member.Status, &member.LastSeen,
 		); err != nil {
@@ -67,6 +68,7 @@ func (r *DMRepo) ListConversations(ctx context.Context, userID string) ([]ConvRe
 					ID:        conversationID,
 					CreatedAt: createdAt,
 					UpdatedAt: updatedAt,
+					OwnerID:   ownerID,
 					Name:      name,
 					IconURL:   iconURL,
 					IsGroup:   isGroup,
@@ -159,10 +161,10 @@ func (r *DMRepo) FindConversationByMembers(ctx context.Context, tx pgx.Tx, membe
 	return existingID, err
 }
 
-func (r *DMRepo) CreateConversation(ctx context.Context, tx pgx.Tx, convID string, memberIDs []string, now time.Time, isGroup bool) error {
+func (r *DMRepo) CreateConversation(ctx context.Context, tx pgx.Tx, convID string, memberIDs []string, ownerID *string, now time.Time, isGroup bool) error {
 	_, err := tx.Exec(ctx,
-		`INSERT INTO conversations (id, created_at, updated_at, is_group) VALUES ($1, $2, $3, $4)`,
-		convID, now, now, isGroup)
+		`INSERT INTO conversations (id, created_at, updated_at, owner_id, is_group) VALUES ($1, $2, $3, $4, $5)`,
+		convID, now, now, ownerID, isGroup)
 	if err != nil {
 		return err
 	}
@@ -182,8 +184,8 @@ func (r *DMRepo) CreateConversation(ctx context.Context, tx pgx.Tx, convID strin
 func (r *DMRepo) GetConversation(ctx context.Context, convID string) (*models.Conversation, error) {
 	var conv models.Conversation
 	err := r.db.QueryRow(ctx,
-		`SELECT id, created_at, updated_at, name, icon_url, is_group FROM conversations WHERE id = $1`, convID,
-	).Scan(&conv.ID, &conv.CreatedAt, &conv.UpdatedAt, &conv.Name, &conv.IconURL, &conv.IsGroup)
+		`SELECT id, created_at, updated_at, owner_id, name, icon_url, is_group FROM conversations WHERE id = $1`, convID,
+	).Scan(&conv.ID, &conv.CreatedAt, &conv.UpdatedAt, &conv.OwnerID, &conv.Name, &conv.IconURL, &conv.IsGroup)
 	if err != nil {
 		return nil, err
 	}
@@ -307,6 +309,14 @@ func (r *DMRepo) AddConversationMembers(ctx context.Context, tx pgx.Tx, convID s
 	return nil
 }
 
+func (r *DMRepo) UpdateConversationOwnerTx(ctx context.Context, tx pgx.Tx, convID string, ownerID *string) error {
+	_, err := tx.Exec(ctx,
+		`UPDATE conversations SET owner_id = $2 WHERE id = $1`,
+		convID, ownerID,
+	)
+	return err
+}
+
 func (r *DMRepo) RemoveConversationMember(ctx context.Context, tx pgx.Tx, convID, userID string) error {
 	if _, err := tx.Exec(ctx,
 		`DELETE FROM conversation_members WHERE conversation_id = $1 AND user_id = $2`,
@@ -357,7 +367,7 @@ func (r *DMRepo) GetOtherMembers(ctx context.Context, convID, excludeUserID stri
 
 func (r *DMRepo) GetAllMembers(ctx context.Context, convID string) ([]string, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT user_id FROM conversation_members WHERE conversation_id = $1`, convID)
+		`SELECT user_id FROM conversation_members WHERE conversation_id = $1 ORDER BY joined_at ASC, user_id ASC`, convID)
 	if err != nil {
 		return nil, err
 	}
@@ -375,7 +385,7 @@ func (r *DMRepo) GetAllMembers(ctx context.Context, convID string) ([]string, er
 
 func (r *DMRepo) GetAllMembersTx(ctx context.Context, tx pgx.Tx, convID string) ([]string, error) {
 	rows, err := tx.Query(ctx,
-		`SELECT user_id FROM conversation_members WHERE conversation_id = $1`, convID)
+		`SELECT user_id FROM conversation_members WHERE conversation_id = $1 ORDER BY joined_at ASC, user_id ASC`, convID)
 	if err != nil {
 		return nil, err
 	}

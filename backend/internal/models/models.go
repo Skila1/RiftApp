@@ -186,6 +186,7 @@ type Conversation struct {
 	ID          string    `json:"id"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+	OwnerID     *string   `json:"owner_id,omitempty"`
 	Name        *string   `json:"name,omitempty"`
 	IconURL     *string   `json:"icon_url,omitempty"`
 	IsGroup     bool      `json:"is_group"`

@@ -240,6 +240,7 @@ export interface Conversation {
   id: string;
   created_at: string;
   updated_at: string;
+  owner_id?: string | null;
   name?: string | null;
   icon_url?: string | null;
   icon_updated_at?: string | null;

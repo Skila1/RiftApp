@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import HubSidebar from '../sidebar/HubSidebar';
 import StreamSidebar from '../sidebar/StreamSidebar';
 import DMSidebar from '../sidebar/DMSidebar';
+import GroupDMMemberList from '../sidebar/GroupDMMemberList';
 import MemberList from '../sidebar/MemberList';
 import ChatPanel from '../chat/ChatPanel';
 import VoiceView from '../voice/VoiceView';
@@ -27,6 +28,7 @@ import { useVoiceStore } from '../../stores/voiceStore';
 import { useVoiceChannelUiStore } from '../../stores/voiceChannelUiStore';
 import { getDesktop } from '../../utils/desktop';
 import { getDesktopAttentionSignalCount } from '../../utils/desktopAttention';
+import { isGroupConversation } from '../../utils/conversations';
 
 export default function AppLayout() {
   useWebSocket();
@@ -41,6 +43,7 @@ export default function AppLayout() {
   const loadConversationCallStates = useVoiceStore((s) => s.loadConversationCallStates);
   const conversationCallRings = useVoiceStore((s) => s.conversationCallRings);
   const activeConversationId = useDMStore((s) => s.activeConversationId);
+  const conversations = useDMStore((s) => s.conversations);
   const streamUnreads = useStreamStore((s) => s.streamUnreads);
   const params = useParams<{ hubId?: string; streamId?: string; conversationId?: string }>();
   const desktopAttentionSignalCount = useMemo(() => getDesktopAttentionSignalCount({
@@ -158,6 +161,10 @@ export default function AppLayout() {
   }, [params.hubId, params.conversationId]);
 
   const activeHubId = useHubStore((s) => s.activeHubId);
+  const activeConversation = useMemo(
+    () => conversations.find((conversation) => conversation.id === activeConversationId) ?? null,
+    [activeConversationId, conversations],
+  );
   const streams = useStreamStore((s) => s.streams);
   const voiceTargetId = useVoiceStore((s) => s.targetId);
   const voiceConnecting = useVoiceStore((s) => s.connecting);
@@ -166,6 +173,14 @@ export default function AppLayout() {
   const activeVoiceChannelKind = useVoiceChannelUiStore((s) => s.activeChannelKind);
   const resetVoiceView = useVoiceChannelUiStore((s) => s.resetVoiceView);
   const showFullVoiceView = voiceUiOpen && activeVoiceChannelKind !== null;
+  const showGroupDMMemberList = Boolean(
+    activeConversation
+    && isGroupConversation(activeConversation, currentUserId)
+    && !activeHubId
+    && !showFullVoiceView
+    && showMemberList
+    && !searchSidebarOpen,
+  );
 
   useEffect(() => {
     if (!voiceConnecting && !voiceTargetId) {
@@ -208,7 +223,8 @@ export default function AppLayout() {
           onSearchPanelVisibilityChange={setSearchSidebarOpen}
         />
       )}
-      {activeHubId && !activeConversationId && !showFullVoiceView && showMemberList && !searchSidebarOpen && <MemberList />}
+      {activeHubId && !activeConversationId && !showFullVoiceView && showMemberList && !searchSidebarOpen ? <MemberList /> : null}
+      {showGroupDMMemberList && activeConversation ? <GroupDMMemberList conversation={activeConversation} /> : null}
       <MiniProfilePopover />
       <FullProfileModal />
       <SelfProfilePopover />

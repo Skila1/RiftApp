@@ -11,6 +11,7 @@ import {
 } from '../../utils/conversations';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import AddFriendsToDMModal from './AddFriendsToDMModal';
+import CrownIcon from '../shared/CrownIcon';
 import ModalOverlay from '../shared/ModalOverlay';
 
 interface Props {
@@ -52,14 +53,19 @@ export default function GroupDMSettingsModal({ conversation, onClose }: Props) {
     setIconFile(null);
   }, [currentConversation.id, currentConversation.name, currentConversation.icon_url]);
 
+  const ownerId = currentConversation.owner_id ?? null;
+  const canRemoveMembers = Boolean(ownerId && ownerId === currentUserId);
+
   const members = useMemo(() => {
     const entries = getConversationMembers(currentConversation);
     return [...entries].sort((left, right) => {
-      if (left.id === currentUserId) return -1;
-      if (right.id === currentUserId) return 1;
+	      if (left.id === ownerId && right.id !== ownerId) return -1;
+	      if (right.id === ownerId && left.id !== ownerId) return 1;
+	      if (left.id === currentUserId) return -1;
+	      if (right.id === currentUserId) return 1;
       return getUserLabel(left).localeCompare(getUserLabel(right));
     });
-  }, [currentConversation, currentUserId]);
+  }, [currentConversation, currentUserId, ownerId]);
 
   const initialName = currentConversation.name ?? '';
   const initialIcon = getConversationIconUrl(currentConversation) ?? null;
@@ -191,13 +197,17 @@ export default function GroupDMSettingsModal({ conversation, onClose }: Props) {
                     {saving ? 'Saving…' : 'Save Changes'}
                   </button>
                 </div>
+                <p className="mt-3 text-xs text-[#949ba4]">Anyone in this group can change the name or icon.</p>
               </div>
 
               <div className="rounded-2xl border border-white/8 bg-[#17181c] p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#949ba4]">Members</div>
-                    <div className="mt-1 text-sm text-[#949ba4]">{members.length} member{members.length === 1 ? '' : 's'}</div>
+                    <div className="mt-1 text-sm text-[#949ba4]">
+                      {members.length} member{members.length === 1 ? '' : 's'}
+                      {ownerId ? ' • Crown marks the group owner' : ''}
+                    </div>
                   </div>
                   <button
                     type="button"
@@ -216,10 +226,13 @@ export default function GroupDMSettingsModal({ conversation, onClose }: Props) {
                       <div key={member.id} className="flex items-center gap-3 rounded-xl border border-white/6 bg-[#111214] px-3 py-2.5">
                         <MemberAvatar label={label} avatarUrl={member.avatar_url} />
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium text-[#f2f3f5]">{label}</div>
+                          <div className="flex items-center gap-1.5 truncate text-sm font-medium text-[#f2f3f5]">
+                            <span className="truncate">{label}</span>
+                            {ownerId === member.id ? <CrownIcon className="h-3.5 w-3.5 shrink-0 text-[#f0b232]" /> : null}
+                          </div>
                           <div className="truncate text-xs text-[#949ba4]">@{member.username}{isCurrentUser ? ' • You' : ''}</div>
                         </div>
-                        {!isCurrentUser ? (
+                        {!isCurrentUser && canRemoveMembers ? (
                           <button
                             type="button"
                             onClick={() => void handleRemoveMember(member.id)}
@@ -233,6 +246,9 @@ export default function GroupDMSettingsModal({ conversation, onClose }: Props) {
                     );
                   })}
                 </div>
+                {!canRemoveMembers ? (
+                  <div className="mt-3 text-xs text-[#949ba4]">Only the group owner can remove members.</div>
+                ) : null}
               </div>
 
               {error ? <div className="text-sm text-[#ed4245]">{error}</div> : null}

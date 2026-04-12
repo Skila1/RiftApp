@@ -463,7 +463,12 @@ func (s *DMService) createOrOpenConversation(ctx context.Context, userID string,
 	convID := uuid.New().String()
 	now := time.Now()
 
-	if err := s.dmRepo.CreateConversation(ctx, tx, convID, memberIDs, now, requireGroup); err != nil {
+	var ownerID *string
+	if requireGroup {
+		ownerID = &userID
+	}
+
+	if err := s.dmRepo.CreateConversation(ctx, tx, convID, memberIDs, ownerID, now, requireGroup); err != nil {
 		return repository.ConvResponse{}, false, apperror.Internal("failed to create conversation", err)
 	}
 
@@ -648,6 +653,11 @@ func (s *DMService) RemoveMember(ctx context.Context, userID, convID, targetUser
 	if !targetIsMember {
 		return apperror.NotFound("conversation member not found")
 	}
+	if targetUserID != userID {
+		if conversation.OwnerID == nil || *conversation.OwnerID != userID {
+			return apperror.Forbidden("only the group owner can remove members")
+		}
+	}
 
 	tx, err := s.dmRepo.BeginTx(ctx)
 	if err != nil {
@@ -674,6 +684,12 @@ func (s *DMService) RemoveMember(ctx context.Context, userID, convID, targetUser
 			return apperror.Internal("failed to delete conversation", err)
 		}
 	} else {
+		if conversation.OwnerID != nil && *conversation.OwnerID == targetUserID {
+			nextOwnerID := remainingMembers[0]
+			if err := s.dmRepo.UpdateConversationOwnerTx(ctx, tx, convID, &nextOwnerID); err != nil {
+				return apperror.Internal("failed to transfer conversation owner", err)
+			}
+		}
 		if err := s.dmRepo.UpdateConversationTimestampTx(ctx, tx, convID, time.Now()); err != nil {
 			return apperror.Internal("failed to update conversation", err)
 		}
