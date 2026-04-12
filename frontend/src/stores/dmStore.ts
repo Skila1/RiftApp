@@ -9,8 +9,64 @@ import { useStreamStore } from './streamStore';
 import { useVoiceChannelUiStore } from './voiceChannelUiStore';
 import { useVoiceStore } from './voiceStore';
 
+const HIDDEN_DM_STORAGE_KEY = 'riftapp.hidden-dm-conversations.v1';
+
 const sumDmUnreads = (conversations: Conversation[]) =>
   conversations.reduce((acc, c) => acc + (c.unread_count ?? 0), 0);
+
+function normalizeHiddenConversationIds(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const next: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string') {
+      continue;
+    }
+    const normalized = item.trim();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    next.push(normalized);
+  }
+  return next;
+}
+
+function loadPersistedHiddenConversationIds(): string[] {
+  try {
+    const raw = localStorage.getItem(HIDDEN_DM_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    return normalizeHiddenConversationIds(JSON.parse(raw));
+  } catch {
+    return [];
+  }
+}
+
+function persistHiddenConversationIds(hiddenConversationIds: string[]) {
+  try {
+    localStorage.setItem(HIDDEN_DM_STORAGE_KEY, JSON.stringify(hiddenConversationIds));
+  } catch {
+    /* ignore storage failures */
+  }
+}
+
+function showHiddenConversation(hiddenConversationIds: string[], conversationId: string) {
+  return hiddenConversationIds.filter((id) => id !== conversationId);
+}
+
+function hideConversationId(hiddenConversationIds: string[], conversationId: string) {
+  if (!conversationId.trim() || hiddenConversationIds.includes(conversationId)) {
+    return hiddenConversationIds;
+  }
+  return [...hiddenConversationIds, conversationId];
+}
+
+const persistedHiddenConversationIds = loadPersistedHiddenConversationIds();
 
 function upsertConversationList(conversations: Conversation[], nextConversation: Conversation): Conversation[] {
   const existing = conversations.find((conversation) => conversation.id === nextConversation.id);
@@ -35,6 +91,7 @@ interface DMState {
   dmMessagesLoading: boolean;
   dmTotalUnread: number;
   dmPinMutationVersion: number;
+  hiddenConversationIds: string[];
 
   loadConversations: () => Promise<void>;
   openDM: (recipientId: string) => Promise<void>;
@@ -58,6 +115,8 @@ interface DMState {
   addConversation: (conv: Conversation) => void;
   updateConversation: (conv: Conversation) => void;
   removeConversation: (conversationId: string) => void;
+  hideConversation: (conversationId: string) => void;
+  showConversation: (conversationId: string) => void;
   ackDM: (convId: string) => Promise<void>;
   readStates: () => Promise<void>;
   patchUser: (user: User) => void;
@@ -73,6 +132,7 @@ export const useDMStore = create<DMState>((set, get) => ({
   dmMessagesLoading: false,
   dmTotalUnread: 0,
   dmPinMutationVersion: 0,
+  hiddenConversationIds: persistedHiddenConversationIds,
 
   loadConversations: async () => {
     try {
@@ -94,9 +154,12 @@ export const useDMStore = create<DMState>((set, get) => ({
     const conv = normalizeConversation(await api.createOrOpenDM(recipientId));
     set((s) => {
       const conversations = upsertConversationList(s.conversations, conv);
+      const hiddenConversationIds = showHiddenConversation(s.hiddenConversationIds, conv.id);
+      persistHiddenConversationIds(hiddenConversationIds);
       return {
         conversations,
         dmTotalUnread: sumDmUnreads(conversations),
+        hiddenConversationIds,
       };
     });
     await get().setActiveConversation(conv.id);
@@ -106,7 +169,9 @@ export const useDMStore = create<DMState>((set, get) => ({
     const conv = normalizeConversation(await api.createOrOpenGroupDM(memberIds));
     set((s) => {
       const conversations = upsertConversationList(s.conversations, conv);
-      return { conversations, dmTotalUnread: sumDmUnreads(conversations) };
+      const hiddenConversationIds = showHiddenConversation(s.hiddenConversationIds, conv.id);
+      persistHiddenConversationIds(hiddenConversationIds);
+      return { conversations, dmTotalUnread: sumDmUnreads(conversations), hiddenConversationIds };
     });
     await get().setActiveConversation(conv.id);
     return conv;
@@ -143,7 +208,13 @@ export const useDMStore = create<DMState>((set, get) => ({
     useStreamStore.getState().clearStreams();
     useMessageStore.getState().clearMessages();
 
-    set({ activeConversationId: convId, dmMessages: [] });
+    set((s) => {
+      const hiddenConversationIds = showHiddenConversation(s.hiddenConversationIds, convId);
+      if (hiddenConversationIds !== s.hiddenConversationIds) {
+        persistHiddenConversationIds(hiddenConversationIds);
+      }
+      return { activeConversationId: convId, dmMessages: [], hiddenConversationIds };
+    });
     await get().loadDMMessages(convId);
   },
 
@@ -237,6 +308,12 @@ export const useDMStore = create<DMState>((set, get) => ({
       const isActive = nextMessage.conversation_id === s.activeConversationId;
 	  const alreadyKnown = s.dmMessages.some((m) => m.id === nextMessage.id);
       const isOwn = nextMessage.author_id === currentUserId;
+      const hiddenConversationIds = isOwn || !nextMessage.conversation_id
+        ? s.hiddenConversationIds
+        : showHiddenConversation(s.hiddenConversationIds, nextMessage.conversation_id);
+      if (hiddenConversationIds !== s.hiddenConversationIds) {
+        persistHiddenConversationIds(hiddenConversationIds);
+      }
 
       const conversations = s.conversations.map((c) => {
         if (c.id !== nextMessage.conversation_id) return c;
@@ -251,12 +328,12 @@ export const useDMStore = create<DMState>((set, get) => ({
       const dmTotalUnread = sumDmUnreads(conversations);
 
       if (!isActive) {
-        return { conversations, dmTotalUnread };
+        return { conversations, dmTotalUnread, hiddenConversationIds };
       }
       if (alreadyKnown) {
-        return { conversations, dmTotalUnread };
+        return { conversations, dmTotalUnread, hiddenConversationIds };
       }
-      return { dmMessages: [...s.dmMessages, nextMessage], conversations, dmTotalUnread };
+      return { dmMessages: [...s.dmMessages, nextMessage], conversations, dmTotalUnread, hiddenConversationIds };
     });
   },
 
@@ -307,7 +384,9 @@ export const useDMStore = create<DMState>((set, get) => ({
     const nextConversation = normalizeConversation(conv);
     set((s) => {
       const conversations = upsertConversationList(s.conversations, nextConversation);
-      return { conversations, dmTotalUnread: sumDmUnreads(conversations) };
+      const hiddenConversationIds = showHiddenConversation(s.hiddenConversationIds, nextConversation.id);
+      persistHiddenConversationIds(hiddenConversationIds);
+      return { conversations, dmTotalUnread: sumDmUnreads(conversations), hiddenConversationIds };
     });
   },
 
@@ -315,7 +394,9 @@ export const useDMStore = create<DMState>((set, get) => ({
     const nextConversation = normalizeConversation(conv);
     set((s) => {
       const conversations = upsertConversationList(s.conversations, nextConversation);
-      return { conversations, dmTotalUnread: sumDmUnreads(conversations) };
+      const hiddenConversationIds = showHiddenConversation(s.hiddenConversationIds, nextConversation.id);
+      persistHiddenConversationIds(hiddenConversationIds);
+      return { conversations, dmTotalUnread: sumDmUnreads(conversations), hiddenConversationIds };
     });
   },
 
@@ -338,12 +419,44 @@ export const useDMStore = create<DMState>((set, get) => ({
 
     set((s) => {
       const conversations = s.conversations.filter((conversation) => conversation.id !== conversationId);
+      const hiddenConversationIds = showHiddenConversation(s.hiddenConversationIds, conversationId);
+      persistHiddenConversationIds(hiddenConversationIds);
       return {
         conversations,
         dmTotalUnread: sumDmUnreads(conversations),
         activeConversationId: isActiveConversation ? null : s.activeConversationId,
         dmMessages: isActiveConversation ? [] : s.dmMessages,
+        hiddenConversationIds,
       };
+    });
+  },
+
+  hideConversation: (conversationId) => {
+    if (!conversationId.trim()) {
+      return;
+    }
+
+    const isActiveConversation = get().activeConversationId === conversationId;
+    if (isActiveConversation) {
+      useVoiceChannelUiStore.getState().closeVoiceView();
+    }
+
+    set((s) => {
+      const hiddenConversationIds = hideConversationId(s.hiddenConversationIds, conversationId);
+      persistHiddenConversationIds(hiddenConversationIds);
+      return {
+        hiddenConversationIds,
+        activeConversationId: isActiveConversation ? null : s.activeConversationId,
+        dmMessages: isActiveConversation ? [] : s.dmMessages,
+      };
+    });
+  },
+
+  showConversation: (conversationId) => {
+    set((s) => {
+      const hiddenConversationIds = showHiddenConversation(s.hiddenConversationIds, conversationId);
+      persistHiddenConversationIds(hiddenConversationIds);
+      return { hiddenConversationIds };
     });
   },
 

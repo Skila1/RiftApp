@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDMStore } from '../../stores/dmStore';
 import { useAuthStore } from '../../stores/auth';
 import { useAppSettingsStore } from '../../stores/appSettingsStore';
@@ -6,7 +6,9 @@ import { isConversationMuted, useConversationMuteStore } from '../../stores/conv
 import { useHubStore } from '../../stores/hubStore';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useFriendStore } from '../../stores/friendStore';
+import { useProfilePopoverStore } from '../../stores/profilePopoverStore';
 import { useVoiceStore } from '../../stores/voiceStore';
+import { useVoiceChannelUiStore } from '../../stores/voiceChannelUiStore';
 import { api } from '../../api/client';
 import type { Conversation, User } from '../../types';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
@@ -25,7 +27,6 @@ import BotBadge from '../shared/BotBadge';
 import { MenuOverlay, menuDivider } from '../context-menus/MenuOverlay';
 import GroupDMSettingsModal from '../modals/GroupDMSettingsModal';
 import ConfirmModal from '../modals/ConfirmModal';
-import InviteHubToConversationModal from '../modals/InviteHubToConversationModal';
 
 function SearchIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -126,6 +127,8 @@ export default function DMSidebar() {
   const loadConversations = useDMStore((s) => s.loadConversations);
   const ackDM = useDMStore((s) => s.ackDM);
   const leaveConversation = useDMStore((s) => s.leaveConversation);
+  const hideConversation = useDMStore((s) => s.hideConversation);
+  const hiddenConversationIds = useDMStore((s) => s.hiddenConversationIds);
   const currentUserId = useAuthStore((s) => s.user?.id);
   const developerMode = useAppSettingsStore((s) => s.developerMode);
   const hubs = useHubStore((s) => s.hubs);
@@ -138,8 +141,11 @@ export default function DMSidebar() {
   const conversationVoiceMembers = useVoiceStore((s) => s.conversationVoiceMembers);
   const conversationCallRings = useVoiceStore((s) => s.conversationCallRings);
   const conversationCallOutcomes = useVoiceStore((s) => s.conversationCallOutcomes);
+  const openProfileModal = useProfilePopoverStore((s) => s.openModal);
   const pendingCount = useFriendStore((s) => s.pendingCount);
   const loadPendingCount = useFriendStore((s) => s.loadPendingCount);
+  const removeFriend = useFriendStore((s) => s.removeFriend);
+  const blockUser = useFriendStore((s) => s.blockUser);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResult, setSearchResult] = useState<User | null>(null);
@@ -148,11 +154,12 @@ export default function DMSidebar() {
   const [opening, setOpening] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ conversation: Conversation; x: number; y: number } | null>(null);
   const [editConversation, setEditConversation] = useState<Conversation | null>(null);
-  const [inviteConversation, setInviteConversation] = useState<Conversation | null>(null);
   const [leaveConversationTarget, setLeaveConversationTarget] = useState<Conversation | null>(null);
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
   const [muteSubmenuOpen, setMuteSubmenuOpen] = useState(false);
+  const [inviteSubmenuOpen, setInviteSubmenuOpen] = useState(false);
+  const [inviteSendingHubId, setInviteSendingHubId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -212,6 +219,8 @@ export default function DMSidebar() {
 
   const closeContextMenu = () => {
     setMuteSubmenuOpen(false);
+    setInviteSubmenuOpen(false);
+    setInviteSendingHubId(null);
     setContextMenu(null);
   };
 
@@ -219,6 +228,7 @@ export default function DMSidebar() {
     event.preventDefault();
     clearExpiredConversationMutes();
     setMuteSubmenuOpen(false);
+    setInviteSubmenuOpen(false);
     setContextMenu({ conversation, x: event.clientX, y: event.clientY });
   };
 
@@ -249,6 +259,10 @@ export default function DMSidebar() {
   };
 
   const filteredConversations = conversations.filter((conversation) => {
+    if (!isGroupConversation(conversation, currentUserId) && hiddenConversationIds.includes(conversation.id)) {
+      return false;
+    }
+
     const normalizedQuery = searchQuery.trim().toLowerCase();
     if (!normalizedQuery) {
       return true;
@@ -269,6 +283,17 @@ export default function DMSidebar() {
   const contextConversationMuted = contextMenu
     ? isConversationMuted(mutedUntilByConversationId[contextMenu.conversation.id])
     : false;
+  const contextConversation = contextMenu?.conversation ?? null;
+  const contextIsGroupConversation = Boolean(contextConversation && isGroupConversation(contextConversation, currentUserId));
+  const contextDirectUser = contextConversation && !contextIsGroupConversation
+    ? getConversationOtherMembers(contextConversation, currentUserId)[0] ?? contextConversation.recipient ?? null
+    : null;
+  const contextMuteLabel = contextDirectUser ? `Mute @${contextDirectUser.username}` : 'Mute Conversation';
+  const contextUnmuteLabel = contextDirectUser ? `Unmute @${contextDirectUser.username}` : 'Unmute Conversation';
+  const sortedInviteHubs = useMemo(
+    () => [...hubs].sort((left, right) => left.name.localeCompare(right.name)),
+    [hubs],
+  );
 
   const muteOptions: Array<{ label: string; durationMs: number | null }> = [
     { label: 'For 15 Minutes', durationMs: 15 * 60 * 1000 },
@@ -281,6 +306,74 @@ export default function DMSidebar() {
 
   const menuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
   const submenuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
+
+  const handleStartDirectCall = useCallback(async (conversation: Conversation) => {
+    if (!currentUserId) {
+      return;
+    }
+
+    if (activeConversationId !== conversation.id) {
+      await setActiveConversation(conversation.id);
+    }
+
+    const voiceState = useVoiceStore.getState();
+    const isCurrentConversationCall = voiceState.targetKind === 'conversation'
+      && voiceState.conversationId === conversation.id
+      && voiceState.connected;
+    if (isCurrentConversationCall) {
+      useVoiceChannelUiStore.getState().setActiveChannel(conversation.id, 'conversation');
+      return;
+    }
+
+    const existingRing = voiceState.conversationCallRings[conversation.id];
+    const activeMembers = voiceState.conversationVoiceMembers[conversation.id] ?? [];
+    const hasOtherParticipants = activeMembers.some((memberId) => memberId !== currentUserId);
+    let startedRing = false;
+
+    if (!hasOtherParticipants && !existingRing) {
+      await voiceState.startConversationCallRing(conversation.id, 'audio');
+      startedRing = true;
+    }
+
+    useVoiceChannelUiStore.getState().setActiveChannel(conversation.id, 'conversation');
+    await useVoiceStore.getState().joinConversation(conversation.id);
+
+    const joinedState = useVoiceStore.getState();
+    const joinedConversationCall = joinedState.targetKind === 'conversation'
+      && joinedState.conversationId === conversation.id
+      && joinedState.connected;
+    if (startedRing && !joinedConversationCall) {
+      await joinedState.cancelConversationCallRing(conversation.id);
+    }
+  }, [activeConversationId, currentUserId, setActiveConversation]);
+
+  const handleInviteDirectConversationToHub = useCallback(async (conversationId: string, hubId: string) => {
+    setInviteSendingHubId(hubId);
+    try {
+      const invite = await api.createInvite(hubId, { expires_in: 604800 });
+      const message = await api.sendDMMessage(conversationId, `${window.location.origin}/invite/${invite.code}`);
+      useDMStore.getState().addDMMessage(message);
+      closeContextMenu();
+    } finally {
+      setInviteSendingHubId(null);
+    }
+  }, []);
+
+  const handleRemoveFriend = useCallback(async (userId: string) => {
+    try {
+      await removeFriend(userId);
+    } catch {
+      /* ignore */
+    }
+  }, [removeFriend]);
+
+  const handleBlockUser = useCallback(async (userId: string) => {
+    try {
+      await blockUser(userId);
+    } catch {
+      /* ignore */
+    }
+  }, [blockUser]);
 
   return (
     <>
@@ -537,22 +630,7 @@ export default function DMSidebar() {
               Mark as Read
             </button>
 
-            {menuDivider()}
-
-            {!isGroupConversation(contextMenu.conversation, currentUserId) ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setInviteConversation(contextMenu.conversation);
-                  closeContextMenu();
-                }}
-                className={menuItemClassName}
-              >
-                Invites
-              </button>
-            ) : null}
-
-            {isGroupConversation(contextMenu.conversation, currentUserId) ? (
+            {contextIsGroupConversation ? (
               <button
                 type="button"
                 onClick={() => {
@@ -565,56 +643,198 @@ export default function DMSidebar() {
               </button>
             ) : null}
 
-            {menuDivider()}
-
-            <div
-              className="relative mx-0.5"
-              onMouseEnter={() => {
-                if (!contextConversationMuted) {
-                  setMuteSubmenuOpen(true);
-                }
-              }}
-              onMouseLeave={() => setMuteSubmenuOpen(false)}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  if (contextConversationMuted) {
-                    unmuteConversation(contextMenu.conversation.id);
-                  } else {
-                    muteConversation(contextMenu.conversation.id, null);
-                  }
-                  closeContextMenu();
-                }}
-                className={`${menuItemClassName} justify-between ${muteSubmenuOpen ? 'bg-[#232428]' : ''}`}
-              >
-                <span className="flex-1 text-left">{contextConversationMuted ? 'Unmute Conversation' : 'Mute Conversation'}</span>
-                {!contextConversationMuted ? <span className="text-[#8f949c]">›</span> : null}
-              </button>
-
-              {!contextConversationMuted && muteSubmenuOpen ? (
-                <div className="absolute left-full top-0 z-10 pl-1" onMouseEnter={() => setMuteSubmenuOpen(true)}>
-                  <div className="rift-context-submenu-shell min-w-[220px]">
-                    {muteOptions.map((option) => (
-                      <button
-                        key={option.label}
-                        type="button"
-                        onClick={() => {
-                          muteConversation(contextMenu.conversation.id, option.durationMs);
-                          closeContextMenu();
-                        }}
-                        className={submenuItemClassName}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
-            {isGroupConversation(contextMenu.conversation, currentUserId) ? (
+            {!contextIsGroupConversation && contextDirectUser ? (
               <>
+                {menuDivider()}
+                <button
+                  type="button"
+                  onClick={() => {
+                    openProfileModal(contextDirectUser);
+                    closeContextMenu();
+                  }}
+                  className={menuItemClassName}
+                >
+                  Profile
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const conversation = contextMenu.conversation;
+                    closeContextMenu();
+                    void handleStartDirectCall(conversation);
+                  }}
+                  className={menuItemClassName}
+                >
+                  Start a Call
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    hideConversation(contextMenu.conversation.id);
+                    closeContextMenu();
+                  }}
+                  className={menuItemClassName}
+                >
+                  Close DM
+                </button>
+
+                {menuDivider()}
+
+                <div
+                  className="relative mx-0.5"
+                  onMouseEnter={() => setInviteSubmenuOpen(true)}
+                  onMouseLeave={() => setInviteSubmenuOpen(false)}
+                >
+                  <div className={`${menuItemClassName} cursor-default justify-between ${inviteSubmenuOpen ? 'bg-[#232428]' : ''}`}>
+                    <span>Invite to Server</span>
+                    <span className="text-[#8f949c]">›</span>
+                  </div>
+
+                  {inviteSubmenuOpen ? (
+                    <div className="absolute left-full top-0 z-10 pl-1" onMouseEnter={() => setInviteSubmenuOpen(true)}>
+                      <div className="rift-context-submenu-shell min-w-[220px] max-h-[min(70vh,340px)] overflow-y-auto">
+                        {sortedInviteHubs.length === 0 ? (
+                          <div className="mx-1.5 flex w-[calc(100%-12px)] items-center rounded-[6px] px-2.5 py-[7px] text-[13px] text-[#8f949c]">
+                            No servers available
+                          </div>
+                        ) : (
+                          sortedInviteHubs.map((hub) => (
+                            <button
+                              key={hub.id}
+                              type="button"
+                              onClick={() => {
+                                void handleInviteDirectConversationToHub(contextMenu.conversation.id, hub.id);
+                              }}
+                              disabled={inviteSendingHubId != null}
+                              className={inviteSendingHubId != null ? `${submenuItemClassName} cursor-not-allowed opacity-60` : submenuItemClassName}
+                            >
+                              <span className="truncate">{inviteSendingHubId === hub.id ? 'Sending...' : hub.name}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeContextMenu();
+                    void handleRemoveFriend(contextDirectUser.id);
+                  }}
+                  className={menuItemClassName}
+                >
+                  Remove Friend
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeContextMenu();
+                    void handleBlockUser(contextDirectUser.id);
+                  }}
+                  className={`${menuItemClassName} text-[#f38b8f]`}
+                >
+                  Block
+                </button>
+
+                <div
+                  className="relative mx-0.5"
+                  onMouseEnter={() => {
+                    if (!contextConversationMuted) {
+                      setMuteSubmenuOpen(true);
+                    }
+                  }}
+                  onMouseLeave={() => setMuteSubmenuOpen(false)}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (contextConversationMuted) {
+                        unmuteConversation(contextMenu.conversation.id);
+                      } else {
+                        muteConversation(contextMenu.conversation.id, null);
+                      }
+                      closeContextMenu();
+                    }}
+                    className={`${menuItemClassName} justify-between ${muteSubmenuOpen ? 'bg-[#232428]' : ''}`}
+                  >
+                    <span className="flex-1 text-left">{contextConversationMuted ? contextUnmuteLabel : contextMuteLabel}</span>
+                    {!contextConversationMuted ? <span className="text-[#8f949c]">›</span> : null}
+                  </button>
+
+                  {!contextConversationMuted && muteSubmenuOpen ? (
+                    <div className="absolute left-full top-0 z-10 pl-1" onMouseEnter={() => setMuteSubmenuOpen(true)}>
+                      <div className="rift-context-submenu-shell min-w-[220px]">
+                        {muteOptions.map((option) => (
+                          <button
+                            key={option.label}
+                            type="button"
+                            onClick={() => {
+                              muteConversation(contextMenu.conversation.id, option.durationMs);
+                              closeContextMenu();
+                            }}
+                            className={submenuItemClassName}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
+
+            {contextIsGroupConversation ? (
+              <>
+                {menuDivider()}
+                <div
+                  className="relative mx-0.5"
+                  onMouseEnter={() => {
+                    if (!contextConversationMuted) {
+                      setMuteSubmenuOpen(true);
+                    }
+                  }}
+                  onMouseLeave={() => setMuteSubmenuOpen(false)}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (contextConversationMuted) {
+                        unmuteConversation(contextMenu.conversation.id);
+                      } else {
+                        muteConversation(contextMenu.conversation.id, null);
+                      }
+                      closeContextMenu();
+                    }}
+                    className={`${menuItemClassName} justify-between ${muteSubmenuOpen ? 'bg-[#232428]' : ''}`}
+                  >
+                    <span className="flex-1 text-left">{contextConversationMuted ? 'Unmute Conversation' : 'Mute Conversation'}</span>
+                    {!contextConversationMuted ? <span className="text-[#8f949c]">›</span> : null}
+                  </button>
+
+                  {!contextConversationMuted && muteSubmenuOpen ? (
+                    <div className="absolute left-full top-0 z-10 pl-1" onMouseEnter={() => setMuteSubmenuOpen(true)}>
+                      <div className="rift-context-submenu-shell min-w-[220px]">
+                        {muteOptions.map((option) => (
+                          <button
+                            key={option.label}
+                            type="button"
+                            onClick={() => {
+                              muteConversation(contextMenu.conversation.id, option.durationMs);
+                              closeContextMenu();
+                            }}
+                            className={submenuItemClassName}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
                 {menuDivider()}
                 <button
                   type="button"
@@ -630,7 +850,34 @@ export default function DMSidebar() {
               </>
             ) : null}
 
-            {developerMode ? (
+            {developerMode && contextDirectUser ? (
+              <>
+                {menuDivider()}
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(contextDirectUser.id);
+                    closeContextMenu();
+                  }}
+                  className={`${menuItemClassName} justify-between gap-2`}
+                >
+                  <span>Copy User ID</span>
+                  <span className="text-[10px] font-mono font-semibold px-1 py-0.5 rounded bg-[#1e1f22] border border-[#3f4147] text-[#b5bac1]">ID</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleCopyConversationId(contextMenu.conversation.id);
+                  }}
+                  className={`${menuItemClassName} justify-between gap-2`}
+                >
+                  <span>Copy Channel ID</span>
+                  <span className="text-[10px] font-mono font-semibold px-1 py-0.5 rounded bg-[#1e1f22] border border-[#3f4147] text-[#b5bac1]">ID</span>
+                </button>
+              </>
+            ) : null}
+
+            {developerMode && contextIsGroupConversation ? (
               <>
                 {menuDivider()}
                 <button
@@ -655,14 +902,6 @@ export default function DMSidebar() {
           onClose={() => setEditConversation(null)}
         />
       ) : null}
-
-      {inviteConversation ? (
-        <InviteHubToConversationModal
-          conversation={inviteConversation}
-          onClose={() => setInviteConversation(null)}
-        />
-      ) : null}
-
       <ConfirmModal
         isOpen={leaveConversationTarget != null}
         title="Leave Group"
