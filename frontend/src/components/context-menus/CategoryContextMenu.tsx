@@ -62,11 +62,12 @@ export default function CategoryContextMenu({
       setDeleteBusy(false);
     }
   };
+  const menuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
 
   return (
     <>
       <MenuOverlay x={x} y={y} onClose={onClose}>
-        <div className="rift-context-menu-shell min-w-[200px] text-[13px] text-[#dbdee1]">
+        <div className="rift-context-menu-shell text-[13px] text-[#dbdee1]">
           {/* Collapse / Expand */}
           <button
             type="button"
@@ -74,9 +75,8 @@ export default function CategoryContextMenu({
               onToggleCollapse(category.id);
               onClose();
             }}
-            className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+            className={menuItemClassName}
           >
-            <span className="w-4 shrink-0" aria-hidden />
             {isCollapsed ? 'Expand Category' : 'Collapse Category'}
           </button>
 
@@ -86,9 +86,8 @@ export default function CategoryContextMenu({
               onCollapseAll();
               onClose();
             }}
-            className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+            className={menuItemClassName}
           >
-            <span className="w-4 shrink-0" aria-hidden />
             Collapse All Categories
           </button>
 
@@ -102,9 +101,8 @@ export default function CategoryContextMenu({
                   onEditCategory(category);
                   onClose();
                 }}
-                className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+                className={menuItemClassName}
               >
-                <span className="w-4 shrink-0" aria-hidden />
                 Edit Category
               </button>
 
@@ -116,9 +114,8 @@ export default function CategoryContextMenu({
                   onClose();
                   onCreateTextChannel(category.id);
                 }}
-                className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+                className={menuItemClassName}
               >
-                <span className="w-4 shrink-0" aria-hidden />
                 Create Text Channel
               </button>
               <button
@@ -127,9 +124,8 @@ export default function CategoryContextMenu({
                   onClose();
                   onCreateVoiceChannel(category.id);
                 }}
-                className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+                className={menuItemClassName}
               >
-                <span className="w-4 shrink-0" aria-hidden />
                 Create Voice Channel
               </button>
 
@@ -138,9 +134,8 @@ export default function CategoryContextMenu({
               <button
                 type="button"
                 onClick={() => setDeleteOpen(true)}
-                className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#d83c3e]/20 text-[#d83c3e] text-left w-[calc(100%-8px)]"
+                className={`${menuItemClassName} text-[#d83c3e] hover:bg-[#d83c3e]/20`}
               >
-                <span className="w-4 shrink-0" aria-hidden />
                 Delete Category
               </button>
             </>
@@ -152,7 +147,7 @@ export default function CategoryContextMenu({
               <button
                 type="button"
                 onClick={copyCategoryId}
-                className="flex items-center justify-between gap-2 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+                className={`${menuItemClassName} justify-between gap-2`}
               >
                 <span>Copy Category ID</span>
                 <span className="text-[10px] font-mono font-semibold px-1 py-0.5 rounded bg-[#1e1f22] border border-[#3f4147] text-[#b5bac1]">ID</span>

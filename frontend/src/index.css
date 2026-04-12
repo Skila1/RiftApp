@@ -306,6 +306,7 @@
   }
 
   .rift-context-menu-shell {
+    width: min(208px, calc(100vw - 16px));
     @apply select-none overflow-hidden rounded-lg border border-riftapp-border/60 bg-riftapp-menu py-1.5 shadow-modal;
   }
 

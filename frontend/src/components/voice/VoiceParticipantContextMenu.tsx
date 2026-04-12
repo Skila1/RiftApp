@@ -256,7 +256,7 @@ export default function VoiceParticipantContextMenu({
   return (
     <MenuOverlay x={x} y={y} onClose={onClose}>
       <div
-        className="rift-context-menu-shell max-h-[min(85vh,560px)] min-w-[220px] max-w-[280px] overflow-y-auto"
+        className="rift-context-menu-shell max-h-[min(85vh,560px)] overflow-y-auto"
         onContextMenu={(e) => e.preventDefault()}
       >
         <div className="px-1">

@@ -83,7 +83,7 @@ export function MenuOverlay({
     >
       <div
         ref={wrapRef}
-        className="fixed min-w-[200px] animate-scale-in"
+        className="fixed w-max max-w-[calc(100vw-16px)] animate-scale-in"
         style={{ left: pos.x, top: pos.y, zIndex: zIndex + 1 }}
         onMouseDown={(e) => e.stopPropagation()}
       >

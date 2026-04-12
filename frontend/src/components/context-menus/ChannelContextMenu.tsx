@@ -139,11 +139,13 @@ export default function ChannelContextMenu({
   };
 
   const markReadDisabled = !isText || unreadCount <= 0;
+  const menuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
+  const submenuItemClassName = `${menuItemClassName} gap-2.5`;
 
   return (
     <>
       <MenuOverlay x={x} y={y} onClose={onClose}>
-        <div className="rift-context-menu-shell min-w-[220px] max-h-[min(90vh,520px)] overflow-y-auto text-[13px] text-[#dbdee1]">
+        <div className="rift-context-menu-shell max-h-[min(90vh,520px)] overflow-y-auto text-[13px] text-[#dbdee1]">
         <button
           type="button"
           disabled={markReadDisabled}
@@ -151,9 +153,8 @@ export default function ChannelContextMenu({
             onClose();
             await markStreamRead(stream.id);
           }}
-          className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)] disabled:opacity-40 disabled:pointer-events-none"
+          className={`${menuItemClassName} disabled:opacity-40 disabled:pointer-events-none`}
         >
-          <span className="w-4 shrink-0" aria-hidden />
           Mark As Read
         </button>
 
@@ -165,17 +166,15 @@ export default function ChannelContextMenu({
             onClose();
             onInviteServer();
           }}
-          className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+          className={menuItemClassName}
         >
-          <span className="w-4 shrink-0" aria-hidden />
           {isText ? 'Invite to Channel' : 'Invite to Voice'}
         </button>
         <button
           type="button"
           onClick={copyLink}
-          className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+          className={menuItemClassName}
         >
-          <span className="w-4 shrink-0" aria-hidden />
           Copy Link
         </button>
 
@@ -191,23 +190,21 @@ export default function ChannelContextMenu({
                 void setActiveStream(firstTextStreamId);
                 closeVoiceView();
               }}
-              className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)] disabled:opacity-40"
+              className={`${menuItemClassName} disabled:opacity-40`}
             >
-              <span className="w-4 shrink-0" aria-hidden />
               Open Chat
             </button>
             <button
               type="button"
               disabled
-              className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded text-left w-[calc(100%-8px)] opacity-40 cursor-not-allowed"
+              className={`${menuItemClassName} cursor-not-allowed opacity-40 hover:bg-transparent`}
             >
-              <span className="w-4 shrink-0" aria-hidden />
               Set Channel Status
             </button>
             <button
               type="button"
               onClick={() => toggleHideNames(stream.id)}
-              className="flex items-center justify-between gap-2 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+              className={`${menuItemClassName} justify-between gap-2`}
             >
               <span>Hide Names</span>
               <span
@@ -229,7 +226,7 @@ export default function ChannelContextMenu({
 
         <div className="relative mx-1" onMouseEnter={() => setMuteSubOpen(true)} onMouseLeave={() => setMuteSubOpen(false)}>
           <div
-            className={`flex items-center justify-between gap-2 px-2 py-1.5 rounded cursor-default ${
+            className={`${menuItemClassName} justify-between gap-2 cursor-default ${
               muteSubOpen ? 'bg-[#232428]' : 'hover:bg-[#232428]'
             }`}
           >
@@ -244,7 +241,7 @@ export default function ChannelContextMenu({
                     key={label}
                     type="button"
                     onClick={() => void setChannelMuted(true)}
-                    className="block text-left px-2.5 py-1.5 hover:bg-[#232428] rounded-sm mx-1 w-[calc(100%-8px)]"
+                    className={menuItemClassName}
                   >
                     {label}
                   </button>
@@ -253,7 +250,7 @@ export default function ChannelContextMenu({
                 <button
                   type="button"
                   onClick={() => void setChannelMuted(false)}
-                  className="block text-left px-2.5 py-1.5 hover:bg-[#232428] rounded-sm mx-1 w-[calc(100%-8px)]"
+                  className={menuItemClassName}
                 >
                   Unmute
                 </button>
@@ -264,9 +261,8 @@ export default function ChannelContextMenu({
 
         <div className="relative mx-1" onMouseEnter={() => setNotifSubOpen(true)} onMouseLeave={() => setNotifSubOpen(false)}>
           <div
-            className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-default ${notifSubOpen ? 'bg-[#232428]' : 'hover:bg-[#232428]'}`}
+            className={`${menuItemClassName} cursor-default ${notifSubOpen ? 'bg-[#232428]' : 'hover:bg-[#232428]'}`}
           >
-            <span className="w-4 shrink-0" aria-hidden />
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2">
                 <span>Notification Settings</span>
@@ -290,7 +286,7 @@ export default function ChannelContextMenu({
                         notification_level: level,
                       })
                     }
-                    className="flex items-center gap-2.5 px-2.5 py-1.5 text-left hover:bg-[#232428] rounded-sm mx-1 w-[calc(100%-8px)]"
+                    className={submenuItemClassName}
                   >
                     <span
                       className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
@@ -317,7 +313,7 @@ export default function ChannelContextMenu({
                     key={key}
                     type="button"
                     onClick={() => void patchNotif({ ...streamNotifSettings, [key]: !streamNotifSettings[key] })}
-                    className="flex items-center justify-between gap-2 px-2.5 py-1.5 text-left hover:bg-[#232428] rounded-sm mx-1 w-[calc(100%-8px)]"
+                    className={`${submenuItemClassName} justify-between`}
                   >
                     <span>{label}</span>
                     <span
@@ -337,7 +333,7 @@ export default function ChannelContextMenu({
                 <button
                   type="button"
                   onClick={() => void patchNotif({ ...streamNotifSettings, mobile_push: !streamNotifSettings.mobile_push })}
-                  className="flex items-center justify-between gap-2 px-2.5 py-1.5 text-left hover:bg-[#232428] rounded-sm mx-1 w-[calc(100%-8px)]"
+                  className={`${submenuItemClassName} justify-between`}
                 >
                   <span>Mobile Push Notifications</span>
                   <span
@@ -366,9 +362,8 @@ export default function ChannelContextMenu({
                 onClose();
                 onEditChannel(stream);
               }}
-              className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+              className={menuItemClassName}
             >
-              <span className="w-4 shrink-0" aria-hidden />
               {isText ? 'Edit Channel' : 'Edit Channel'}
             </button>
             <button
@@ -377,9 +372,8 @@ export default function ChannelContextMenu({
                 setDeleteError(null);
                 setDeleteOpen(true);
               }}
-              className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)] text-[#f23f42]"
+              className={`${menuItemClassName} text-[#f23f42]`}
             >
-              <span className="w-4 shrink-0" aria-hidden />
               Delete Channel
             </button>
             {menuDivider()}
@@ -389,9 +383,8 @@ export default function ChannelContextMenu({
                 onClose();
                 onCreateTextChannel(stream.category_id);
               }}
-              className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+              className={menuItemClassName}
             >
-              <span className="w-4 shrink-0" aria-hidden />
               Create Text Channel
             </button>
             <button
@@ -400,9 +393,8 @@ export default function ChannelContextMenu({
                 onClose();
                 onCreateVoiceChannel(stream.category_id);
               }}
-              className="flex items-center gap-2.5 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+              className={menuItemClassName}
             >
-              <span className="w-4 shrink-0" aria-hidden />
               Create Voice Channel
             </button>
           </>
@@ -414,7 +406,7 @@ export default function ChannelContextMenu({
         <button
           type="button"
           onClick={copyChannelId}
-          className="flex items-center justify-between gap-2 px-2 py-1.5 mx-1 rounded hover:bg-[#232428] text-left w-[calc(100%-8px)]"
+          className={`${menuItemClassName} justify-between gap-2`}
         >
           <span>Copy Channel ID</span>
           <span className="text-[10px] font-mono font-semibold px-1 py-0.5 rounded bg-[#1e1f22] border border-[#3f4147] text-[#b5bac1]">ID</span>

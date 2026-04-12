@@ -274,7 +274,7 @@ export default function StreamSidebar() {
 
       {headerMenu && (
         <MenuOverlay x={headerMenu.x} y={headerMenu.y} onClose={() => setHeaderMenu(null)}>
-          <div className="rift-context-menu-shell min-w-[200px] text-[13px] text-riftapp-text">
+          <div className="rift-context-menu-shell text-[13px] text-riftapp-text">
             <button
               type="button"
               onClick={() => {
@@ -283,12 +283,8 @@ export default function StreamSidebar() {
                 setShowCreateChannel(true);
                 setHeaderMenu(null);
               }}
-              className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover"
+              className="mx-1.5 flex w-[calc(100%-12px)] items-center rounded-[6px] px-2.5 py-[7px] text-left text-[13px] transition-colors hover:bg-riftapp-chrome-hover"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#949ba4] shrink-0">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
               Create Channel
             </button>
             <button
@@ -297,11 +293,8 @@ export default function StreamSidebar() {
                 setShowCreateCategory(true);
                 setHeaderMenu(null);
               }}
-              className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover"
+              className="mx-1.5 flex w-[calc(100%-12px)] items-center rounded-[6px] px-2.5 py-[7px] text-left text-[13px] transition-colors hover:bg-riftapp-chrome-hover"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#949ba4] shrink-0">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-              </svg>
               Create Category
             </button>
             <div className="mx-2 my-1 h-px bg-white/[0.06]" />
@@ -311,14 +304,8 @@ export default function StreamSidebar() {
                 setShowInviteModal(true);
                 setHeaderMenu(null);
               }}
-              className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover"
+              className="mx-1.5 flex w-[calc(100%-12px)] items-center rounded-[6px] px-2.5 py-[7px] text-left text-[13px] transition-colors hover:bg-riftapp-chrome-hover"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#949ba4] shrink-0">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="8.5" cy="7" r="4" />
-                <line x1="20" y1="8" x2="20" y2="14" />
-                <line x1="23" y1="11" x2="17" y2="11" />
-              </svg>
               Invite to Server
             </button>
             {developerMode && activeHubId && (
@@ -330,7 +317,7 @@ export default function StreamSidebar() {
                     void navigator.clipboard.writeText(activeHubId);
                     setHeaderMenu(null);
                   }}
-                  className="mx-1 flex w-[calc(100%-8px)] items-center justify-between gap-2 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover"
+                  className="mx-1.5 flex w-[calc(100%-12px)] items-center justify-between gap-2 rounded-[6px] px-2.5 py-[7px] text-left text-[13px] transition-colors hover:bg-riftapp-chrome-hover"
                 >
                   <span>Copy Server ID</span>
                   <span className="rounded border border-riftapp-border/60 bg-riftapp-chrome-hover px-1 py-0.5 text-[10px] font-mono font-semibold text-riftapp-text-muted">ID</span>
@@ -390,7 +377,7 @@ export default function StreamSidebar() {
       {/* Blank-space context menu */}
       {blankSpaceMenu && (
         <MenuOverlay x={blankSpaceMenu.x} y={blankSpaceMenu.y} onClose={() => setBlankSpaceMenu(null)}>
-          <div className="rift-context-menu-shell min-w-[200px] text-[13px] text-riftapp-text">
+          <div className="rift-context-menu-shell text-[13px] text-riftapp-text">
             <button
               type="button"
               onClick={() => {
@@ -399,12 +386,8 @@ export default function StreamSidebar() {
                 setShowCreateChannel(true);
                 setBlankSpaceMenu(null);
               }}
-              className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover"
+              className="mx-1.5 flex w-[calc(100%-12px)] items-center rounded-[6px] px-2.5 py-[7px] text-left text-[13px] transition-colors hover:bg-riftapp-chrome-hover"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#949ba4] shrink-0">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
               Create Channel
             </button>
             <button
@@ -413,11 +396,8 @@ export default function StreamSidebar() {
                 setShowCreateCategory(true);
                 setBlankSpaceMenu(null);
               }}
-              className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover"
+              className="mx-1.5 flex w-[calc(100%-12px)] items-center rounded-[6px] px-2.5 py-[7px] text-left text-[13px] transition-colors hover:bg-riftapp-chrome-hover"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#949ba4] shrink-0">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-              </svg>
               Create Category
             </button>
             <div className="mx-2 my-1 h-px bg-white/[0.06]" />
@@ -427,14 +407,8 @@ export default function StreamSidebar() {
                 setShowInviteModal(true);
                 setBlankSpaceMenu(null);
               }}
-              className="mx-1 flex w-[calc(100%-8px)] items-center gap-2.5 rounded px-2 py-1.5 text-left hover:bg-riftapp-chrome-hover"
+              className="mx-1.5 flex w-[calc(100%-12px)] items-center rounded-[6px] px-2.5 py-[7px] text-left text-[13px] transition-colors hover:bg-riftapp-chrome-hover"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[#949ba4] shrink-0">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="8.5" cy="7" r="4" />
-                <line x1="20" y1="8" x2="20" y2="14" />
-                <line x1="23" y1="11" x2="17" y2="11" />
-              </svg>
               Invite to Server
             </button>
           </div>

@@ -343,7 +343,7 @@ export default function MessageContextMenu({
 
   return (
     <MenuOverlay x={x} y={y} onClose={onClose}>
-      <div className="rift-context-menu-shell w-[216px]">
+      <div className="rift-context-menu-shell">
         {!isDM && (
           <div className="mx-1.5 mb-1.5 flex items-center justify-center gap-1.5 px-2 py-1">
             {QUICK_ROW.map((emoji) => (

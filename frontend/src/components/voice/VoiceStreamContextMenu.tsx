@@ -126,7 +126,7 @@ export default function VoiceStreamContextMenu({
   return (
     <MenuOverlay x={x} y={y} onClose={onClose}>
       <div
-        className="rift-context-menu-shell min-w-[240px] max-w-[280px]"
+        className="rift-context-menu-shell"
         onContextMenu={(e) => e.preventDefault()}
       >
         <div className="px-1">

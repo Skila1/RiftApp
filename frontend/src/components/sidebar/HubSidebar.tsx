@@ -207,8 +207,9 @@ export default function HubSidebar() {
     { label: 'For 24 Hours', durationMs: 24 * 60 * 60 * 1000 },
     { label: 'Until I turn it back on', durationMs: null },
   ];
-  const menuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center gap-2.5 rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
-  const submenuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center gap-2.5 rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
+  const menuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
+  const submenuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
+  const submenuControlItemClassName = `${submenuItemClassName} gap-2.5`;
 
   const showTooltip = (label: string, event: ReactMouseEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -365,7 +366,7 @@ export default function HubSidebar() {
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="rift-context-menu-shell min-w-[220px] overflow-visible text-[13px] text-riftapp-text">
+            <div className="rift-context-menu-shell overflow-visible text-[13px] text-riftapp-text">
               <button
                 type="button"
                 onClick={async () => {
@@ -379,11 +380,6 @@ export default function HubSidebar() {
                 }}
                 className={menuItemClassName}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-riftapp-text-dim shrink-0">
-                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-                  <polyline points="16 6 12 2 8 6" />
-                  <line x1="12" y1="2" x2="12" y2="15" />
-                </svg>
                 Mark As Read
               </button>
               <button
@@ -394,12 +390,6 @@ export default function HubSidebar() {
                 }}
                 className={menuItemClassName}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-riftapp-text-dim shrink-0">
-                  <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                  <circle cx="8.5" cy="7" r="4" />
-                  <line x1="20" y1="8" x2="20" y2="14" />
-                  <line x1="23" y1="11" x2="17" y2="11" />
-                </svg>
                 Invite to Server
               </button>
 
@@ -415,7 +405,6 @@ export default function HubSidebar() {
                   onClick={() => { void handleToggleHubMute(); }}
                   className={`${menuItemClassName} justify-between ${muteSubmenuOpen ? 'bg-[#232428]' : ''}`}
                 >
-                  <span className="w-4 shrink-0" aria-hidden />
                   <span className="flex-1 text-left">{contextHubMuted ? 'Unmute Server' : 'Mute Server'}</span>
                   <span className="text-[#8f949c]">›</span>
                 </button>
@@ -429,7 +418,6 @@ export default function HubSidebar() {
                           onClick={() => { void handleToggleHubMute(); }}
                           className={submenuItemClassName}
                         >
-                          <span className="w-4 shrink-0" aria-hidden />
                           Unmute Server
                         </button>
                       ) : null}
@@ -443,7 +431,6 @@ export default function HubSidebar() {
                           onClick={() => { void handleApplyTimedHubMute(option.durationMs); }}
                           className={submenuItemClassName}
                         >
-                          <span className="w-4 shrink-0" aria-hidden />
                           {option.label}
                         </button>
                       ))}
@@ -460,7 +447,6 @@ export default function HubSidebar() {
                 <div
                   className={`${menuItemClassName} cursor-default ${notifSubmenuOpen ? 'bg-[#232428]' : ''}`}
                 >
-                  <span className="w-4 shrink-0" aria-hidden />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
                       <span>Notification Settings</span>
@@ -491,7 +477,7 @@ export default function HubSidebar() {
                               notification_level: level,
                             });
                           }}
-                          className={submenuItemClassName}
+                          className={submenuControlItemClassName}
                         >
                           <span
                             className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
@@ -530,7 +516,7 @@ export default function HubSidebar() {
                               [key]: !contextHubNotifSettings[key],
                             });
                           }}
-                          className={`${submenuItemClassName} justify-between`}
+                          className={`${submenuControlItemClassName} justify-between`}
                         >
                           <span>{label}</span>
                           <span
@@ -562,7 +548,7 @@ export default function HubSidebar() {
                             mobile_push: !contextHubNotifSettings.mobile_push,
                           });
                         }}
-                        className={`${submenuItemClassName} justify-between`}
+                        className={`${submenuControlItemClassName} justify-between`}
                       >
                         <span>Mobile Push Notifications</span>
                         <span
@@ -642,11 +628,6 @@ export default function HubSidebar() {
                     }}
                     className={`${menuItemClassName} text-[#f38b8f]`}
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="shrink-0">
-                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                      <polyline points="16 17 21 12 16 7" />
-                      <line x1="21" y1="12" x2="9" y2="12" />
-                    </svg>
                     Leave Server
                   </button>
                 </>

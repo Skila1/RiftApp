@@ -279,8 +279,8 @@ export default function DMSidebar() {
     { label: 'Until I turn it back on', durationMs: null },
   ];
 
-  const menuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center gap-2.5 rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
-  const submenuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center gap-2.5 rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
+  const menuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
+  const submenuItemClassName = 'mx-1.5 flex w-[calc(100%-12px)] items-center rounded-[6px] px-2.5 py-[7px] text-left text-[13px] text-[#dbdee1] transition-colors hover:bg-[#232428]';
 
   return (
     <>
@@ -524,7 +524,7 @@ export default function DMSidebar() {
 
       {contextMenu ? (
         <MenuOverlay x={contextMenu.x} y={contextMenu.y} onClose={closeContextMenu} zIndex={350}>
-          <div className="rift-context-menu-shell min-w-[210px] overflow-visible text-[#dbdee1]" onContextMenu={(event) => event.preventDefault()}>
+          <div className="rift-context-menu-shell overflow-visible text-[#dbdee1]" onContextMenu={(event) => event.preventDefault()}>
             <button
               type="button"
               onClick={() => {
@@ -534,7 +534,6 @@ export default function DMSidebar() {
               disabled={(contextMenu.conversation.unread_count ?? 0) === 0}
               className={`${menuItemClassName} disabled:cursor-not-allowed disabled:opacity-45`}
             >
-              <span className="w-4 shrink-0" aria-hidden />
               Mark as Read
             </button>
 
@@ -548,7 +547,6 @@ export default function DMSidebar() {
               }}
               className={menuItemClassName}
             >
-              <span className="w-4 shrink-0" aria-hidden />
               Invites
             </button>
 
@@ -561,7 +559,6 @@ export default function DMSidebar() {
                 }}
                 className={menuItemClassName}
               >
-                <span className="w-4 shrink-0" aria-hidden />
                 Edit Group
               </button>
             ) : null}
@@ -585,7 +582,6 @@ export default function DMSidebar() {
                 }}
                 className={`${menuItemClassName} justify-between ${muteSubmenuOpen ? 'bg-[#232428]' : ''}`}
               >
-                <span className="w-4 shrink-0" aria-hidden />
                 <span className="flex-1 text-left">{contextConversationMuted ? 'Unmute Conversation' : 'Mute Conversation'}</span>
                 <span className="text-[#8f949c]">›</span>
               </button>
@@ -602,7 +598,6 @@ export default function DMSidebar() {
                         }}
                         className={submenuItemClassName}
                       >
-                        <span className="w-4 shrink-0" aria-hidden />
                         Unmute Conversation
                       </button>
                     ) : null}
@@ -619,7 +614,6 @@ export default function DMSidebar() {
                         }}
                         className={submenuItemClassName}
                       >
-                        <span className="w-4 shrink-0" aria-hidden />
                         {option.label}
                       </button>
                     ))}

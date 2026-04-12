@@ -8,7 +8,7 @@ import { useFriendStore } from '../../stores/friendStore';
 import { useAppSettingsStore } from '../../stores/appSettingsStore';
 import type { RelationshipType } from '../../types';
 
-const MENU_WIDTH = 200;
+const MENU_WIDTH = 208;
 const MENU_GAP = 4;
 
 export default function UserContextMenu() {
