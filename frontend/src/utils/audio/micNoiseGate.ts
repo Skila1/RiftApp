@@ -41,7 +41,7 @@ interface MicNoiseGateCallbacks {
 
 interface MicNoiseGateInitOptions {
   track: MediaStreamTrack;
-  audioContext: AudioContext;
+  audioContext?: AudioContext;
 }
 
 type RnnoiseModule = typeof import('@sapphi-red/web-noise-suppressor');
@@ -149,6 +149,8 @@ export class MicNoiseGateProcessor {
 
   private destination: MediaStreamAudioDestinationNode | null = null;
 
+  private ownAudioContext: AudioContext | null = null;
+
   private rawSamples: Uint8Array<ArrayBuffer> | null = null;
 
   private processedSamples: Uint8Array<ArrayBuffer> | null = null;
@@ -191,8 +193,17 @@ export class MicNoiseGateProcessor {
     this.emitMetrics(this.lastRawLevel, this.lastProcessedLevel, this.lastOutputLevel, this.getThreshold(), this.lastRawLevel >= this.getThreshold());
   }
 
-  async init({ track, audioContext }: MicNoiseGateInitOptions) {
+  async init({ track, audioContext: providedAudioContext }: MicNoiseGateInitOptions) {
     this.teardownGraph();
+
+    // LiveKit may call init() before assigning an AudioContext to the track
+    // (createLocalTracks calls setProcessor before createTracks calls setAudioContext).
+    // Create our own context as a fallback so the audio graph always initialises.
+    let audioContext = providedAudioContext;
+    if (!audioContext) {
+      audioContext = new AudioContext({ sampleRate: 48000 });
+      this.ownAudioContext = audioContext;
+    }
 
     const inputChannelCount = clamp(Math.round(track.getSettings().channelCount ?? 1), 1, 2);
     this.source = audioContext.createMediaStreamSource(new MediaStream([track]));
@@ -435,5 +446,10 @@ export class MicNoiseGateProcessor {
     this.rawSamples = null;
     this.processedSamples = null;
     this.outputSamples = null;
+
+    if (this.ownAudioContext) {
+      this.ownAudioContext.close().catch(() => {});
+      this.ownAudioContext = null;
+    }
   }
 }
