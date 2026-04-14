@@ -4,35 +4,37 @@ import { api } from '../api/client';
 
 interface CommandState {
   hubCommands: Record<string, SlashCommand[]>;
-  loading: Record<string, boolean>;
   loadCommandsForHub: (hubId: string) => Promise<SlashCommand[]>;
   invalidateHub: (hubId: string) => void;
   clear: () => void;
 }
 
+const inflightRequests = new Map<string, Promise<SlashCommand[]>>();
+
 export const useCommandStore = create<CommandState>((set, get) => ({
   hubCommands: {},
-  loading: {},
 
   loadCommandsForHub: async (hubId: string) => {
     if (hubId in get().hubCommands) return get().hubCommands[hubId];
-    if (get().loading[hubId]) return [];
 
-    set((s) => ({ loading: { ...s.loading, [hubId]: true } }));
-    try {
-      const commands = await api.getHubCommands(hubId);
-      set((s) => ({
-        hubCommands: { ...s.hubCommands, [hubId]: commands },
-        loading: { ...s.loading, [hubId]: false },
-      }));
-      return commands;
-    } catch {
-      set((s) => ({
-        hubCommands: { ...s.hubCommands, [hubId]: [] },
-        loading: { ...s.loading, [hubId]: false },
-      }));
-      return [];
-    }
+    const inflight = inflightRequests.get(hubId);
+    if (inflight) return inflight;
+
+    const promise = api.getHubCommands(hubId).then(
+      (commands) => {
+        set((s) => ({ hubCommands: { ...s.hubCommands, [hubId]: commands } }));
+        inflightRequests.delete(hubId);
+        return commands;
+      },
+      () => {
+        set((s) => ({ hubCommands: { ...s.hubCommands, [hubId]: [] } }));
+        inflightRequests.delete(hubId);
+        return [] as SlashCommand[];
+      },
+    );
+
+    inflightRequests.set(hubId, promise);
+    return promise;
   },
 
   invalidateHub: (hubId: string) => {
@@ -42,5 +44,8 @@ export const useCommandStore = create<CommandState>((set, get) => ({
     });
   },
 
-  clear: () => set({ hubCommands: {}, loading: {} }),
+  clear: () => {
+    inflightRequests.clear();
+    set({ hubCommands: {} });
+  },
 }));
