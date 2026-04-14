@@ -171,6 +171,58 @@ func (e *Engine) GetModService() *moderation.Service {
 	return e.deps.ModSvc
 }
 
+func (e *Engine) GetBuiltinCommandsForHub(hubID string) []models.ApplicationCommand {
+	e.mu.RLock()
+	bots, ok := e.hubConfigs[hubID]
+	e.mu.RUnlock()
+	if !ok {
+		return nil
+	}
+
+	var commands []models.ApplicationCommand
+	for _, bot := range bots {
+		templateCmds, ok := TemplateCommands[bot.TemplateType]
+		if !ok || len(templateCmds) == 0 {
+			continue
+		}
+		for _, cmd := range templateCmds {
+			commands = append(commands, models.ApplicationCommand{
+				ID:            fmt.Sprintf("builtin-%s-%s", bot.TemplateType, cmd.Name),
+				ApplicationID: bot.ID,
+				HubID:         &bot.HubID,
+				Name:          cmd.Name,
+				Description:   cmd.Description,
+				Options:       cmd.Options,
+				Type:          1,
+				Bot: &models.User{
+					ID:          bot.BotUserID,
+					Username:    "rift-" + bot.TemplateType,
+					DisplayName: templateDisplayName(bot.TemplateType),
+					IsBot:       true,
+				},
+			})
+		}
+	}
+	return commands
+}
+
+func templateDisplayName(t string) string {
+	switch t {
+	case "moderation":
+		return "Rift Mod Bot"
+	case "welcome":
+		return "Rift Welcome Bot"
+	case "music":
+		return "Rift Music Bot"
+	case "utility":
+		return "Rift Utility Bot"
+	case "leveling":
+		return "Rift Leveling Bot"
+	default:
+		return "Rift Bot"
+	}
+}
+
 func (e *Engine) checkReminders(ctx context.Context) {
 	if e.deps.PollRepo == nil || e.deps.MsgSvc == nil {
 		return

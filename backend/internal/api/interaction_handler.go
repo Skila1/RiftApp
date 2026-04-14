@@ -8,9 +8,11 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/riftapp-cloud/riftapp/internal/botengine"
 	"github.com/riftapp-cloud/riftapp/internal/middleware"
 	"github.com/riftapp-cloud/riftapp/internal/models"
 	"github.com/riftapp-cloud/riftapp/internal/repository"
@@ -18,10 +20,11 @@ import (
 )
 
 type InteractionHandler struct {
-	cmdRepo *repository.AppCommandRepo
-	devSvc  *service.DeveloperService
-	msgSvc  *service.MessageService
-	botReg  *BotSessionRegistry
+	cmdRepo   *repository.AppCommandRepo
+	devSvc    *service.DeveloperService
+	msgSvc    *service.MessageService
+	botReg    *BotSessionRegistry
+	botEngine *botengine.Engine
 }
 
 func NewInteractionHandler(
@@ -29,12 +32,14 @@ func NewInteractionHandler(
 	devSvc *service.DeveloperService,
 	msgSvc *service.MessageService,
 	botReg *BotSessionRegistry,
+	engine *botengine.Engine,
 ) *InteractionHandler {
 	return &InteractionHandler{
-		cmdRepo: cmdRepo,
-		devSvc:  devSvc,
-		msgSvc:  msgSvc,
-		botReg:  botReg,
+		cmdRepo:   cmdRepo,
+		devSvc:    devSvc,
+		msgSvc:    msgSvc,
+		botReg:    botReg,
+		botEngine: engine,
 	}
 }
 
@@ -70,6 +75,19 @@ func (h *InteractionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.CommandID == "" || req.HubID == "" || req.StreamID == "" {
 		writeError(w, http.StatusBadRequest, "command_id, hub_id, and stream_id are required")
 		return
+	}
+
+	if strings.HasPrefix(req.CommandID, "builtin-") && h.botEngine != nil {
+		parts := strings.SplitN(strings.TrimPrefix(req.CommandID, "builtin-"), "-", 2)
+		if len(parts) == 2 {
+			commandName := parts[1]
+			h.botEngine.HandleSlashCommand(r.Context(), req.HubID, req.StreamID, userID, commandName, req.Options)
+			writeData(w, http.StatusOK, map[string]interface{}{
+				"id":   uuid.New().String(),
+				"type": 2,
+			})
+			return
+		}
 	}
 
 	cmd, err := h.cmdRepo.GetByID(r.Context(), req.CommandID)
@@ -132,7 +150,7 @@ func (h *InteractionHandler) Create(w http.ResponseWriter, r *http.Request) {
 		if resp != nil && resp.Data != nil && resp.Data.Content != "" {
 			h.postBotResponse(r.Context(), app, req.StreamID, resp.Data.Content)
 		}
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		writeData(w, http.StatusOK, map[string]interface{}{
 			"id":   interactionID,
 			"type": 2,
 			"data": resp,
@@ -143,7 +161,7 @@ func (h *InteractionHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if h.botReg != nil {
 		sent := h.botReg.SendToApp(cmd.ApplicationID, GatewayOpDispatch, interactionPayload, "INTERACTION_CREATE")
 		if sent {
-			writeJSON(w, http.StatusOK, map[string]interface{}{
+			writeData(w, http.StatusOK, map[string]interface{}{
 				"id":   interactionID,
 				"type": 2,
 			})

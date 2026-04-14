@@ -112,8 +112,8 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 	}
 
 	var cmdH *CommandHandler
-	if deps.AppCommandRepo != nil {
-		cmdH = NewCommandHandler(deps.AppCommandRepo)
+	if deps.AppCommandRepo != nil || deps.BotEngine != nil {
+		cmdH = NewCommandHandler(deps.AppCommandRepo, deps.BotEngine)
 	}
 
 	botReg := NewBotSessionRegistry()
@@ -395,7 +395,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 			r.Get("/api/hubs/{hubID}/commands", cmdH.ListHubCommands)
 		}
 		if deps.AppCommandRepo != nil && deps.DeveloperService != nil {
-			intH := NewInteractionHandler(deps.AppCommandRepo, deps.DeveloperService, deps.MsgService, botReg)
+			intH := NewInteractionHandler(deps.AppCommandRepo, deps.DeveloperService, deps.MsgService, botReg, deps.BotEngine)
 			r.Post("/api/interactions", intH.Create)
 		}
 	})

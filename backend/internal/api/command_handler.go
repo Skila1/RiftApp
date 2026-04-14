@@ -4,16 +4,19 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/riftapp-cloud/riftapp/internal/botengine"
 	"github.com/riftapp-cloud/riftapp/internal/middleware"
+	"github.com/riftapp-cloud/riftapp/internal/models"
 	"github.com/riftapp-cloud/riftapp/internal/repository"
 )
 
 type CommandHandler struct {
-	cmdRepo *repository.AppCommandRepo
+	cmdRepo   *repository.AppCommandRepo
+	botEngine *botengine.Engine
 }
 
-func NewCommandHandler(cmdRepo *repository.AppCommandRepo) *CommandHandler {
-	return &CommandHandler{cmdRepo: cmdRepo}
+func NewCommandHandler(cmdRepo *repository.AppCommandRepo, engine *botengine.Engine) *CommandHandler {
+	return &CommandHandler{cmdRepo: cmdRepo, botEngine: engine}
 }
 
 func (h *CommandHandler) ListHubCommands(w http.ResponseWriter, r *http.Request) {
@@ -28,11 +31,23 @@ func (h *CommandHandler) ListHubCommands(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	commands, err := h.cmdRepo.ListByHub(r.Context(), hubID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to list commands")
-		return
+	var commands []models.ApplicationCommand
+
+	if h.cmdRepo != nil {
+		externalCmds, err := h.cmdRepo.ListByHub(r.Context(), hubID)
+		if err == nil {
+			commands = append(commands, externalCmds...)
+		}
 	}
 
-	writeJSON(w, http.StatusOK, commands)
+	if h.botEngine != nil {
+		builtinCmds := h.botEngine.GetBuiltinCommandsForHub(hubID)
+		commands = append(commands, builtinCmds...)
+	}
+
+	if commands == nil {
+		commands = []models.ApplicationCommand{}
+	}
+
+	writeData(w, http.StatusOK, commands)
 }
