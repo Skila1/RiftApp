@@ -29,7 +29,7 @@ import { wsSend } from '../hooks/useWebSocket';
 import { useAuthStore } from './auth';
 import { useStreamStore } from './streamStore';
 import { useActiveSpeakerStore } from './activeSpeakerStore';
-import { usePresenceStore } from './presenceStore';
+import { getOrFetchPresenceUser, usePresenceStore } from './presenceStore';
 import { publicAssetUrl } from '../utils/publicAssetUrl';
 import { getDesktop } from '../utils/desktop';
 import { resolveVoiceParticipantSpeakingState } from '../utils/voiceSpeakingState';
@@ -846,7 +846,6 @@ let micGateProcessor: MicNoiseGateProcessor | null = null;
 let micLastSpeakingBroadcastAt = 0;
 let connectionStatsTimer: number | null = null;
 let trackProcessorsModulePromise: Promise<TrackProcessorsModule> | null = null;
-let voiceUserHydrationInFlight = new Set<string>();
 
 async function loadTrackProcessorsModule() {
   if (!trackProcessorsModulePromise) {
@@ -1747,20 +1746,13 @@ function hydrateMissingVoiceUsers(participants: VoiceParticipant[]) {
   const knownUsers = usePresenceStore.getState().usersById;
   for (const participant of participants) {
     const userID = participant.identity;
-    if (!userID || knownUsers[userID] || voiceUserHydrationInFlight.has(userID)) {
+    if (!userID || knownUsers[userID]) {
       continue;
     }
 
-    voiceUserHydrationInFlight.add(userID);
-    api.getUser(userID)
-      .then((user) => {
-        usePresenceStore.getState().mergeUser(user);
-      })
+    getOrFetchPresenceUser(userID)
       .catch(() => {
         /* ignore transient profile hydration failures */
-      })
-      .finally(() => {
-        voiceUserHydrationInFlight.delete(userID);
       });
   }
 }

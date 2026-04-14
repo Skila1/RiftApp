@@ -3,12 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../api/client', () => ({
   api: {
     getHubMembers: vi.fn(),
+    getUser: vi.fn(),
   },
 }));
 
 import type { User } from '../../types';
 import { api } from '../../api/client';
-import { usePresenceStore } from '../presenceStore';
+import { getOrFetchPresenceUser, usePresenceStore } from '../presenceStore';
 import {
   SELF_PRESENCE_STORAGE_KEY,
   getPersistedSelfPresence,
@@ -123,7 +124,24 @@ describe('presenceStore', () => {
     expect(state.usersById['user-2']).toMatchObject({ username: 'beta' });
   });
 
-  it('ignores stale hub member responses from earlier hub switches', async () => {
+  it('deduplicates concurrent presence user fetches across callers', async () => {
+    const response = createDeferred<User>();
+
+    mockedApi.getUser.mockImplementationOnce(() => response.promise);
+
+    const firstFetch = getOrFetchPresenceUser('user-9');
+    const secondFetch = getOrFetchPresenceUser('user-9');
+
+    expect(mockedApi.getUser).toHaveBeenCalledTimes(1);
+
+    response.resolve(makeUser({ id: 'user-9', username: 'delta', display_name: 'Delta' }));
+
+    await expect(firstFetch).resolves.toMatchObject({ id: 'user-9' });
+    await expect(secondFetch).resolves.toMatchObject({ id: 'user-9' });
+    expect(usePresenceStore.getState().usersById['user-9']).toMatchObject({ username: 'delta' });
+  });
+
+  it('ignores stale hub member responses after session caches are cleared', async () => {
     const firstResponse = createDeferred<User[]>();
     const secondResponse = createDeferred<User[]>();
 
@@ -143,15 +161,17 @@ describe('presenceStore', () => {
       'user-2': expect.objectContaining({ username: 'bravo' }),
     });
 
+    usePresenceStore.getState().clearSessionCaches();
+
     firstResponse.resolve([
       makeUser({ id: 'user-3', username: 'charlie', display_name: 'Charlie' }),
     ]);
     await firstLoad;
 
     const state = usePresenceStore.getState();
-    expect(state.hubMembers['user-2']).toMatchObject({ username: 'bravo' });
+    expect(state.hubMembers['user-2']).toBeUndefined();
     expect(state.hubMembers['user-3']).toBeUndefined();
-    expect(state.usersById['user-3']).toMatchObject({ username: 'charlie' });
+    expect(state.usersById['user-3']).toBeUndefined();
   });
 
   it('clears persisted self status on logout cleanup', () => {

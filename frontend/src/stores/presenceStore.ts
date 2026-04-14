@@ -10,6 +10,8 @@ import {
 } from './selfPresencePersistence';
 
 let loadPresenceForHubRequestId = 0;
+let presenceSessionToken = 0;
+const pendingPresenceUserFetches = new Map<string, Promise<User | null>>();
 
 function resolveSelfPresenceStatus(
   selfUserId: string | null,
@@ -155,6 +157,7 @@ export const usePresenceStore = create<PresenceState>((set) => ({
 
   loadPresenceForHub: async (hubId) => {
     const requestId = ++loadPresenceForHubRequestId;
+    const sessionToken = presenceSessionToken;
     try {
       const members = normalizeUsers(await api.getHubMembers(hubId));
       const entries: Record<string, number> = {};
@@ -165,6 +168,10 @@ export const usePresenceStore = create<PresenceState>((set) => ({
         memberMap[m.id] = status === m.status ? m : { ...m, status };
       }
       set((s) => {
+        if (sessionToken !== presenceSessionToken) {
+          return s;
+        }
+
         const nextUsersById = { ...s.usersById };
         for (const member of Object.values(memberMap)) {
           nextUsersById[member.id] = mergeCachedUser(nextUsersById[member.id], member, member.status);
@@ -203,6 +210,8 @@ export const usePresenceStore = create<PresenceState>((set) => ({
 
   clearSessionCaches: () => {
     loadPresenceForHubRequestId = 0;
+    presenceSessionToken += 1;
+    pendingPresenceUserFetches.clear();
     set({
       selfUserId: null,
       presence: {},
@@ -236,3 +245,38 @@ export const usePresenceStore = create<PresenceState>((set) => ({
     });
   },
 }));
+
+export function getOrFetchPresenceUser(userId: string): Promise<User | null> {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    return Promise.resolve(null);
+  }
+
+  const cachedUser = usePresenceStore.getState().usersById[normalizedUserId];
+  if (cachedUser) {
+    return Promise.resolve(cachedUser);
+  }
+
+  const pendingFetch = pendingPresenceUserFetches.get(normalizedUserId);
+  if (pendingFetch) {
+    return pendingFetch;
+  }
+
+  const sessionToken = presenceSessionToken;
+  let fetchPromise: Promise<User | null>;
+  fetchPromise = api.getUser(normalizedUserId)
+    .then((user) => {
+      if (sessionToken === presenceSessionToken) {
+        usePresenceStore.getState().mergeUser(user);
+      }
+      return user;
+    })
+    .finally(() => {
+      if (pendingPresenceUserFetches.get(normalizedUserId) === fetchPromise) {
+        pendingPresenceUserFetches.delete(normalizedUserId);
+      }
+    });
+
+  pendingPresenceUserFetches.set(normalizedUserId, fetchPromise);
+  return fetchPromise;
+}
