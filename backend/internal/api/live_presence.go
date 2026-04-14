@@ -11,13 +11,13 @@ func applyLiveUserStatus(hub *ws.Hub, user *models.User) {
 	}
 
 	if hub.IsOnline(user.ID) {
-		if user.Status <= 0 {
-			user.Status = 1
+		if user.Status <= models.UserStatusOffline {
+			user.Status = models.UserStatusOnline
 		}
 		return
 	}
 
-	user.Status = 0
+	user.Status = models.UserStatusOffline
 }
 
 func applyLiveStatusesToFriendships(hub *ws.Hub, friendships []models.Friendship) {

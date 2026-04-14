@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/riftapp-cloud/riftapp/internal/admin"
+	"github.com/riftapp-cloud/riftapp/internal/models"
 	"github.com/riftapp-cloud/riftapp/internal/moderation"
 	"github.com/riftapp-cloud/riftapp/internal/smtp"
 	"github.com/riftapp-cloud/riftapp/internal/ws"
@@ -117,20 +118,20 @@ func (h *AdminHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 	userID := chi.URLParam(r, "userID")
 
 	type UserDetail struct {
-		ID          string     `json:"id"`
-		Username    string     `json:"username"`
-		Email       *string    `json:"email,omitempty"`
-		DisplayName string     `json:"display_name"`
-		AvatarURL   *string    `json:"avatar_url,omitempty"`
-		Bio         *string    `json:"bio,omitempty"`
-		Status      int        `json:"status"`
-		LastSeen    *time.Time `json:"last_seen,omitempty"`
-		CreatedAt   time.Time  `json:"created_at"`
-		UpdatedAt   time.Time  `json:"updated_at"`
-		BannedAt    *time.Time `json:"banned_at,omitempty"`
-		IsBot       bool       `json:"is_bot"`
-		HubCount    int        `json:"hub_count"`
-		MessageCount int       `json:"message_count"`
+		ID           string     `json:"id"`
+		Username     string     `json:"username"`
+		Email        *string    `json:"email,omitempty"`
+		DisplayName  string     `json:"display_name"`
+		AvatarURL    *string    `json:"avatar_url,omitempty"`
+		Bio          *string    `json:"bio,omitempty"`
+		Status       int        `json:"status"`
+		LastSeen     *time.Time `json:"last_seen,omitempty"`
+		CreatedAt    time.Time  `json:"created_at"`
+		UpdatedAt    time.Time  `json:"updated_at"`
+		BannedAt     *time.Time `json:"banned_at,omitempty"`
+		IsBot        bool       `json:"is_bot"`
+		HubCount     int        `json:"hub_count"`
+		MessageCount int        `json:"message_count"`
 	}
 
 	var u UserDetail
@@ -152,7 +153,7 @@ func (h *AdminHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) BanUser(w http.ResponseWriter, r *http.Request) {
 	userID := chi.URLParam(r, "userID")
 	cmd, err := h.db.Exec(r.Context(),
-		`UPDATE users SET banned_at = now(), status = 0, updated_at = now() WHERE id = $1 AND banned_at IS NULL`, userID)
+		`UPDATE users SET banned_at = now(), status = $2, updated_at = now() WHERE id = $1 AND banned_at IS NULL`, userID, models.UserStatusOffline)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to ban user")
 		return
@@ -349,16 +350,16 @@ func (h *AdminHandler) Analytics(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	stats := make(map[string]interface{})
 
-	scan := func(q string) int {
+	scan := func(q string, args ...any) int {
 		var n int
-		h.db.QueryRow(ctx, q).Scan(&n)
+		h.db.QueryRow(ctx, q, args...).Scan(&n)
 		return n
 	}
 
 	stats["total_users"] = scan(`SELECT COUNT(*) FROM users`)
 	stats["total_bots"] = scan(`SELECT COUNT(*) FROM users WHERE is_bot = true`)
 	stats["banned_users"] = scan(`SELECT COUNT(*) FROM users WHERE banned_at IS NOT NULL`)
-	stats["online_users"] = scan(`SELECT COUNT(*) FROM users WHERE status > 0`)
+	stats["online_users"] = scan(`SELECT COUNT(*) FROM users WHERE status > $1`, models.UserStatusOffline)
 	stats["total_hubs"] = scan(`SELECT COUNT(*) FROM hubs`)
 	stats["total_messages"] = scan(`SELECT COUNT(*) FROM messages`)
 	stats["total_dms"] = scan(`SELECT COUNT(*) FROM messages WHERE conversation_id IS NOT NULL`)
