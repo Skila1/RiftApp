@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useAuthStore } from '../stores/auth';
 import { useStreamStore } from '../stores/streamStore';
 import { useMessageStore } from '../stores/messageStore';
-import { usePresenceStore } from '../stores/presenceStore';
+import { getOrFetchPresenceUser, usePresenceStore } from '../stores/presenceStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { useDMStore } from '../stores/dmStore';
 import { useFriendStore } from '../stores/friendStore';
@@ -13,7 +13,6 @@ import { useVoiceStore } from '../stores/voiceStore';
 import { useVoiceChannelUiStore } from '../stores/voiceChannelUiStore';
 import type { Message, Notification, Conversation, Hub, User, WSEvent, DMCallRing, DMCallRingEnd } from '../types';
 import { publicAssetUrl } from '../utils/publicAssetUrl';
-import { api } from '../api/client';
 import { playNotificationSound } from '../utils/audio/appSounds';
 import { debugVoiceSpeaking } from '../utils/audio/voiceSpeakingDebug';
 
@@ -285,8 +284,8 @@ export function useWebSocket() {
             const voiceState = useVoiceStore.getState();
             if (action === 'join') {
               // Fetch profile for unknown users so their display name is shown immediately
-              if (!usePresenceStore.getState().hubMembers[user_id]) {
-                api.getUser(user_id).then((u) => usePresenceStore.getState().mergeUser(u)).catch(() => {});
+              if (!usePresenceStore.getState().usersById[user_id]) {
+                getOrFetchPresenceUser(user_id).catch(() => {});
               }
             } else {
               voiceState.clearSpeakingSignal(user_id);

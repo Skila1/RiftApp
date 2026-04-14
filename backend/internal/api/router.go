@@ -84,7 +84,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 	voiceH := NewVoiceHandler(deps.Config, deps.HubService, deps.StreamService, deps.DMService, deps.WSHub, deps.HubCustomizationRepo)
 	notifH := NewNotifHandler(deps.NotifService)
 	dmH := NewDMHandler(deps.DMService)
-	friendH := NewFriendHandler(deps.FriendService, deps.UserService)
+	friendH := NewFriendHandler(deps.FriendService, deps.UserService, deps.WSHub)
 
 	var devH *DeveloperHandler
 	if deps.DeveloperService != nil {

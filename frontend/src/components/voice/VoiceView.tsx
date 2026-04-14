@@ -146,8 +146,10 @@ export default function VoiceView() {
   const activeVoiceChannelId = useVoiceChannelUiStore((s) => s.activeChannelId);
   const activeVoiceChannelKind = useVoiceChannelUiStore((s) => s.activeChannelKind);
   const hubMembers = usePresenceStore((s) => s.hubMembers);
+  const usersById = usePresenceStore((s) => s.usersById);
   const activeHubId = useHubStore((s) => s.activeHubId);
   const hubPermissionsByHub = useHubStore((s) => s.hubPermissions);
+  const knownUsers = useMemo(() => ({ ...usersById, ...hubMembers }), [hubMembers, usersById]);
 
   const stream = activeVoiceChannelKind === 'stream'
     ? streams.find((entry) => entry.id === activeVoiceChannelId)
@@ -346,7 +348,7 @@ export default function VoiceView() {
           <FocusLayout
             focusedSlot={focusedSlot}
             filmstripSlots={layoutSlots.filter((s) => s.id !== focusedSlot.id)}
-            hubMembers={hubMembers}
+            hubMembers={knownUsers}
             onSlotClick={handleSlotClick}
             onSlotContextMenu={openSlotContextMenu}
           />
@@ -356,7 +358,7 @@ export default function VoiceView() {
               <SlotTile
                 key={slot.id}
                 slot={slot}
-                hubMembers={hubMembers}
+                hubMembers={knownUsers}
                 fill
                 onClick={() => handleSlotClick(slot.id)}
                 onContextMenu={(e) => openSlotContextMenu(e, slot)}
@@ -418,7 +420,7 @@ export default function VoiceView() {
       {tileMenu?.kind === 'participant' && (
         <VoiceParticipantContextMenu
           participant={tileMenu.participant}
-          member={hubMembers[tileMenu.participant.identity]}
+          member={knownUsers[tileMenu.participant.identity]}
           x={tileMenu.x}
           y={tileMenu.y}
           hubId={activeVoiceChannelKind === 'stream' ? (stream?.hub_id ?? activeHubId ?? null) : null}
