@@ -174,7 +174,45 @@ describe('activeSpeakerStore', () => {
     });
   });
 
-  it('ignores audio-only speakers for the floating media overlay', () => {
+  it('ignores audio-only speakers instead of dropping the media overlay', () => {
+    useActiveSpeakerStore.getState().syncFromParticipants([
+      participant({
+        identity: 'camera-user',
+        isSpeaking: true,
+        isCameraOn: true,
+        videoTrack: { id: 'camera-track' } as never,
+      }),
+    ]);
+
+    useActiveSpeakerStore.getState().syncFromParticipants([
+      participant({
+        identity: 'camera-user',
+        isSpeaking: false,
+        isCameraOn: true,
+        videoTrack: { id: 'camera-track' } as never,
+      }),
+      participant({
+        identity: 'audio-user',
+        isSpeaking: true,
+      }),
+    ]);
+
+    expect(useActiveSpeakerStore.getState().activeSpeaker).toMatchObject({
+      userId: 'camera-user',
+      trackType: 'camera',
+      isSpeaking: false,
+    });
+
+    vi.advanceTimersByTime(ACTIVE_SPEAKER_HOLD_MS + 20);
+
+    expect(useActiveSpeakerStore.getState().activeSpeaker).toMatchObject({
+      userId: 'camera-user',
+      trackType: 'camera',
+      isSpeaking: false,
+    });
+  });
+
+  it('falls back to avatar overlay for audio-only speakers when no media is available', () => {
     useActiveSpeakerStore.getState().syncFromParticipants([
       participant({
         identity: 'audio-user',
@@ -182,6 +220,10 @@ describe('activeSpeakerStore', () => {
       }),
     ]);
 
-    expect(useActiveSpeakerStore.getState().activeSpeaker).toBeNull();
+    expect(useActiveSpeakerStore.getState().activeSpeaker).toMatchObject({
+      userId: 'audio-user',
+      trackType: null,
+      isSpeaking: true,
+    });
   });
 });

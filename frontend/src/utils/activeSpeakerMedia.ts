@@ -72,24 +72,21 @@ export function selectPreferredActiveSpeaker<TTrack>(
   participants: ActiveSpeakerCandidate<TTrack>[],
   current: CurrentActiveSpeakerTarget | null,
 ): ActiveSpeakerSelection<TTrack> | null {
-  const speakingParticipants = participants.filter((participant) => participant.isSpeaking);
-
-  const mediaParticipants = participants.filter((participant) => {
-    const sel = getActiveSpeakerMediaSelection(participant);
-    return sel.trackType !== null && sel.track != null;
-  });
-
-  const pool = speakingParticipants.length > 0 ? speakingParticipants : mediaParticipants;
-  if (pool.length === 0) {
-    return null;
-  }
-
-  const selections = pool
+  const allSelections = participants
     .map((participant) => ({
       participant,
       selection: getActiveSpeakerMediaSelection(participant),
-    }))
+    }));
+
+  const mediaSelections = allSelections
     .filter(({ selection }) => selection.trackType !== null && selection.track != null);
+
+  const selections = mediaSelections.length > 0
+    ? (() => {
+        const speakingMediaSelections = mediaSelections.filter(({ participant }) => participant.isSpeaking);
+        return speakingMediaSelections.length > 0 ? speakingMediaSelections : mediaSelections;
+      })()
+    : allSelections.filter(({ participant }) => participant.isSpeaking);
 
   if (selections.length === 0) {
     return null;
@@ -103,15 +100,12 @@ export function selectPreferredActiveSpeaker<TTrack>(
     return best;
   }
 
-  const currentInPool = pool.find((participant) => participant.identity === current.userId);
+  const currentInPool = selections.find(({ participant }) => participant.identity === current.userId);
   if (!currentInPool) {
     return best;
   }
 
-  const currentSelection = getActiveSpeakerMediaSelection(currentInPool);
-  if (currentSelection.trackType === null || currentSelection.track == null) {
-    return best;
-  }
+  const currentSelection = currentInPool.selection;
 
   if (currentSelection.priority >= best.priority) {
     return currentSelection;
