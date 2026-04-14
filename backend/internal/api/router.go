@@ -51,6 +51,7 @@ type RouterDeps struct {
 	ReportService           *service.ReportService
 	HubModerationRepo       *repository.HubModerationRepo
 	DeviceTokenRepo         *repository.DeviceTokenRepo
+	AppCommandRepo          *repository.AppCommandRepo
 	DB                      interface{}
 	AdminService            *admin.Service
 	SMTPService             *smtp.Service
@@ -104,6 +105,13 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 	if deps.DeviceTokenRepo != nil {
 		deviceTokenH = NewDeviceTokenHandler(deps.DeviceTokenRepo)
 	}
+
+	var cmdH *CommandHandler
+	if deps.AppCommandRepo != nil {
+		cmdH = NewCommandHandler(deps.AppCommandRepo)
+	}
+
+	botReg := NewBotSessionRegistry()
 
 	r.Get("/ws", wsH.Handle)
 
@@ -170,6 +178,15 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 		r.Get("/api/hubs/{hubID}/members", hubH.Members)
 		r.Post("/api/hubs/{hubID}/invite", hubH.CreateInvite)
 		r.Get("/api/hubs/{hubID}/permissions", hubH.MyPermissions)
+
+		if cmdH != nil {
+			r.Get("/api/hubs/{hubID}/commands", cmdH.ListHubCommands)
+		}
+
+		if deps.AppCommandRepo != nil && deps.DeveloperService != nil {
+			intH := NewInteractionHandler(deps.AppCommandRepo, deps.DeveloperService, deps.MsgService, botReg)
+			r.Post("/api/interactions", intH.Create)
+		}
 
 		r.Get("/api/hubs/{hubID}/roles", rankH.List)
 		r.Post("/api/hubs/{hubID}/roles", rankH.Create)
@@ -343,6 +360,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 			MsgRepo:    deps.MsgRepo,
 			RankRepo:   deps.RankRepo,
 			DevRepo:    deps.DeveloperRepo,
+			CmdRepo:    deps.AppCommandRepo,
 			BaseURL:    "",
 		})
 		gwH := NewDiscordGatewayHandler(
@@ -352,6 +370,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 			deps.StreamService,
 			deps.RankRepo,
 			deps.WSHub,
+			botReg,
 			deps.Config.AllowedOrigins,
 		)
 
@@ -375,9 +394,15 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 					r.Get("/channels/{channelID}", dcH.GetChannel)
 					r.Get("/channels/{channelID}/messages", dcH.GetChannelMessages)
 					r.Post("/channels/{channelID}/messages", dcH.CreateChannelMessage)
-					r.Get("/channels/{channelID}/messages/{messageID}", dcH.GetChannelMessage)
-					r.Delete("/channels/{channelID}/messages/{messageID}", dcH.DeleteChannelMessage)
-				})
+				r.Get("/channels/{channelID}/messages/{messageID}", dcH.GetChannelMessage)
+				r.Delete("/channels/{channelID}/messages/{messageID}", dcH.DeleteChannelMessage)
+
+				r.Put("/applications/{appId}/commands", dcH.BulkOverwriteGlobalCommands)
+				r.Get("/applications/{appId}/commands", dcH.GetGlobalCommands)
+				r.Delete("/applications/{appId}/commands/{commandId}", dcH.DeleteCommand)
+				r.Put("/applications/{appId}/guilds/{guildId}/commands", dcH.BulkOverwriteGuildCommands)
+				r.Get("/applications/{appId}/guilds/{guildId}/commands", dcH.GetGuildCommands)
+			})
 			})
 		}
 		mountDiscordRoutes("/api/v10")

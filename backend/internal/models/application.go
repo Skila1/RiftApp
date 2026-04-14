@@ -77,3 +77,29 @@ type RichPresenceAsset struct {
 	ImageHash     string    `json:"image_hash"`
 	CreatedAt     time.Time `json:"created_at"`
 }
+
+type ApplicationCommandOptionChoice struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type ApplicationCommandOption struct {
+	Name        string                          `json:"name"`
+	Description string                          `json:"description"`
+	Type        int                             `json:"type"`
+	Required    bool                            `json:"required"`
+	Choices     []ApplicationCommandOptionChoice `json:"choices,omitempty"`
+}
+
+type ApplicationCommand struct {
+	ID            string                     `json:"id"`
+	ApplicationID string                     `json:"application_id"`
+	HubID         *string                    `json:"guild_id,omitempty"`
+	Name          string                     `json:"name"`
+	Description   string                     `json:"description"`
+	Options       []ApplicationCommandOption `json:"options"`
+	Type          int                        `json:"type"`
+	CreatedAt     time.Time                  `json:"created_at"`
+	UpdatedAt     time.Time                  `json:"updated_at"`
+	Bot           *User                      `json:"bot,omitempty"`
+}

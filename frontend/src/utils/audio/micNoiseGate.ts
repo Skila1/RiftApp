@@ -5,7 +5,7 @@ import rnnoiseSimdWasmPath from '@sapphi-red/web-noise-suppressor/rnnoise_simd.w
 
 import { debugVoiceSpeaking, isVoiceSpeakingDebugEnabled } from './voiceSpeakingDebug';
 
-const AUTO_THRESHOLD_MULTIPLIER = 1.55;
+const AUTO_THRESHOLD_MULTIPLIER = 1.35;
 const AUTO_THRESHOLD_OFFSET = 0.0025;
 export const AUTO_THRESHOLD_MIN = 0.006;
 export const AUTO_THRESHOLD_MAX = 0.08;
@@ -14,7 +14,7 @@ const NOISE_FLOOR_FALL_SMOOTHING = 0.012;
 const SPEAKING_DEBUG_LOG_INTERVAL_MS = 250;
 
 export const DEFAULT_MANUAL_MIC_THRESHOLD = 0.025;
-export const DEFAULT_MIC_GATE_RELEASE_MS = 30;
+export const DEFAULT_MIC_GATE_RELEASE_MS = 200;
 
 interface MicNoiseGateSettings {
   automaticSensitivity: boolean;
@@ -163,6 +163,8 @@ export class MicNoiseGateProcessor {
 
   private holdUntil = 0;
 
+  private gateClosedAt = 0;
+
   private noiseFloor = AUTO_THRESHOLD_MIN;
 
   private lastRawLevel = 0;
@@ -223,6 +225,7 @@ export class MicNoiseGateProcessor {
     this.outputSamples = new Uint8Array(new ArrayBuffer(this.outputAnalyser.fftSize));
     this.noiseFloor = AUTO_THRESHOLD_MIN;
     this.holdUntil = 0;
+    this.gateClosedAt = 0;
     this.speaking = false;
     this.lastRawLevel = 0;
     this.lastProcessedLevel = 0;
@@ -319,7 +322,10 @@ export class MicNoiseGateProcessor {
     }
 
     if (this.settings.automaticSensitivity && !this.speaking && threshold > 0) {
-      this.updateNoiseFloor(rawLevel);
+      const cooldownElapsed = now - this.gateClosedAt > 500;
+      if (cooldownElapsed) {
+        this.updateNoiseFloor(rawLevel);
+      }
     }
 
     const currentThreshold = this.getThreshold();
@@ -367,6 +373,9 @@ export class MicNoiseGateProcessor {
     }
 
     this.speaking = speaking;
+    if (!speaking) {
+      this.gateClosedAt = performance.now();
+    }
     debugVoiceSpeaking('Local speaking state changed', {
       speaking,
       rawLevel: this.roundLevel(this.lastRawLevel),

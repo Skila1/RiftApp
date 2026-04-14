@@ -5,12 +5,14 @@ import { useReplyDraftStore } from '../../stores/replyDraftStore';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useHubStore } from '../../stores/hubStore';
 import { useEmojiStore } from '../../stores/emojiStore';
+import { useCommandStore } from '../../stores/commandStore';
+import { useStreamStore } from '../../stores/streamStore';
 import { useMediaPickerStore } from '../../stores/mediaPickerStore';
 import MediaPicker from '../media/MediaPicker';
 import type { EmojiSelection } from '../media/EmojiTab';
 import { EMOJI_AUTOCOMPLETE_LIST } from '../../utils/emojiNames';
 import { api } from '../../api/client';
-import type { Attachment, HubSticker, User } from '../../types';
+import type { Attachment, HubSticker, SlashCommand, User } from '../../types';
 import { getReplyAuthorLabel, getReplyPreviewMeta } from '../../utils/replyPreview';
 
 const TYPING_THROTTLE_MS = 500;
@@ -92,6 +94,15 @@ export default function MessageInput({
   const emojiStartRef = useRef<number | null>(null);
   const hubEmojis = useEmojiStore((s) => (activeHubId ? s.hubEmojis[activeHubId] : undefined));
 
+  // Slash command autocomplete state
+  const [slashQuery, setSlashQuery] = useState<string | null>(null);
+  const [slashIndex, setSlashIndex] = useState(0);
+  const [activeSlashCommand, setActiveSlashCommand] = useState<SlashCommand | null>(null);
+  const [slashOptionValues, setSlashOptionValues] = useState<Record<string, string>>({});
+  const [activeOptionIndex, setActiveOptionIndex] = useState(0);
+  const hubCommands = useCommandStore((s) => (activeHubId ? s.getCommandsForHub(activeHubId) : []));
+  const activeStreamId = useStreamStore((s) => s.activeStreamId);
+
   const memberList = useMemo<User[]>(
     () => Object.values(hubMembers),
     [hubMembers],
@@ -135,6 +146,15 @@ export default function MessageInput({
 
     return results;
   }, [emojiQuery, hubEmojis]);
+
+  const slashResults = useMemo(() => {
+    if (slashQuery === null || isDMMode) return [];
+    const q = slashQuery.toLowerCase();
+    return hubCommands
+      .filter((cmd) => cmd.name.toLowerCase().startsWith(q))
+      .slice(0, 10);
+  }, [slashQuery, hubCommands, isDMMode]);
+
   const replyAuthorLabel = useMemo(() => getReplyAuthorLabel(replyTo ?? undefined), [replyTo]);
   const replyPreview = useMemo(() => getReplyPreviewMeta(replyTo ?? undefined), [replyTo]);
 
@@ -266,6 +286,67 @@ export default function MessageInput({
     });
   }, [content]);
 
+  const selectSlashCommand = useCallback((cmd: SlashCommand) => {
+    const requiredOpts = cmd.options.filter((o) => o.required);
+    if (requiredOpts.length > 0) {
+      setActiveSlashCommand(cmd);
+      setSlashOptionValues({});
+      setActiveOptionIndex(0);
+      const placeholder = `/${cmd.name} `;
+      setContent(placeholder);
+      setSlashQuery(null);
+      requestAnimationFrame(() => {
+        const textarea = textareaRef.current;
+        if (textarea) {
+          textarea.focus();
+          textarea.setSelectionRange(placeholder.length, placeholder.length);
+        }
+      });
+    } else {
+      setActiveSlashCommand(cmd);
+      setSlashOptionValues({});
+      setContent(`/${cmd.name}`);
+      setSlashQuery(null);
+    }
+  }, []);
+
+  const submitSlashCommand = useCallback(async () => {
+    if (!activeSlashCommand || !activeHubId || !activeStreamId) return;
+    const options: Record<string, string> = {};
+    if (activeSlashCommand.options.length > 0) {
+      const text = content.slice(`/${activeSlashCommand.name} `.length).trim();
+      const requiredOpts = activeSlashCommand.options.filter((o) => o.required);
+      if (requiredOpts.length === 1) {
+        options[requiredOpts[0].name] = text;
+      } else {
+        Object.entries(slashOptionValues).forEach(([k, v]) => {
+          if (v.trim()) options[k] = v.trim();
+        });
+        if (text && requiredOpts.length > 0 && Object.keys(options).length === 0) {
+          options[requiredOpts[0].name] = text;
+        }
+      }
+    }
+
+    setContent('');
+    setActiveSlashCommand(null);
+    setSlashOptionValues({});
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+
+    try {
+      await api.sendInteraction({
+        command_id: activeSlashCommand.id,
+        hub_id: activeHubId,
+        stream_id: activeStreamId,
+        options,
+      });
+    } catch (err) {
+      console.error('Failed to send interaction:', err);
+    }
+  }, [activeSlashCommand, activeHubId, activeStreamId, content, slashOptionValues]);
+
   const handleEmojiSelect = useCallback((sel: EmojiSelection) => {
     const insert = sel.emojiId ? sel.emoji : sel.emoji;
     setContent((prev) => {
@@ -303,6 +384,29 @@ export default function MessageInput({
   }, [closeMediaPicker, isDMMode, onSendDM, replyTo?.id, sendMessage, setReplyTo]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Slash command autocomplete navigation (highest priority)
+    if (slashQuery !== null && slashResults.length > 0 && !activeSlashCommand) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSlashIndex((i) => (i + 1) % slashResults.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashIndex((i) => (i - 1 + slashResults.length) % slashResults.length);
+        return;
+      }
+      if (e.key === 'Tab' || e.key === 'Enter') {
+        e.preventDefault();
+        selectSlashCommand(slashResults[slashIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setSlashQuery(null);
+        return;
+      }
+    }
     // Mention autocomplete navigation
     if (mentionQuery !== null && mentionResults.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -353,7 +457,17 @@ export default function MessageInput({
     }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSubmit();
+      if (activeSlashCommand) {
+        submitSlashCommand();
+      } else {
+        handleSubmit();
+      }
+    }
+    if (e.key === 'Escape' && activeSlashCommand) {
+      e.preventDefault();
+      setActiveSlashCommand(null);
+      setSlashOptionValues({});
+      setContent('');
     }
   };
 
@@ -392,6 +506,23 @@ export default function MessageInput({
     } else {
       emojiStartRef.current = null;
       setEmojiQuery(null);
+    }
+
+    // Detect /slash command (only at start of message, not in DMs)
+    if (!isDMMode && !activeSlashCommand) {
+      const slashMatch = val.match(/^\/(\S*)$/);
+      if (slashMatch) {
+        setSlashQuery(slashMatch[1]);
+        setSlashIndex(0);
+      } else {
+        setSlashQuery(null);
+      }
+    }
+
+    // Clear active slash command if user deletes the prefix
+    if (activeSlashCommand && !val.startsWith(`/${activeSlashCommand.name}`)) {
+      setActiveSlashCommand(null);
+      setSlashOptionValues({});
     }
 
     // Throttled typing event
@@ -535,6 +666,67 @@ export default function MessageInput({
       <div className={`rounded-xl border bg-riftapp-panel/95 shadow-[0_6px_18px_rgba(0,0,0,0.22)] flex items-end transition-all duration-200 relative ${
         dragging ? 'border-riftapp-accent shadow-glow' : 'border-riftapp-border/70 hover:border-riftapp-border-light'
       }`}>
+        {/* Slash command autocomplete dropdown */}
+        {slashQuery !== null && slashResults.length > 0 && !activeSlashCommand && (
+          <div className="absolute bottom-full left-0 right-0 mb-1 bg-riftapp-panel border border-riftapp-border/60 rounded-xl shadow-elevation-high overflow-hidden z-50 animate-scale-in">
+            <div className="px-3 py-1.5 text-[11px] font-semibold text-riftapp-text-dim uppercase tracking-wide">Commands</div>
+            {slashResults.map((cmd, i) => (
+              <button
+                key={cmd.id}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  selectSlashCommand(cmd);
+                }}
+                onMouseEnter={() => setSlashIndex(i)}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-[14px] transition-colors ${
+                  i === slashIndex
+                    ? 'bg-riftapp-accent/15 text-riftapp-text'
+                    : 'text-riftapp-text-muted hover:bg-riftapp-content-elevated'
+                }`}
+              >
+                {cmd.bot?.avatar_url ? (
+                  <img src={publicAssetUrl(cmd.bot.avatar_url)} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-riftapp-accent/20 flex items-center justify-center text-[11px] font-bold text-riftapp-accent flex-shrink-0">
+                    /
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <span className="font-semibold text-riftapp-text">/{cmd.name}</span>
+                  <span className="ml-2 text-[12px] text-riftapp-text-dim truncate">{cmd.description}</span>
+                </div>
+                {cmd.bot && (
+                  <span className="text-[11px] text-riftapp-text-dim/70 flex-shrink-0">{cmd.bot.display_name || cmd.bot.username}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+        {/* Active slash command parameter hints */}
+        {activeSlashCommand && activeSlashCommand.options.length > 0 && (
+          <div className="absolute bottom-full left-0 right-0 mb-1 bg-riftapp-panel border border-riftapp-border/60 rounded-xl shadow-elevation-high overflow-hidden z-50 animate-scale-in">
+            <div className="px-3 py-1.5 text-[11px] font-semibold text-riftapp-text-dim uppercase tracking-wide">
+              /{activeSlashCommand.name}
+              {activeSlashCommand.bot && (
+                <span className="ml-2 normal-case font-normal text-riftapp-text-dim/70">— {activeSlashCommand.bot.display_name || activeSlashCommand.bot.username}</span>
+              )}
+            </div>
+            {activeSlashCommand.options.map((opt, i) => (
+              <div
+                key={opt.name}
+                className={`px-3 py-1.5 flex items-center gap-2 text-[13px] ${
+                  i === activeOptionIndex ? 'bg-riftapp-accent/10' : ''
+                }`}
+              >
+                <span className={`font-medium ${opt.required ? 'text-riftapp-text' : 'text-riftapp-text-dim'}`}>
+                  {opt.name}{opt.required && <span className="text-riftapp-danger ml-0.5">*</span>}
+                </span>
+                <span className="text-[11px] text-riftapp-text-dim truncate">{opt.description}</span>
+              </div>
+            ))}
+          </div>
+        )}
         {/* Mention autocomplete dropdown */}
         {mentionQuery !== null && mentionResults.length > 0 && (
           <div className="absolute bottom-full left-0 right-0 mb-1 bg-riftapp-panel border border-riftapp-border/60 rounded-xl shadow-elevation-high overflow-hidden z-50 animate-scale-in">

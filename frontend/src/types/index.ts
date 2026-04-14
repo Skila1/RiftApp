@@ -446,3 +446,47 @@ export interface HubBan {
   display_name?: string;
   avatar_url?: string;
 }
+
+export interface SlashCommandOptionChoice {
+  name: string;
+  value: string;
+}
+
+export interface SlashCommandOption {
+  name: string;
+  description: string;
+  type: number; // 3=string, 4=integer, 5=boolean, 6=user, 7=channel, 8=role, 10=number
+  required: boolean;
+  choices?: SlashCommandOptionChoice[];
+}
+
+export interface SlashCommand {
+  id: string;
+  application_id: string;
+  guild_id?: string;
+  name: string;
+  description: string;
+  options: SlashCommandOption[];
+  type: number;
+  created_at: string;
+  updated_at: string;
+  bot?: User;
+}
+
+export interface InteractionPayload {
+  command_id: string;
+  hub_id: string;
+  stream_id: string;
+  options: Record<string, string>;
+}
+
+export interface InteractionResponse {
+  id: string;
+  type: number;
+  data?: {
+    type?: number;
+    data?: {
+      content?: string;
+    };
+  };
+}

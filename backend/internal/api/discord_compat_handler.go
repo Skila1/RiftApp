@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -24,6 +25,7 @@ type DiscordCompatDeps struct {
 	MsgRepo    *repository.MessageRepo
 	RankRepo   *repository.RankRepo
 	DevRepo    *repository.DeveloperRepo
+	CmdRepo    *repository.AppCommandRepo
 	BaseURL    string
 }
 
@@ -37,6 +39,7 @@ type DiscordCompatHandler struct {
 	msgRepo    *repository.MessageRepo
 	rankRepo   *repository.RankRepo
 	devRepo    *repository.DeveloperRepo
+	cmdRepo    *repository.AppCommandRepo
 	baseURL    string
 }
 
@@ -51,6 +54,7 @@ func NewDiscordCompatHandler(deps DiscordCompatDeps) *DiscordCompatHandler {
 		msgRepo:    deps.MsgRepo,
 		rankRepo:   deps.RankRepo,
 		devRepo:    deps.DevRepo,
+		cmdRepo:    deps.CmdRepo,
 		baseURL:    deps.BaseURL,
 	}
 }
@@ -538,6 +542,108 @@ func toDiscordMessage(msg *models.Message) map[string]interface{} {
 		result["edited_timestamp"] = nil
 	}
 	return result
+}
+
+func (h *DiscordCompatHandler) BulkOverwriteGlobalCommands(w http.ResponseWriter, r *http.Request) {
+	appID := chi.URLParam(r, "appId")
+	callerAppID := getAppID(r.Context())
+	if appID != callerAppID {
+		discordError(w, 50001, "Missing Access", http.StatusForbidden)
+		return
+	}
+
+	var commands []models.ApplicationCommand
+	if err := json.NewDecoder(r.Body).Decode(&commands); err != nil {
+		discordError(w, 50035, "Invalid Form Body", http.StatusBadRequest)
+		return
+	}
+
+	result, err := h.cmdRepo.BulkUpsert(r.Context(), appID, nil, commands)
+	if err != nil {
+		discordError(w, 0, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *DiscordCompatHandler) GetGlobalCommands(w http.ResponseWriter, r *http.Request) {
+	appID := chi.URLParam(r, "appId")
+	callerAppID := getAppID(r.Context())
+	if appID != callerAppID {
+		discordError(w, 50001, "Missing Access", http.StatusForbidden)
+		return
+	}
+
+	commands, err := h.cmdRepo.ListByApplication(r.Context(), appID, nil)
+	if err != nil {
+		discordError(w, 0, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, commands)
+}
+
+func (h *DiscordCompatHandler) BulkOverwriteGuildCommands(w http.ResponseWriter, r *http.Request) {
+	appID := chi.URLParam(r, "appId")
+	guildID := chi.URLParam(r, "guildId")
+	callerAppID := getAppID(r.Context())
+	if appID != callerAppID {
+		discordError(w, 50001, "Missing Access", http.StatusForbidden)
+		return
+	}
+
+	if _, ok := h.requireGuildAccess(w, r, guildID); !ok {
+		return
+	}
+
+	var commands []models.ApplicationCommand
+	if err := json.NewDecoder(r.Body).Decode(&commands); err != nil {
+		discordError(w, 50035, "Invalid Form Body", http.StatusBadRequest)
+		return
+	}
+
+	result, err := h.cmdRepo.BulkUpsert(r.Context(), appID, &guildID, commands)
+	if err != nil {
+		discordError(w, 0, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *DiscordCompatHandler) GetGuildCommands(w http.ResponseWriter, r *http.Request) {
+	appID := chi.URLParam(r, "appId")
+	guildID := chi.URLParam(r, "guildId")
+	callerAppID := getAppID(r.Context())
+	if appID != callerAppID {
+		discordError(w, 50001, "Missing Access", http.StatusForbidden)
+		return
+	}
+
+	if _, ok := h.requireGuildAccess(w, r, guildID); !ok {
+		return
+	}
+
+	commands, err := h.cmdRepo.ListByApplication(r.Context(), appID, &guildID)
+	if err != nil {
+		discordError(w, 0, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, commands)
+}
+
+func (h *DiscordCompatHandler) DeleteCommand(w http.ResponseWriter, r *http.Request) {
+	appID := chi.URLParam(r, "appId")
+	commandID := chi.URLParam(r, "commandId")
+	callerAppID := getAppID(r.Context())
+	if appID != callerAppID {
+		discordError(w, 50001, "Missing Access", http.StatusForbidden)
+		return
+	}
+
+	if err := h.cmdRepo.Delete(r.Context(), appID, commandID); err != nil {
+		discordError(w, 0, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func discordError(w http.ResponseWriter, code int, msg string, status int) {

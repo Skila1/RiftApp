@@ -118,6 +118,9 @@ func main() {
 	// Device token repo for push notifications
 	deviceTokenRepo := repository.NewDeviceTokenRepo(db)
 
+	// Application command repo for slash commands
+	appCommandRepo := repository.NewAppCommandRepo(db)
+
 	// Push notification service (Firebase Cloud Messaging)
 	pushSvc, err := push.NewService(deviceTokenRepo)
 	if err != nil {
@@ -189,6 +192,7 @@ func main() {
 		ReportService:           reportSvc,
 		HubModerationRepo:       hubModRepo,
 		DeviceTokenRepo:         deviceTokenRepo,
+		AppCommandRepo:          appCommandRepo,
 		DB:                      db,
 		AdminService:            adminSvc,
 		SMTPService:             smtpSvc,

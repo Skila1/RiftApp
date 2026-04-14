@@ -12,6 +12,7 @@ import { useDMStore } from '../../stores/dmStore';
 import { usePresenceStore } from '../../stores/presenceStore';
 import { useVoiceStore } from '../../stores/voiceStore';
 import { useVoiceChannelUiStore } from '../../stores/voiceChannelUiStore';
+import { useStreamStore } from '../../stores/streamStore';
 import { publicAssetUrl } from '../../utils/publicAssetUrl';
 import { CameraIcon, ScreenShareIcon, VoiceChannelIcon } from './VoiceIcons';
 
@@ -126,6 +127,7 @@ export default function FloatingActiveSpeakerMedia() {
     offsetY: number;
     moved: boolean;
   } | null>(null);
+  const lastTapRef = useRef(0);
 
   const participant = useMemo(() => {
     if (!activeSpeaker) {
@@ -211,6 +213,13 @@ export default function FloatingActiveSpeakerMedia() {
       return;
     }
 
+    const streamId = voiceTargetId;
+    const hubId = useStreamStore.getState().streamHubMap[streamId]
+      ?? useStreamStore.getState().streams.find((s) => s.id === streamId)?.hub_id;
+
+    if (hubId) {
+      navigate(`/app/hubs/${hubId}/${streamId}`);
+    }
     openVoiceView(voiceTargetId, voiceTargetKind ?? 'stream');
   };
 
@@ -268,7 +277,13 @@ export default function FloatingActiveSpeakerMedia() {
     setOverlayPosition(position);
 
     if (!dragState.moved) {
-      openCurrentVoiceTarget();
+      const now = Date.now();
+      if (now - lastTapRef.current < 350) {
+        lastTapRef.current = 0;
+        openCurrentVoiceTarget();
+      } else {
+        lastTapRef.current = now;
+      }
     }
   };
 

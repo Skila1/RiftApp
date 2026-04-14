@@ -86,7 +86,7 @@ export function selectPreferredActiveSpeaker<TTrack>(
         const speakingMediaSelections = mediaSelections.filter(({ participant }) => participant.isSpeaking);
         return speakingMediaSelections.length > 0 ? speakingMediaSelections : mediaSelections;
       })()
-    : allSelections.filter(({ participant }) => participant.isSpeaking);
+    : [];
 
   if (selections.length === 0) {
     return null;
