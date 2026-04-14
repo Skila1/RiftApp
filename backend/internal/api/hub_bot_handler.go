@@ -92,10 +92,18 @@ func (h *HubBotHandler) CreateHubBot(w http.ResponseWriter, r *http.Request) {
 	displayName := templateDisplayName(body.TemplateType)
 	username := "rift-" + body.TemplateType + "-" + hubID[:8]
 
-	_, _ = h.db.Exec(r.Context(),
-		`INSERT INTO users (id, username, display_name, password_hash, is_bot, status, created_at, updated_at)
-		 VALUES ($1, $2, $3, '', true, 1, now(), now()) ON CONFLICT DO NOTHING`,
-		botUserID, username, displayName)
+	// Reuse existing bot user if one was previously created (handles delete + re-enable)
+	var existingUserID string
+	err := h.db.QueryRow(r.Context(),
+		`SELECT id FROM users WHERE username = $1 AND is_bot = true`, username).Scan(&existingUserID)
+	if err == nil && existingUserID != "" {
+		botUserID = existingUserID
+	} else {
+		_, _ = h.db.Exec(r.Context(),
+			`INSERT INTO users (id, username, display_name, password_hash, is_bot, status, created_at, updated_at)
+			 VALUES ($1, $2, $3, '', true, 1, now(), now()) ON CONFLICT DO NOTHING`,
+			botUserID, username, displayName)
+	}
 
 	if body.Config == nil {
 		body.Config = json.RawMessage(`{}`)

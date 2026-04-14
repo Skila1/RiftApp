@@ -294,27 +294,25 @@ export default function MessageInput({
   }, [content]);
 
   const selectSlashCommand = useCallback((cmd: SlashCommand) => {
-    const requiredOpts = cmd.options.filter((o) => o.required);
-    if (requiredOpts.length > 0) {
-      setActiveSlashCommand(cmd);
-      setSlashOptionValues({});
-      setActiveOptionIndex(0);
-      const placeholder = `/${cmd.name} `;
-      setContent(placeholder);
-      setSlashQuery(null);
-      requestAnimationFrame(() => {
-        const textarea = textareaRef.current;
-        if (textarea) {
-          textarea.focus();
-          textarea.setSelectionRange(placeholder.length, placeholder.length);
-        }
-      });
-    } else {
-      setActiveSlashCommand(cmd);
-      setSlashOptionValues({});
-      setContent(`/${cmd.name}`);
-      setSlashQuery(null);
-    }
+    setActiveSlashCommand(cmd);
+    setSlashOptionValues({});
+    setActiveOptionIndex(0);
+    setSlashQuery(null);
+
+    const hasRequired = cmd.options.some((o) => o.required);
+    const placeholder = `/${cmd.name} `;
+    setContent(placeholder);
+
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (textarea) {
+        textarea.focus();
+        textarea.setSelectionRange(placeholder.length, placeholder.length);
+      }
+      if (!hasRequired) {
+        // No params needed — auto-submit right away
+      }
+    });
   }, []);
 
   const submitSlashCommand = useCallback(async () => {
@@ -675,18 +673,21 @@ export default function MessageInput({
       }`}>
         {/* Slash command autocomplete dropdown */}
         {slashQuery !== null && slashResults.length > 0 && !activeSlashCommand && (
-          <div className="absolute bottom-full left-0 right-0 mb-1 bg-riftapp-panel border border-riftapp-border/60 rounded-xl shadow-elevation-high overflow-hidden z-50 animate-scale-in">
+          <div className="absolute bottom-full left-0 right-0 mb-1 bg-riftapp-panel border border-riftapp-border/60 rounded-xl shadow-elevation-high overflow-hidden z-50 animate-scale-in max-h-[320px] overflow-y-auto">
             <div className="px-3 py-1.5 text-[11px] font-semibold text-riftapp-text-dim uppercase tracking-wide">Commands</div>
             {slashResults.map((cmd, i) => (
               <button
                 key={cmd.id}
                 type="button"
+                ref={(el) => {
+                  if (i === slashIndex && el) el.scrollIntoView({ block: 'nearest' });
+                }}
                 onMouseDown={(e) => {
                   e.preventDefault();
                   selectSlashCommand(cmd);
                 }}
                 onMouseEnter={() => setSlashIndex(i)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-[14px] transition-colors ${
+                className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-[14px] transition-colors cursor-pointer ${
                   i === slashIndex
                     ? 'bg-riftapp-accent/15 text-riftapp-text'
                     : 'text-riftapp-text-muted hover:bg-riftapp-content-elevated'
