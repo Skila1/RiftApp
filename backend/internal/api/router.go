@@ -179,15 +179,6 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 		r.Post("/api/hubs/{hubID}/invite", hubH.CreateInvite)
 		r.Get("/api/hubs/{hubID}/permissions", hubH.MyPermissions)
 
-		if cmdH != nil {
-			r.Get("/api/hubs/{hubID}/commands", cmdH.ListHubCommands)
-		}
-
-		if deps.AppCommandRepo != nil && deps.DeveloperService != nil {
-			intH := NewInteractionHandler(deps.AppCommandRepo, deps.DeveloperService, deps.MsgService, botReg)
-			r.Post("/api/interactions", intH.Create)
-		}
-
 		r.Get("/api/hubs/{hubID}/roles", rankH.List)
 		r.Post("/api/hubs/{hubID}/roles", rankH.Create)
 		r.Patch("/api/hubs/{hubID}/roles/{rankID}", rankH.Update)
@@ -346,6 +337,21 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 		r.Delete("/api/hubs/{hubID}/stickers/{stickerID}", customH.DeleteSticker)
 		r.Post("/api/hubs/{hubID}/sounds", customH.CreateSound)
 		r.Delete("/api/hubs/{hubID}/sounds/{soundID}", customH.DeleteSound)
+	})
+
+	// Slash commands & interactions — separate group so they don't share the main rate limit bucket.
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.Auth(deps.AuthService))
+		if deps.UserRepo != nil {
+			r.Use(middleware.BanCheck(deps.UserRepo))
+		}
+		if cmdH != nil {
+			r.Get("/api/hubs/{hubID}/commands", cmdH.ListHubCommands)
+		}
+		if deps.AppCommandRepo != nil && deps.DeveloperService != nil {
+			intH := NewInteractionHandler(deps.AppCommandRepo, deps.DeveloperService, deps.MsgService, botReg)
+			r.Post("/api/interactions", intH.Create)
+		}
 	})
 
 	// Discord-compatible REST API (v9/v10) for bot libraries
