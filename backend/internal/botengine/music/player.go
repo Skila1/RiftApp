@@ -340,9 +340,11 @@ func (t *Template) playTrack(hubID, streamID string, hctx HubContext) {
 	roomName := "stream:" + streamID
 
 	room, err := lksdk.ConnectToRoom(t.lkURL, lksdk.ConnectInfo{
-		APIKey:    t.lkKey,
-		APISecret: t.lkSecret,
-		RoomName:  roomName,
+		APIKey:              t.lkKey,
+		APISecret:           t.lkSecret,
+		RoomName:            roomName,
+		ParticipantIdentity: "rift-music-bot",
+		ParticipantName:     "Rift Music Bot",
 	}, &lksdk.RoomCallback{}, lksdk.WithAutoSubscribe(false))
 	if err != nil {
 		log.Printf("music: failed to join LiveKit room %s: %v", roomName, err)
