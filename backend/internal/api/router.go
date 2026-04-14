@@ -363,7 +363,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 					return
 				}
 				_ = deps.BotEngine.HandleComponentInteraction(r.Context(), hubID, streamID, userID, body.MessageID, body.CustomID, body.Values)
-				writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+				writeData(w, http.StatusOK, map[string]string{"status": "ok"})
 			})
 		}
 	})

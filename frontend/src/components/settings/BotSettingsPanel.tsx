@@ -58,7 +58,7 @@ export default function BotSettingsPanel({ hubId }: { hubId: string }) {
   const loadBots = useCallback(async () => {
     try {
       const data = await api.get<HubBot[]>(`/hubs/${hubId}/bots`);
-      setBots(data);
+      setBots(data ?? []);
     } catch {
       setBots([]);
     } finally {

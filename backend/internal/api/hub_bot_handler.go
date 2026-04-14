@@ -57,7 +57,7 @@ func (h *HubBotHandler) ListHubBots(w http.ResponseWriter, r *http.Request) {
 	if bots == nil {
 		bots = []repository.HubBot{}
 	}
-	writeJSON(w, http.StatusOK, bots)
+	writeData(w, http.StatusOK, bots)
 }
 
 func (h *HubBotHandler) CreateHubBot(w http.ResponseWriter, r *http.Request) {
@@ -125,7 +125,7 @@ func (h *HubBotHandler) CreateHubBot(w http.ResponseWriter, r *http.Request) {
 		h.engine.InvalidateHub(hubID)
 	}
 
-	writeJSON(w, http.StatusCreated, bot)
+	writeData(w, http.StatusCreated, bot)
 }
 
 func (h *HubBotHandler) UpdateHubBot(w http.ResponseWriter, r *http.Request) {
@@ -173,7 +173,7 @@ func (h *HubBotHandler) UpdateHubBot(w http.ResponseWriter, r *http.Request) {
 
 	bot.Config = cfg
 	bot.Enabled = enabled
-	writeJSON(w, http.StatusOK, bot)
+	writeData(w, http.StatusOK, bot)
 }
 
 func (h *HubBotHandler) DeleteHubBot(w http.ResponseWriter, r *http.Request) {
