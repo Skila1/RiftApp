@@ -9,15 +9,17 @@ import (
 	"github.com/riftapp-cloud/riftapp/internal/middleware"
 	"github.com/riftapp-cloud/riftapp/internal/service"
 	userpkg "github.com/riftapp-cloud/riftapp/internal/user"
+	"github.com/riftapp-cloud/riftapp/internal/ws"
 )
 
 type FriendHandler struct {
 	svc     *service.FriendService
 	userSvc *userpkg.Service
+	hub     *ws.Hub
 }
 
-func NewFriendHandler(svc *service.FriendService, userSvc *userpkg.Service) *FriendHandler {
-	return &FriendHandler{svc: svc, userSvc: userSvc}
+func NewFriendHandler(svc *service.FriendService, userSvc *userpkg.Service, hub *ws.Hub) *FriendHandler {
+	return &FriendHandler{svc: svc, userSvc: userSvc, hub: hub}
 }
 
 func (h *FriendHandler) SendRequest(w http.ResponseWriter, r *http.Request) {
@@ -101,6 +103,7 @@ func (h *FriendHandler) List(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to list friends")
 		return
 	}
+	applyLiveStatusesToFriendships(h.hub, friends)
 	writeData(w, http.StatusOK, friends)
 }
 
@@ -111,6 +114,7 @@ func (h *FriendHandler) PendingIncoming(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, "failed to list pending")
 		return
 	}
+	applyLiveStatusesToFriendships(h.hub, list)
 	writeData(w, http.StatusOK, list)
 }
 
@@ -121,6 +125,7 @@ func (h *FriendHandler) PendingOutgoing(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, "failed to list pending")
 		return
 	}
+	applyLiveStatusesToFriendships(h.hub, list)
 	writeData(w, http.StatusOK, list)
 }
 
@@ -167,6 +172,7 @@ func (h *FriendHandler) ListBlocked(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to list blocked")
 		return
 	}
+	applyLiveStatusesToBlocks(h.hub, list)
 	writeData(w, http.StatusOK, list)
 }
 

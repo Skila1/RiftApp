@@ -9,6 +9,8 @@ import {
   resolveInitialSelfPresenceStatus,
 } from './selfPresencePersistence';
 
+let loadPresenceForHubRequestId = 0;
+
 function resolveSelfPresenceStatus(
   selfUserId: string | null,
   presence: Record<string, number>,
@@ -34,6 +36,7 @@ function resolveSelfPresenceStatus(
 interface PresenceState {
   selfUserId: string | null;
   presence: Record<string, number>;
+  usersById: Record<string, User>;
   hubMembers: Record<string, User>;
   typers: Record<string, Set<string>>;
 
@@ -51,16 +54,45 @@ interface PresenceState {
   clearTypers: (streamId: string) => void;
 }
 
+function patchCachedUserStatus(users: Record<string, User>, userId: string, status: number) {
+  const existingUser = users[userId];
+  if (!existingUser || existingUser.status === status) {
+    return users;
+  }
+
+  return {
+    ...users,
+    [userId]: { ...existingUser, status },
+  };
+}
+
+function mergeCachedUser(existingUser: User | undefined, nextUser: User, status: number) {
+  if (!existingUser) {
+    return { ...nextUser, status };
+  }
+
+  return {
+    ...existingUser,
+    ...nextUser,
+    status,
+  };
+}
+
 export const usePresenceStore = create<PresenceState>((set) => ({
   selfUserId: null,
   presence: {},
+  usersById: {},
   hubMembers: {},
   typers: {},
 
   setPresence: (userId, status) => {
     set((s) => {
       if (s.presence[userId] === status) return s;
-      return { presence: { ...s.presence, [userId]: status } };
+      return {
+        presence: { ...s.presence, [userId]: status },
+        usersById: patchCachedUserStatus(s.usersById, userId, status),
+        hubMembers: patchCachedUserStatus(s.hubMembers, userId, status),
+      };
     });
   },
 
@@ -69,9 +101,8 @@ export const usePresenceStore = create<PresenceState>((set) => ({
     set((s) => ({
       selfUserId: userId,
       presence: s.presence[userId] === status ? s.presence : { ...s.presence, [userId]: status },
-      hubMembers: s.hubMembers[userId]
-        ? { ...s.hubMembers, [userId]: { ...s.hubMembers[userId], status } }
-        : s.hubMembers,
+      usersById: patchCachedUserStatus(s.usersById, userId, status),
+      hubMembers: patchCachedUserStatus(s.hubMembers, userId, status),
     }));
   },
 
@@ -80,9 +111,8 @@ export const usePresenceStore = create<PresenceState>((set) => ({
     set((s) => ({
       selfUserId: userId,
       presence: s.presence[userId] === resolvedStatus ? s.presence : { ...s.presence, [userId]: resolvedStatus },
-      hubMembers: s.hubMembers[userId]
-        ? { ...s.hubMembers, [userId]: { ...s.hubMembers[userId], status: resolvedStatus } }
-        : s.hubMembers,
+      usersById: patchCachedUserStatus(s.usersById, userId, resolvedStatus),
+      hubMembers: patchCachedUserStatus(s.hubMembers, userId, resolvedStatus),
     }));
     return resolvedStatus;
   },
@@ -104,15 +134,27 @@ export const usePresenceStore = create<PresenceState>((set) => ({
   },
 
   setBulkPresence: (entries) => {
-    set((s) => ({
-      presence: Object.entries(entries).reduce<Record<string, number>>((nextPresence, [userId, status]) => {
-        nextPresence[userId] = resolveSelfPresenceStatus(s.selfUserId, s.presence, userId, status);
-        return nextPresence;
-      }, { ...s.presence }),
-    }));
+    set((s) => {
+      let nextUsersById = s.usersById;
+      let nextHubMembers = s.hubMembers;
+      const nextPresence = Object.entries(entries).reduce<Record<string, number>>((acc, [userId, status]) => {
+        const resolvedStatus = resolveSelfPresenceStatus(s.selfUserId, s.presence, userId, status);
+        acc[userId] = resolvedStatus;
+        nextUsersById = patchCachedUserStatus(nextUsersById, userId, resolvedStatus);
+        nextHubMembers = patchCachedUserStatus(nextHubMembers, userId, resolvedStatus);
+        return acc;
+      }, { ...s.presence });
+
+      return {
+        presence: nextPresence,
+        usersById: nextUsersById,
+        hubMembers: nextHubMembers,
+      };
+    });
   },
 
   loadPresenceForHub: async (hubId) => {
+    const requestId = ++loadPresenceForHubRequestId;
     try {
       const members = normalizeUsers(await api.getHubMembers(hubId));
       const entries: Record<string, number> = {};
@@ -122,39 +164,49 @@ export const usePresenceStore = create<PresenceState>((set) => ({
         entries[m.id] = status;
         memberMap[m.id] = status === m.status ? m : { ...m, status };
       }
-      set((s) => ({
-        presence: { ...s.presence, ...entries },
-        hubMembers: memberMap,
-      }));
+      set((s) => {
+        const nextUsersById = { ...s.usersById };
+        for (const member of Object.values(memberMap)) {
+          nextUsersById[member.id] = mergeCachedUser(nextUsersById[member.id], member, member.status);
+        }
+
+        return {
+          presence: { ...s.presence, ...entries },
+          usersById: nextUsersById,
+          hubMembers: requestId === loadPresenceForHubRequestId ? memberMap : s.hubMembers,
+        };
+      });
     } catch {}
   },
 
   mergeUser: (user) => {
     const nextUser = normalizeUser(user);
-    set((s) => ({
-      presence: s.presence[nextUser.id] === resolveSelfPresenceStatus(s.selfUserId, s.presence, nextUser.id, nextUser.status)
-        ? s.presence
-        : { ...s.presence, [nextUser.id]: resolveSelfPresenceStatus(s.selfUserId, s.presence, nextUser.id, nextUser.status) },
-      hubMembers: {
-        ...s.hubMembers,
-        [nextUser.id]: s.hubMembers[nextUser.id]
+    set((s) => {
+      const resolvedStatus = resolveSelfPresenceStatus(s.selfUserId, s.presence, nextUser.id, nextUser.status);
+      return {
+        presence: s.presence[nextUser.id] === resolvedStatus
+          ? s.presence
+          : { ...s.presence, [nextUser.id]: resolvedStatus },
+        usersById: {
+          ...s.usersById,
+          [nextUser.id]: mergeCachedUser(s.usersById[nextUser.id], nextUser, resolvedStatus),
+        },
+        hubMembers: s.hubMembers[nextUser.id]
           ? {
-              ...s.hubMembers[nextUser.id],
-              ...nextUser,
-              status: resolveSelfPresenceStatus(s.selfUserId, s.presence, nextUser.id, nextUser.status),
+              ...s.hubMembers,
+              [nextUser.id]: mergeCachedUser(s.hubMembers[nextUser.id], nextUser, resolvedStatus),
             }
-          : {
-              ...nextUser,
-              status: resolveSelfPresenceStatus(s.selfUserId, s.presence, nextUser.id, nextUser.status),
-            },
-      },
-    }));
+          : s.hubMembers,
+      };
+    });
   },
 
   clearSessionCaches: () => {
+    loadPresenceForHubRequestId = 0;
     set({
       selfUserId: null,
       presence: {},
+      usersById: {},
       hubMembers: {},
       typers: {},
     });

@@ -115,6 +115,7 @@ export default function FloatingActiveSpeakerMedia() {
   const openConversation = useDMStore((state) => state.setActiveConversation);
   const authUser = useAuthStore((state) => state.user);
   const hubMembers = usePresenceStore((state) => state.hubMembers);
+  const usersById = usePresenceStore((state) => state.usersById);
   const navigate = useNavigate();
 
   const [position, setPosition] = useState<FloatingMediaPosition | null>(persistedPosition);
@@ -134,13 +135,13 @@ export default function FloatingActiveSpeakerMedia() {
 
     if (authUser?.id === activeSpeaker.userId) {
       return {
-        ...(hubMembers[activeSpeaker.userId] ?? {}),
+        ...(hubMembers[activeSpeaker.userId] ?? usersById[activeSpeaker.userId] ?? {}),
         ...authUser,
       };
     }
 
-    return hubMembers[activeSpeaker.userId] ?? null;
-  }, [activeSpeaker, authUser, hubMembers]);
+    return hubMembers[activeSpeaker.userId] ?? usersById[activeSpeaker.userId] ?? null;
+  }, [activeSpeaker, authUser, hubMembers, usersById]);
 
   const displayName = activeSpeaker
     ? participant?.display_name || participant?.username || activeSpeaker.userId

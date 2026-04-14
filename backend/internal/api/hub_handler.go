@@ -150,6 +150,9 @@ func (h *HubHandler) Members(w http.ResponseWriter, r *http.Request) {
 		writeAppError(w, err)
 		return
 	}
+	for index := range members {
+		applyLiveUserStatus(h.hub, &members[index].User)
+	}
 	writeData(w, http.StatusOK, members)
 }
 

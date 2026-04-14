@@ -72,8 +72,13 @@ export const useHubStore = create<HubState>((set, get) => ({
   },
 
   setActiveHub: async (hubId) => {
+    const previousHubId = get().activeHubId;
     set({ activeHubId: hubId });
     useDMStore.getState().clearActive();
+
+    if (previousHubId !== hubId) {
+      usePresenceStore.setState({ hubMembers: {} });
+    }
 
     // Show cached channels for this hub immediately (or clear if unknown) — avoids empty UI and cuts API spam.
     useStreamStore.getState().applyHubLayoutOrClear(hubId);
@@ -193,6 +198,7 @@ export const useHubStore = create<HubState>((set, get) => ({
 
   clearActive: () => {
     useVoiceChannelUiStore.getState().closeVoiceView();
+    usePresenceStore.setState({ hubMembers: {} });
     set({ activeHubId: null });
   },
 

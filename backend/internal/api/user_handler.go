@@ -32,6 +32,7 @@ func (h *UserHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "user not found")
 		return
 	}
+	applyLiveUserStatus(h.hub, u)
 
 	writeData(w, http.StatusOK, u)
 }
@@ -83,6 +84,7 @@ func (h *UserHandler) SearchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	applyLiveUserStatus(h.hub, u)
 	u.Email = nil
 	writeData(w, http.StatusOK, u)
 }
@@ -98,6 +100,7 @@ func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	applyLiveUserStatus(h.hub, u)
 	// Strip private fields for public view
 	u.Email = nil
 	writeData(w, http.StatusOK, u)

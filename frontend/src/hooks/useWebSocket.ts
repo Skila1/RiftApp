@@ -285,7 +285,7 @@ export function useWebSocket() {
             const voiceState = useVoiceStore.getState();
             if (action === 'join') {
               // Fetch profile for unknown users so their display name is shown immediately
-              if (!usePresenceStore.getState().hubMembers[user_id]) {
+              if (!usePresenceStore.getState().usersById[user_id]) {
                 api.getUser(user_id).then((u) => usePresenceStore.getState().mergeUser(u)).catch(() => {});
               }
             } else {

@@ -1744,7 +1744,7 @@ function getTrackForSource(p: Participant, source: Track.Source): Track | undefi
 }
 
 function hydrateMissingVoiceUsers(participants: VoiceParticipant[]) {
-  const knownUsers = usePresenceStore.getState().hubMembers;
+  const knownUsers = usePresenceStore.getState().usersById;
   for (const participant of participants) {
     const userID = participant.identity;
     if (!userID || knownUsers[userID] || voiceUserHydrationInFlight.has(userID)) {
