@@ -2,15 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useFrontendUpdateStore } from '../frontendUpdateStore';
 
-const { reloadFrontendIgnoringCache, reloadOnceForFrontendUpdate } = vi.hoisted(() => ({
+const { desktopRef, reloadFrontendIgnoringCache, reloadOnceForFrontendUpdate } = vi.hoisted(() => ({
+  desktopRef: { current: { reloadFrontendIgnoringCache: vi.fn() } as { reloadFrontendIgnoringCache: ReturnType<typeof vi.fn> } | undefined },
   reloadFrontendIgnoringCache: vi.fn(),
   reloadOnceForFrontendUpdate: vi.fn(),
 }));
 
 vi.mock('../../utils/desktop', () => ({
-  getDesktop: () => ({
-    reloadFrontendIgnoringCache,
-  }),
+  getDesktop: () => desktopRef.current,
 }));
 
 vi.mock('../../utils/frontendUpdate', () => ({
@@ -20,6 +19,9 @@ vi.mock('../../utils/frontendUpdate', () => ({
 describe('frontendUpdateStore', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    desktopRef.current = {
+      reloadFrontendIgnoringCache,
+    };
     reloadFrontendIgnoringCache.mockReset();
     reloadFrontendIgnoringCache.mockResolvedValue(false);
     reloadOnceForFrontendUpdate.mockReset();
@@ -79,16 +81,33 @@ describe('frontendUpdateStore', () => {
     expect(useFrontendUpdateStore.getState().latestSignature).toBe('/assets/app-new.js|/assets/app-new.css');
   });
 
-  it('shows the transition splash before asking the desktop shell to reload the frontend ignoring cache', async () => {
+  it('reloads the desktop shell immediately when a desktop bridge is available', async () => {
+    useFrontendUpdateStore.setState({ updateReady: true });
+    reloadFrontendIgnoringCache.mockResolvedValueOnce(true);
+
+    useFrontendUpdateStore.getState().applyUpdate();
+    await Promise.resolve();
+
+    expect(useFrontendUpdateStore.getState().applyingUpdate).toBe(true);
+    expect(reloadFrontendIgnoringCache).toHaveBeenCalledTimes(1);
+    expect(reloadOnceForFrontendUpdate).not.toHaveBeenCalled();
+  });
+
+  it('keeps a short transition before reloading in the browser', async () => {
+    desktopRef.current = undefined;
     useFrontendUpdateStore.setState({ updateReady: true });
 
     useFrontendUpdateStore.getState().applyUpdate();
 
     expect(useFrontendUpdateStore.getState().applyingUpdate).toBe(true);
-    expect(reloadFrontendIgnoringCache).not.toHaveBeenCalled();
+    expect(reloadOnceForFrontendUpdate).not.toHaveBeenCalled();
 
-    await vi.advanceTimersByTimeAsync(650);
+    await vi.advanceTimersByTimeAsync(199);
 
-    expect(reloadFrontendIgnoringCache).toHaveBeenCalledTimes(1);
+    expect(reloadOnceForFrontendUpdate).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(reloadOnceForFrontendUpdate).toHaveBeenCalledTimes(1);
   });
 });

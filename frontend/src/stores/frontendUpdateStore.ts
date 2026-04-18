@@ -20,9 +20,26 @@ interface FrontendUpdateState {
 }
 
 const ASSET_FAILURE_SIGNATURE = '__asset_failure__';
-const FRONTEND_UPDATE_TRANSITION_MS = 650;
+const FRONTEND_UPDATE_TRANSITION_MS = 200;
 
 let frontendUpdateApplyTimer: number | null = null;
+
+function reloadFrontend(desktop: ReturnType<typeof getDesktop> | undefined) {
+  if (desktop) {
+    void desktop.reloadFrontendIgnoringCache()
+      .then((reloaded) => {
+        if (!reloaded) {
+          reloadOnceForFrontendUpdate();
+        }
+      })
+      .catch(() => {
+        reloadOnceForFrontendUpdate();
+      });
+    return;
+  }
+
+  reloadOnceForFrontendUpdate();
+}
 
 export const useFrontendUpdateStore = create<FrontendUpdateState>((set, get) => ({
   currentCommitSha: __RIFT_FRONTEND_COMMIT_SHA__,
@@ -102,22 +119,18 @@ export const useFrontendUpdateStore = create<FrontendUpdateState>((set, get) => 
 
     if (frontendUpdateApplyTimer != null) {
       window.clearTimeout(frontendUpdateApplyTimer);
+      frontendUpdateApplyTimer = null;
+    }
+
+    const desktop = getDesktop();
+    if (desktop) {
+      reloadFrontend(desktop);
+      return;
     }
 
     frontendUpdateApplyTimer = window.setTimeout(() => {
       frontendUpdateApplyTimer = null;
-
-      const desktop = getDesktop();
-      if (desktop) {
-        void desktop.reloadFrontendIgnoringCache().then((reloaded) => {
-          if (!reloaded) {
-            reloadOnceForFrontendUpdate();
-          }
-        });
-        return;
-      }
-
-      reloadOnceForFrontendUpdate();
+      reloadFrontend(undefined);
     }, FRONTEND_UPDATE_TRANSITION_MS);
   },
 }));

@@ -1,4 +1,5 @@
 import { useFrontendUpdateStore } from '../../stores/frontendUpdateStore';
+import { getDesktop } from '../../utils/desktop';
 
 function RiftSplashMark() {
   return (
@@ -14,8 +15,9 @@ function RiftSplashMark() {
 
 export default function FrontendUpdateSplash() {
   const applyingUpdate = useFrontendUpdateStore((state) => state.applyingUpdate);
+  const desktop = getDesktop();
 
-  if (!applyingUpdate) {
+  if (desktop || !applyingUpdate) {
     return null;
   }
 
