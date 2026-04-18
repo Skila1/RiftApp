@@ -23,6 +23,7 @@ const UPDATE_RESTART_MARKER_FILENAME = "update-restart-pending.json";
 const UPDATE_RESTART_MARKER_TTL_MS = 90_000;
 const MAIN_WINDOW_READY_TIMEOUT_MS = 15_000;
 const FRONTEND_RELOAD_SPLASH_MIN_MS = 250;
+const FRONTEND_RELOAD_FALLBACK_READY_TIMEOUT_MS = 2_500;
 const TRUSTED_RENDERER_ORIGINS = new Set<string>([
   new URL(VITE_DEV_URL).origin,
   new URL(PRODUCTION_WEB_APP_URL).origin,
@@ -465,6 +466,9 @@ async function reloadFrontendIgnoringCache(webContents: Electron.WebContents): P
 
   const targetWindow = BrowserWindow.fromWebContents(webContents);
   const shouldShowReloadSplash = app.isPackaged && Boolean(targetWindow && !targetWindow.isDestroyed());
+  const splashMinimumPromise = shouldShowReloadSplash
+    ? new Promise<void>((resolve) => setTimeout(resolve, FRONTEND_RELOAD_SPLASH_MIN_MS))
+    : Promise.resolve();
 
   if (shouldShowReloadSplash) {
     if (!splashWindow || splashWindow.isDestroyed()) {
@@ -472,31 +476,28 @@ async function reloadFrontendIgnoringCache(webContents: Electron.WebContents): P
     }
     updateSplash("Refreshing Rift…", "SYNCING");
     targetWindow?.hide();
-    await new Promise<void>((resolve) => setTimeout(resolve, FRONTEND_RELOAD_SPLASH_MIN_MS));
   }
 
   try {
-    await webContents.session.clearCache();
-  } catch (error) {
-    console.warn("[Rift] Failed to clear renderer cache before frontend reload:", error);
-  }
-
-  try {
-    await webContents.loadURL(buildCacheBustedUrl(currentUrl), {
-      extraHeaders: "pragma: no-cache\ncache-control: no-cache",
-    });
+    await Promise.all([
+      splashMinimumPromise,
+      webContents.loadURL(buildCacheBustedUrl(currentUrl), {
+        extraHeaders: "pragma: no-cache\ncache-control: no-cache",
+      }),
+    ]);
     return true;
   } catch (error) {
     console.warn("[Rift] Failed to reload frontend after clearing cache:", error);
     try {
+      const fallbackReadyPromise = waitForMainWindowReady(targetWindow, FRONTEND_RELOAD_FALLBACK_READY_TIMEOUT_MS);
       webContents.reloadIgnoringCache();
+      await Promise.allSettled([splashMinimumPromise, fallbackReadyPromise]);
       return true;
     } catch {
       return false;
     }
   } finally {
     if (shouldShowReloadSplash) {
-      await waitForMainWindowReady(targetWindow);
       closeSplash();
       if (targetWindow && !targetWindow.isDestroyed()) {
         targetWindow.show();
