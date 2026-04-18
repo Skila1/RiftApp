@@ -668,7 +668,7 @@ export default function MessageInput({
       )}
 
 
-      <div className={`rounded-xl border bg-riftapp-panel/95 shadow-[0_6px_18px_rgba(0,0,0,0.22)] flex items-end transition-all duration-200 relative ${
+      <div className={`rounded-xl border bg-riftapp-panel/95 shadow-[0_6px_18px_rgba(0,0,0,0.22)] flex items-start transition-all duration-200 relative ${
         dragging ? 'border-riftapp-accent shadow-glow' : 'border-riftapp-border/70 hover:border-riftapp-border-light'
       }`}>
         {/* Slash command autocomplete dropdown */}
@@ -799,7 +799,7 @@ export default function MessageInput({
         {/* File attach button */}
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="px-3 py-3 text-riftapp-text-dim hover:text-riftapp-text active:scale-95 transition-all duration-150"
+          className="self-start px-3 py-3 text-riftapp-text-dim hover:text-riftapp-text active:scale-95 transition-all duration-150"
           title="Attach file"
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -829,7 +829,7 @@ export default function MessageInput({
           maxLength={4000}
         />
         {/* Media buttons: GIF, Stickers, Emoji */}
-        <div className="relative flex items-center">
+        <div className="relative flex self-start items-center">
           <button
             data-media-btn
             onClick={() => toggleMediaPicker('gifs')}

@@ -5,6 +5,13 @@ import (
 	"time"
 )
 
+const (
+	UserStatusOffline = iota
+	UserStatusOnline
+	UserStatusIdle
+	UserStatusDND
+)
+
 type User struct {
 	ID           string     `json:"id"`
 	Username     string     `json:"username"`
@@ -14,7 +21,7 @@ type User struct {
 	DisplayName  string     `json:"display_name"`
 	AvatarURL    *string    `json:"avatar_url,omitempty"`
 	Bio          *string    `json:"bio,omitempty"`
-	Status       int        `json:"status"` // 0=offline, 1=online, 2=idle, 3=dnd
+	Status       int        `json:"status"` // Uses the UserStatus* constants.
 	LastSeen     *time.Time `json:"last_seen,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`

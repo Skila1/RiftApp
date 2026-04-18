@@ -113,7 +113,7 @@ func (r *Repo) UsernameExists(ctx context.Context, username string, excludeUserI
 	return exists, err
 }
 
-// SetStatus updates a user's status (0=offline, 1=online, 2=idle, 3=dnd).
+// SetStatus updates a user's status using the models.UserStatus* constants.
 func (r *Repo) SetStatus(ctx context.Context, id string, status int) error {
 	_, err := r.db.Exec(ctx,
 		`UPDATE users SET status = $2, updated_at = now() WHERE id = $1`, id, status)
@@ -123,7 +123,7 @@ func (r *Repo) SetStatus(ctx context.Context, id string, status int) error {
 // SetOffline sets a user offline and records last_seen.
 func (r *Repo) SetOffline(ctx context.Context, id string) error {
 	_, err := r.db.Exec(ctx,
-		`UPDATE users SET status = 0, last_seen = now(), updated_at = now() WHERE id = $1`, id)
+		`UPDATE users SET status = $2, last_seen = now(), updated_at = now() WHERE id = $1`, id, models.UserStatusOffline)
 	return err
 }
 
@@ -152,7 +152,7 @@ func (r *Repo) GetCoMemberIDs(ctx context.Context, userID string) ([]string, err
 
 func (r *Repo) BanUser(ctx context.Context, userID string) error {
 	cmd, err := r.db.Exec(ctx,
-		`UPDATE users SET banned_at = now(), status = 0, updated_at = now() WHERE id = $1`, userID)
+		`UPDATE users SET banned_at = now(), status = $2, updated_at = now() WHERE id = $1`, userID, models.UserStatusOffline)
 	if err != nil {
 		return err
 	}

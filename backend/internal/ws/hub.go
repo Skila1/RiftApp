@@ -11,6 +11,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/riftapp-cloud/riftapp/internal/models"
 )
 
 type StreamPermissionChecker interface {
@@ -236,9 +238,9 @@ func (h *Hub) SetPresence(userID string, status int) {
 	}
 	ctx := context.Background()
 
-	if status == 0 {
+	if status == models.UserStatusOffline {
 		if _, err := h.db.Exec(ctx,
-			`UPDATE users SET status = 0, last_seen = now(), updated_at = now() WHERE id = $1`, userID); err != nil {
+			`UPDATE users SET status = $2, last_seen = now(), updated_at = now() WHERE id = $1`, userID, models.UserStatusOffline); err != nil {
 			log.Printf("ws: failed to update offline presence for %s: %v", userID, err)
 		}
 	} else {

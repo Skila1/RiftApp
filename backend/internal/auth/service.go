@@ -89,7 +89,7 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (*AuthRespo
 		Username:    input.Username,
 		Email:       input.Email,
 		DisplayName: input.Username,
-		Status:      1,
+		Status:      models.UserStatusOnline,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}

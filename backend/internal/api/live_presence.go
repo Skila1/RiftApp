@@ -5,24 +5,19 @@ import (
 	"github.com/riftapp-cloud/riftapp/internal/ws"
 )
 
-const (
-	PresenceOffline = 0
-	PresenceOnline  = 1
-)
-
 func applyLiveUserStatus(hub *ws.Hub, user *models.User) {
 	if hub == nil || user == nil || user.ID == "" {
 		return
 	}
 
 	if hub.IsOnline(user.ID) {
-		if user.Status <= PresenceOffline {
-			user.Status = PresenceOnline
+		if user.Status <= models.UserStatusOffline {
+			user.Status = models.UserStatusOnline
 		}
 		return
 	}
 
-	user.Status = PresenceOffline
+	user.Status = models.UserStatusOffline
 }
 
 func applyLiveStatusesToFriendships(hub *ws.Hub, friendships []models.Friendship) {

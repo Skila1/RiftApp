@@ -60,6 +60,7 @@ func (h *UserHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, status, err.Error())
 		return
 	}
+	applyLiveUserStatus(h.hub, updated)
 	if h.hub != nil {
 		publicUser := *updated
 		publicUser.Email = nil
