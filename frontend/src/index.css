@@ -75,7 +75,7 @@
 
   /* Hub icon with Discord-style morphing */
   .hub-icon {
-    @apply h-12 w-12 cursor-pointer items-center justify-center text-sm font-semibold transition-all duration-300 ease-out;
+    @apply flex h-12 w-12 cursor-pointer items-center justify-center text-sm font-semibold transition-all duration-300 ease-out;
   }
 
   .hub-icon-idle {

@@ -41,7 +41,7 @@ export default function EditCategoryModal({ hubId, category, onClose }: Props) {
 
   return (
     <ModalOverlay isOpen onClose={onClose} zIndex={300}>
-      <div className="bg-riftapp-panel rounded-xl shadow-modal w-full max-w-[440px] overflow-hidden border border-riftapp-border/50">
+      <div className="w-full max-w-[440px] overflow-hidden rounded-xl border border-[#2f3440] bg-[#1f2228] shadow-modal">
         <div className="px-6 pt-6 pb-4">
           <div className="flex items-center justify-between mb-1">
             <h2 className="text-xl font-bold">Edit Category</h2>
@@ -64,7 +64,7 @@ export default function EditCategoryModal({ hubId, category, onClose }: Props) {
           />
           {error && <p className="text-sm text-riftapp-danger mt-3">{error}</p>}
         </div>
-        <div className="px-6 py-4 bg-riftapp-bg/40 flex justify-end gap-2 border-t border-riftapp-border/40">
+        <div className="flex justify-end gap-2 border-t border-white/[0.04] bg-[#181b20] px-6 py-4">
           <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-medium hover:bg-riftapp-content-elevated transition-colors">
             Cancel
           </button>

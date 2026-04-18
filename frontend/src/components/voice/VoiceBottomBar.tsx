@@ -357,7 +357,7 @@ function VoiceConnectionPopover({
   return (
     <div
       ref={popoverRef}
-      className="absolute bottom-full left-0 z-40 mb-2 w-[320px] rounded-[8px] border border-black/20 bg-[#111214] p-4 shadow-modal"
+      className="absolute bottom-full left-0 z-40 mb-2 w-[320px] rounded-[8px] border border-[#2f3440] bg-[#1f2228] p-4 shadow-modal"
       role="dialog"
       aria-label="Voice connection details"
     >

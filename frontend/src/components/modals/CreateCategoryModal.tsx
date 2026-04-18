@@ -31,7 +31,7 @@ export default function CreateCategoryModal({ hubId, onClose }: Props) {
 
   return (
     <ModalOverlay isOpen onClose={onClose} zIndex={300}>
-      <div className="bg-riftapp-panel rounded-xl shadow-modal w-full max-w-[440px] overflow-hidden">
+      <div className="w-full max-w-[440px] overflow-hidden rounded-xl border border-[#2f3440] bg-[#1f2228] shadow-modal">
         <div className="px-6 pt-6 pb-4">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold">Create Category</h2>
@@ -51,7 +51,7 @@ export default function CreateCategoryModal({ hubId, onClose }: Props) {
           />
         </div>
 
-        <div className="bg-riftapp-content-elevated px-6 py-4 flex justify-end gap-3">
+        <div className="flex justify-end gap-3 bg-[#181b20] px-6 py-4 shadow-[0_-1px_0_rgba(255,255,255,0.04)]">
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-riftapp-text-dim hover:text-riftapp-text transition-colors">
             Cancel
           </button>

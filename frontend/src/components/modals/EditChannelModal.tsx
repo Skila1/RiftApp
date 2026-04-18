@@ -733,12 +733,12 @@ export default function EditChannelModal({ stream, onClose }: Props) {
       <div
         ref={modalRef}
         tabIndex={-1}
-        className="bg-[#313338] rounded-xl w-[940px] h-[660px] flex shadow-modal overflow-hidden outline-none"
+        className="flex h-[660px] w-[940px] overflow-hidden rounded-xl border border-[#2f3440] bg-[#1f2228] shadow-modal outline-none"
       >
         {/* ───── Left Sidebar ───── */}
-        <nav className="w-[220px] bg-[#2b2d31] flex flex-col flex-shrink-0 overflow-y-auto">
+        <nav className="flex w-[220px] flex-shrink-0 flex-col overflow-y-auto bg-[#191c21]">
           {/* Channel header */}
-          <div className="px-4 pt-5 pb-3 border-b border-[#1e1f22]/60">
+          <div className="border-b border-white/[0.04] px-4 pt-5 pb-3">
             <p className="text-[11px] font-bold uppercase tracking-wider text-[#949ba4] truncate">
               {channelPrefix} {stream.name}
             </p>
@@ -777,7 +777,7 @@ export default function EditChannelModal({ stream, onClose }: Props) {
         {/* ───── Main Content ───── */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Header bar */}
-          <div className="flex items-center justify-between px-6 h-14 border-b border-[#1e1f22]/60 flex-shrink-0">
+          <div className="flex h-14 flex-shrink-0 items-center justify-between border-b border-white/[0.04] px-6">
             <h2 className="text-[18px] font-bold text-[#f2f3f5]">
               {activeTab === 'overview' ? 'Overview' : activeTab === 'permissions' ? 'Channel Permissions' : 'Delete Channel'}
             </h2>
@@ -817,7 +817,7 @@ export default function EditChannelModal({ stream, onClose }: Props) {
 
           {/* Save bar (only for overview & permissions tabs) */}
           {activeTab !== 'delete' && hasChanges() && (
-            <div className="px-6 py-3 bg-[#1e1f22] border-t border-[#1e1f22]/80 flex items-center justify-end gap-3 animate-slide-up">
+            <div className="flex items-center justify-end gap-3 border-t border-white/[0.04] bg-[#181b20] px-6 py-3 animate-slide-up">
               <p className="text-[13px] text-[#dbdee1] mr-auto">Careful — you have unsaved changes!</p>
               <button
                 type="button"

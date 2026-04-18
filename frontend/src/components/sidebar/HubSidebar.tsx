@@ -251,15 +251,15 @@ export default function HubSidebar() {
           setHoverTooltip(null);
         }}
       >
-        <div
-          className={`hub-pill ${
-            isDMMode
-              ? 'h-10 top-1'
-              : dmHovered
-                ? 'h-5 top-3.5'
-                : 'h-0 top-6'
-          }`}
-        />
+        {isDMMode || dmHovered ? (
+          <div
+            className={`hub-pill ${
+              isDMMode
+                ? 'h-10 top-1'
+                : 'h-5 top-3.5'
+            }`}
+          />
+        ) : null}
         <button
           onClick={handleDMClick}
           className={`hub-icon relative ${isDMMode ? 'hub-icon-active shadow-glow-sm' : 'hub-icon-idle'}`}
@@ -310,15 +310,15 @@ export default function HubSidebar() {
             }}
           >
             {/* Active / hover pill indicator */}
-            <div
-              className={`hub-pill ${
-                isActive
-                  ? 'h-10 top-1'
-                  : isHovered
-                    ? 'h-5 top-3.5'
-                    : 'h-0 top-6'
-              }`}
-            />
+            {isActive || isHovered ? (
+              <div
+                className={`hub-pill ${
+                  isActive
+                    ? 'h-10 top-1'
+                    : 'h-5 top-3.5'
+                }`}
+              />
+            ) : null}
 
             {quietUnread && !hubMuted && <div className="hub-unread-smidge" aria-hidden />}
 
